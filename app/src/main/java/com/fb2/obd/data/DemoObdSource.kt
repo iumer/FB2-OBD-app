@@ -18,6 +18,7 @@ class DemoObdSource(
 ) : ObdSource {
 
     override val name: String = "Demo (simulated)"
+    override val isLive: Boolean = false
 
     override fun snapshots(): Flow<VehicleSnapshot> = flow {
         var t = 0.0

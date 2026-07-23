@@ -1,6 +1,5 @@
 package com.fb2.obd.ui.theme
 
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
@@ -27,8 +26,6 @@ private val DarkColors = darkColorScheme(
 @Composable
 fun FB2Theme(content: @Composable () -> Unit) {
     // Always dark: this is an in-car instrument cluster.
-    @Suppress("UNUSED_EXPRESSION")
-    isSystemInDarkTheme()
     MaterialTheme(
         colorScheme = DarkColors,
         content = content,

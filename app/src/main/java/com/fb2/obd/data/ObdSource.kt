@@ -13,6 +13,9 @@ enum class ConnectionState { DISCONNECTED, CONNECTING, CONNECTED, ERROR }
 interface ObdSource {
     val name: String
 
+    /** True for a real vehicle connection; false for the simulated demo feed. */
+    val isLive: Boolean
+
     /** Emits a decoded snapshot on every poll cycle. */
     fun snapshots(): Flow<VehicleSnapshot>
 }

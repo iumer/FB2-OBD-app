@@ -36,6 +36,7 @@ import com.fb2.obd.ui.theme.Surface
 import com.fb2.obd.ui.theme.TextMuted
 import com.fb2.obd.ui.theme.TextPrimary
 import com.fb2.obd.ui.theme.WarnAmber
+import kotlin.math.roundToInt
 
 fun Health.color(): Color = when (this) {
     Health.GOOD -> GoodGreen
@@ -94,7 +95,7 @@ fun CircularGauge(
         }
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Text(
-                text = value?.let { it.toInt().toString() } ?: "--",
+                text = value?.let { it.roundToInt().toString() } ?: "--",
                 color = TextPrimary,
                 fontSize = 52.sp,
                 fontWeight = FontWeight.Bold,
@@ -110,15 +111,23 @@ fun CircularGauge(
     }
 }
 
-/** Compact metric tile with a health-coloured status dot. */
+/**
+ * Compact metric tile. A health-coloured status dot is shown only for metrics
+ * that have a health rule ([health] non-null); plain metrics get no dot so the
+ * traffic-light dots keep their meaning.
+ */
 @Composable
 fun StatTile(
     label: String,
     value: String,
     unit: String,
-    health: Health = Health.UNKNOWN,
+    health: Health? = null,
     modifier: Modifier = Modifier,
 ) {
+    val valueColor = when (health) {
+        null, Health.UNKNOWN -> TextPrimary
+        else -> health.color()
+    }
     Column(
         modifier = modifier
             .clip(RoundedCornerShape(14.dp))
@@ -127,23 +136,32 @@ fun StatTile(
         verticalArrangement = Arrangement.Center,
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(
-                modifier = Modifier
-                    .size(8.dp)
-                    .clip(RoundedCornerShape(4.dp))
-                    .background(health.color()),
-            )
-            Text(
-                text = "  $label",
-                color = TextMuted,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Medium,
-            )
+            if (health != null) {
+                Box(
+                    modifier = Modifier
+                        .size(8.dp)
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(health.color()),
+                )
+                Text(
+                    text = "  $label",
+                    color = TextMuted,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Medium,
+                )
+            } else {
+                Text(
+                    text = label,
+                    color = TextMuted,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Medium,
+                )
+            }
         }
         Row(verticalAlignment = Alignment.Bottom) {
             Text(
                 text = value,
-                color = if (health == Health.UNKNOWN) TextPrimary else health.color(),
+                color = valueColor,
                 fontSize = 24.sp,
                 fontWeight = FontWeight.Bold,
             )
@@ -166,7 +184,8 @@ fun GearIndicator(gear: Int?, modifier: Modifier = Modifier) {
     ) {
         Text(text = "GEAR", color = TextMuted, fontSize = 12.sp, fontWeight = FontWeight.Medium)
         Text(
-            text = gear?.toString() ?: "N",
+            // Null means "unknown / below the speed floor", NOT Neutral.
+            text = gear?.toString() ?: "\u2013",
             color = Accent,
             fontSize = 44.sp,
             fontWeight = FontWeight.Bold,

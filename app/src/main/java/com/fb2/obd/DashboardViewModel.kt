@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.flow.launchIn
 
 /** UI state for the dashboard screen. */
@@ -19,6 +20,7 @@ data class DashboardUiState(
     val snapshot: VehicleSnapshot = VehicleSnapshot.EMPTY,
     val connection: ConnectionState = ConnectionState.DISCONNECTED,
     val sourceName: String = "",
+    val sourceIsLive: Boolean = false,
 )
 
 /**
@@ -39,19 +41,24 @@ class DashboardViewModel : ViewModel() {
 
     fun useSource(source: ObdSource) {
         collectJob?.cancel()
-        _uiState.value = _uiState.value.copy(
-            connection = ConnectionState.CONNECTING,
-            sourceName = source.name,
-        )
+        _uiState.update {
+            it.copy(
+                connection = ConnectionState.CONNECTING,
+                sourceName = source.name,
+                sourceIsLive = source.isLive,
+            )
+        }
         collectJob = source.snapshots()
             .onEach { snapshot ->
-                _uiState.value = _uiState.value.copy(
-                    snapshot = snapshot,
-                    connection = ConnectionState.CONNECTED,
-                )
+                _uiState.update {
+                    it.copy(
+                        snapshot = snapshot,
+                        connection = ConnectionState.CONNECTED,
+                    )
+                }
             }
             .catch {
-                _uiState.value = _uiState.value.copy(connection = ConnectionState.ERROR)
+                _uiState.update { it.copy(connection = ConnectionState.ERROR) }
             }
             .launchIn(viewModelScope)
     }

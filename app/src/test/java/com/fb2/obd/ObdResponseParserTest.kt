@@ -36,15 +36,29 @@ class ObdResponseParserTest {
 
     @Test
     fun coolant2_decodesSensor2FromPid67() {
-        // 41 67 [support=03] [B=7B->83C sensor1] [C=78->80C sensor2]; we read sensor 2.
+        // 41 67 [support=03, bit1 set] [B=7B->83C sensor1] [C=78->80C sensor2].
         val value = ObdResponseParser.parse(ObdPid.COOLANT_TEMP_2, "41 67 03 7B 78")
         assertEquals(80.0, value!!, 0.001)
     }
 
     @Test
+    fun coolant2_nullWhenSensor2NotSupported() {
+        // Support byte 0x01 -> only sensor 1 supported; sensor 2 must be null even
+        // if a byte is present.
+        assertNull(ObdResponseParser.parse(ObdPid.COOLANT_TEMP_2, "41 67 01 7B 78"))
+    }
+
+    @Test
     fun coolant2_nullWhenSensor2Absent() {
-        // Only support byte + sensor 1 present -> no sensor 2 data.
         assertNull(ObdResponseParser.parse(ObdPid.COOLANT_TEMP_2, "41 67 01 7B"))
+    }
+
+    @Test
+    fun multiEcuFrame_slicedToExactDataLength() {
+        // Two modules answer 0x67; exact-length slicing must use only the first
+        // frame's 3 data bytes, not append the second module's bytes.
+        val value = ObdResponseParser.parse(ObdPid.COOLANT_TEMP_2, "41 67 03 7B 78 41 67 03 7C 79")
+        assertEquals(80.0, value!!, 0.001)
     }
 
     @Test
