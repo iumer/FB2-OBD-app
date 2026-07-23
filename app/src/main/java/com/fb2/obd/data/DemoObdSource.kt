@@ -1,6 +1,7 @@
 package com.fb2.obd.data
 
 import com.fb2.obd.obd.GearEstimator
+import com.fb2.obd.obd.GearSource
 import com.fb2.obd.obd.VehicleSnapshot
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
@@ -58,6 +59,11 @@ class DemoObdSource(
                 ltftPct = 3.5,
                 batteryVolts = 14.2 + 0.1 * sin(t / 7.0),
                 gear = gearEstimator.estimate(speed, rpm),
+                gearSource = if (gearEstimator.estimate(speed, rpm) != null) {
+                    GearSource.ESTIMATED
+                } else {
+                    GearSource.NONE
+                },
             )
             emit(snapshot)
             t += 1.0

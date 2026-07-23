@@ -32,4 +32,26 @@ class GearEstimator(private val config: VehicleConfig = VehicleConfig) {
         }
         return bestGear
     }
+
+    /**
+     * Maps an actual transmission gear ratio (from ECU PID 0xA4) to the nearest
+     * forward gear number. More reliable than [estimate] because it uses the
+     * ratio the TCM reports rather than inferring from speed/RPM.
+     *
+     * @return gear number (1-based) or null if the ratio is implausible.
+     */
+    fun gearFromRatio(ratio: Double): Int? {
+        if (ratio <= 0.0) return null
+        var bestGear = 1
+        var bestError = Double.MAX_VALUE
+        config.gearRatios.forEachIndexed { index, gearRatio ->
+            val error = abs(gearRatio - ratio)
+            if (error < bestError) {
+                bestError = error
+                bestGear = index + 1
+            }
+        }
+        // Reject values that don't resemble any forward gear (e.g. neutral/park).
+        return if (bestError <= 0.6) bestGear else null
+    }
 }

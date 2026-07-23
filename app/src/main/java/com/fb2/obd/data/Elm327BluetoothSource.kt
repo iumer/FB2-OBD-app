@@ -5,8 +5,10 @@ import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothSocket
 import com.fb2.obd.obd.GearEstimator
+import com.fb2.obd.obd.GearSource
 import com.fb2.obd.obd.ObdPid
 import com.fb2.obd.obd.ObdResponseParser
+import com.fb2.obd.obd.SupportedPids
 import com.fb2.obd.obd.VehicleSnapshot
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.awaitClose
@@ -25,21 +27,21 @@ import java.util.UUID
 /**
  * Real ELM327 adapter over Bluetooth Classic (Serial Port Profile).
  *
- * Opens an RFCOMM socket to the paired dongle, runs the standard ELM327 init
- * sequence, then round-robins the dashboard PIDs and decodes each reply with the
- * shared [ObdResponseParser]. Requires BLUETOOTH_CONNECT at runtime.
+ * On connect it runs the ELM327 init sequence, probes which PIDs the ECU
+ * supports, then round-robins the supported dashboard PIDs. All raw traffic is
+ * mirrored to [ObdLogger] for the in-app debug log.
  *
  * Robustness:
- * - Reads are bounded by [READ_TIMEOUT_MS] so a silent/stalled adapter surfaces
- *   an error instead of hanging the UI forever.
- * - The socket is closed from [awaitClose], so cancelling the flow (e.g. the user
- *   switches to demo or leaves the screen) unblocks any in-progress read and
- *   releases the socket/thread.
- * - A bounded reconnect ([MAX_RECONNECTS]) rides out brief drop-outs.
+ * - Bounded per-read timeout so a silent adapter surfaces an error, not a hang.
+ * - Per-PID errors are isolated: a single slow/unsupported PID is skipped, it
+ *   does not tear down the whole stream. Only a fully dead cycle triggers a
+ *   bounded reconnect.
+ * - Socket is closed from [awaitClose] so cancellation unblocks a pending read.
  */
 class Elm327BluetoothSource(
     private val device: BluetoothDevice,
     private val gearEstimator: GearEstimator = GearEstimator(),
+    private val logger: ObdLogger = ObdLogger,
 ) : ObdSource {
 
     override val name: String = "ELM327 (Bluetooth)"
@@ -64,9 +66,9 @@ class Elm327BluetoothSource(
 
     @SuppressLint("MissingPermission")
     override fun snapshots(): Flow<VehicleSnapshot> = channelFlow {
-        // Discovery must be off before connecting or the connect will be slow/fail.
         runCatching { BluetoothAdapter.getDefaultAdapter()?.cancelDiscovery() }
 
+        logger.logDebug(ObdLogger.Dir.INFO, "Connecting to ${device.address}")
         val socket = openSocket()
         val input = socket.inputStream
         val output = socket.outputStream
@@ -77,18 +79,48 @@ class Elm327BluetoothSource(
                     sendCommand(input, output, cmd)
                     delay(120L)
                 }
-                var snapshot = VehicleSnapshot.EMPTY
+
+                val supported = probeSupportedPids(input, output)
+                val basePids = if (supported.isEmpty()) polled
+                else polled.filter { it.number in supported }
+                val hasEcuGear = supported.isEmpty() ||
+                    ObdPid.TRANSMISSION_GEAR_RATIO.number in supported
+                val activePids = if (hasEcuGear) basePids + ObdPid.TRANSMISSION_GEAR_RATIO else basePids
+                val unsupported = if (supported.isEmpty()) emptySet()
+                else polled.map { it.number }.filter { it !in supported }.toSet()
+
+                logger.logDebug(
+                    ObdLogger.Dir.INFO,
+                    "Polling ${activePids.size} PIDs; ECU gear=${hasEcuGear}",
+                )
+
+                var snapshot = VehicleSnapshot.EMPTY.copy(unsupportedPids = unsupported)
+                var deadCycles = 0
                 while (isActive) {
-                    for (pid in polled) {
-                        val raw = sendCommand(input, output, pid.request)
-                        snapshot = snapshot.merge(pid, ObdResponseParser.parse(pid, raw))
+                    var responded = 0
+                    for (pid in activePids) {
+                        val value = try {
+                            val raw = sendCommand(input, output, pid.request)
+                            responded++
+                            ObdResponseParser.parse(pid, raw)
+                        } catch (io: IOException) {
+                            // Isolate a slow/unsupported PID; keep the stream alive.
+                            logger.logDebug(ObdLogger.Dir.INFO, "skip ${pid.request}: ${io.message}")
+                            null
+                        }
+                        snapshot = snapshot.merge(pid, value)
                     }
-                    val gear = if (snapshot.speedKmh != null && snapshot.rpm != null) {
-                        gearEstimator.estimate(snapshot.speedKmh!!, snapshot.rpm!!)
+
+                    // A fully dead cycle (nothing answered) means the link is gone.
+                    if (responded == 0) {
+                        deadCycles++
+                        if (deadCycles >= 2) throw IOException("No response from adapter")
                     } else {
-                        null
+                        deadCycles = 0
                     }
-                    trySend(snapshot.copy(gear = gear))
+
+                    snapshot = snapshot.withGear(hasEcuGear)
+                    trySend(snapshot)
                 }
             } catch (e: Exception) {
                 close(e)
@@ -102,6 +134,7 @@ class Elm327BluetoothSource(
     }
         .retryWhen { cause, attempt ->
             if (cause is IOException && attempt < MAX_RECONNECTS) {
+                logger.logDebug(ObdLogger.Dir.INFO, "reconnect attempt ${attempt + 1}")
                 delay(1500L)
                 true
             } else {
@@ -110,11 +143,45 @@ class Elm327BluetoothSource(
         }
         .flowOn(Dispatchers.IO)
 
-    /**
-     * Opens the RFCOMM socket, falling back to the reflection-based channel-1
-     * socket that many cheap ELM327 clones require when the standard SPP
-     * service-record connect fails.
-     */
+    /** Queries the Mode 01 supported-PID bitmasks and returns all supported PIDs. */
+    private fun probeSupportedPids(input: InputStream, output: OutputStream): Set<Int> {
+        val supported = mutableSetOf<Int>()
+        for (base in intArrayOf(0x00, 0x20, 0x40, 0x60, 0xA0)) {
+            val request = "01%02X".format(base)
+            val raw = try {
+                sendCommand(input, output, request)
+            } catch (io: IOException) {
+                continue
+            }
+            val bytes = ObdResponseParser.rawDataBytes(request, 4, raw) ?: continue
+            supported += SupportedPids.fromBitmask(base, bytes)
+        }
+        if (supported.isNotEmpty()) {
+            logger.logDebug(
+                ObdLogger.Dir.INFO,
+                "Supported PIDs: " + supported.sorted().joinToString(" ") { "%02X".format(it) },
+            )
+        }
+        return supported
+    }
+
+    private fun VehicleSnapshot.withGear(hasEcuGear: Boolean): VehicleSnapshot {
+        // Prefer the ECU actual-gear ratio; fall back to speed/RPM estimation.
+        if (hasEcuGear && gearRatioActual != null) {
+            val g = gearEstimator.gearFromRatio(gearRatioActual)
+            if (g != null) return copy(gear = g, gearSource = GearSource.ECU)
+        }
+        val est = if (speedKmh != null && rpm != null) {
+            gearEstimator.estimate(speedKmh, rpm)
+        } else {
+            null
+        }
+        return copy(
+            gear = est,
+            gearSource = if (est != null) GearSource.ESTIMATED else GearSource.NONE,
+        )
+    }
+
     @SuppressLint("MissingPermission")
     private fun openSocket(): BluetoothSocket {
         val secure = device.createRfcommSocketToServiceRecord(SPP_UUID)
@@ -133,6 +200,7 @@ class Elm327BluetoothSource(
 
     /** Writes a command and reads until the ELM327 ">" prompt or a timeout. */
     private fun sendCommand(input: InputStream, output: OutputStream, command: String): String {
+        logger.logDebug(ObdLogger.Dir.TX, command)
         output.write((command + "\r").toByteArray())
         output.flush()
         val sb = StringBuilder()
@@ -142,13 +210,16 @@ class Elm327BluetoothSource(
                 val b = input.read()
                 if (b == -1) break
                 val c = b.toChar()
-                if (c == '>') return sb.toString()
+                if (c == '>') {
+                    logger.logDebug(ObdLogger.Dir.RX, sb.toString())
+                    return sb.toString()
+                }
                 sb.append(c)
             } else {
                 Thread.sleep(5L)
             }
         }
-        throw IOException("ELM327 read timeout for '$command'")
+        throw IOException("read timeout for '$command'")
     }
 
     private fun VehicleSnapshot.merge(pid: ObdPid, value: Double?): VehicleSnapshot = when (pid) {
@@ -166,6 +237,7 @@ class Elm327BluetoothSource(
         ObdPid.STFT_B1 -> copy(stftPct = value ?: stftPct)
         ObdPid.LTFT_B1 -> copy(ltftPct = value ?: ltftPct)
         ObdPid.CONTROL_MODULE_VOLTAGE -> copy(batteryVolts = value ?: batteryVolts)
+        ObdPid.TRANSMISSION_GEAR_RATIO -> copy(gearRatioActual = value ?: gearRatioActual)
     }
 
     companion object {

@@ -62,7 +62,17 @@ enum class ObdPid(
     AMBIENT_TEMP("0146", "Ambient", "\u00B0C", 1, { d ->
         if (d.isNotEmpty()) (d[0] - 40).toDouble() else null
     }),
+    // PID 0xA4 "Transmission Actual Gear": 4 bytes [support, gear-bits, C, D].
+    // Bit A1 of the support byte marks it available; actual gear ratio = (256*C + D)/1000.
+    // Returns the ratio (mapped to a gear number by GearEstimator).
+    TRANSMISSION_GEAR_RATIO("01A4", "Gear ratio", "", 4, { d ->
+        if (d.size >= 4 && (d[0] and 0x02) != 0) ((256 * d[2]) + d[3]) / 1000.0 else null
+    }),
     ;
+
+    /** The PID number itself (e.g. 0x0C for RPM), parsed from the request. */
+    val number: Int
+        get() = request.substring(2).toInt(16)
 
     /** Mode byte echoed back by the ECU is the request mode + 0x40 (e.g. 01 -> 41). */
     val responseHeader: String

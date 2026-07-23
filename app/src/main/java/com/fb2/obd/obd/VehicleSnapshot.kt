@@ -21,6 +21,11 @@ data class VehicleSnapshot(
     val ltftPct: Double? = null,
     val batteryVolts: Double? = null,
     val gear: Int? = null,
+    val gearSource: GearSource = GearSource.NONE,
+    /** Actual transmission gear ratio from ECU PID 0xA4, if available. */
+    val gearRatioActual: Double? = null,
+    /** PID numbers the ECU reported as NOT supported (for "n/s" tiles). */
+    val unsupportedPids: Set<Int> = emptySet(),
 ) {
     companion object {
         val EMPTY = VehicleSnapshot()

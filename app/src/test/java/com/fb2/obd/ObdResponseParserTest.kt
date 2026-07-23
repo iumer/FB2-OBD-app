@@ -97,6 +97,18 @@ class ObdResponseParserTest {
     }
 
     @Test
+    fun transmissionGearRatio_decodesFromPidA4() {
+        // 41 A4 [support=02, bit1 set] [gearbits=00] [C=04][D=27] -> (256*4+39)/1000 = 1.063
+        val ratio = ObdResponseParser.parse(ObdPid.TRANSMISSION_GEAR_RATIO, "41 A4 02 00 04 27")
+        assertEquals(1.063, ratio!!, 0.001)
+    }
+
+    @Test
+    fun transmissionGearRatio_nullWhenUnsupported() {
+        assertNull(ObdResponseParser.parse(ObdPid.TRANSMISSION_GEAR_RATIO, "41 A4 00 00 04 27"))
+    }
+
+    @Test
     fun responseHeader_isModePlus0x40() {
         assertTrue(ObdPid.ENGINE_RPM.responseHeader == "410C")
         assertTrue(ObdPid.CONTROL_MODULE_VOLTAGE.responseHeader == "4142")
