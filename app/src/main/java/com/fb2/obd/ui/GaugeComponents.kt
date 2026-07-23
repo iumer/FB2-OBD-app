@@ -1,0 +1,175 @@
+package com.fb2.obd.ui
+
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.foundation.Canvas
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.fb2.obd.obd.Health
+import com.fb2.obd.ui.theme.Accent
+import com.fb2.obd.ui.theme.CritRed
+import com.fb2.obd.ui.theme.GoodGreen
+import com.fb2.obd.ui.theme.Surface
+import com.fb2.obd.ui.theme.TextMuted
+import com.fb2.obd.ui.theme.TextPrimary
+import com.fb2.obd.ui.theme.WarnAmber
+
+fun Health.color(): Color = when (this) {
+    Health.GOOD -> GoodGreen
+    Health.WARN -> WarnAmber
+    Health.CRITICAL -> CritRed
+    Health.UNKNOWN -> TextMuted
+}
+
+/**
+ * A large circular sweep gauge (used for RPM and Speed) with the value in the
+ * centre. Sweeps 270 degrees like a real instrument cluster.
+ */
+@Composable
+fun CircularGauge(
+    label: String,
+    value: Double?,
+    maxValue: Double,
+    unit: String,
+    modifier: Modifier = Modifier,
+    size: Dp = 220.dp,
+    arcColor: Color = Accent,
+) {
+    val fraction = ((value ?: 0.0) / maxValue).coerceIn(0.0, 1.0).toFloat()
+    val animated by animateFloatAsState(
+        targetValue = fraction,
+        animationSpec = tween(durationMillis = 220),
+        label = "gauge",
+    )
+    val sweepTotal = 270f
+    val startAngle = 135f
+
+    Box(modifier = modifier.size(size), contentAlignment = Alignment.Center) {
+        Canvas(modifier = Modifier.fillMaxSize().padding(10.dp)) {
+            val stroke = Stroke(width = 22f, cap = StrokeCap.Round)
+            val arcSize = Size(this.size.width, this.size.height)
+            drawArc(
+                color = Color(0xFF22303C),
+                startAngle = startAngle,
+                sweepAngle = sweepTotal,
+                useCenter = false,
+                topLeft = Offset.Zero,
+                size = arcSize,
+                style = stroke,
+            )
+            drawArc(
+                brush = Brush.sweepGradient(
+                    listOf(arcColor, arcColor, WarnAmber, CritRed),
+                ),
+                startAngle = startAngle,
+                sweepAngle = sweepTotal * animated,
+                useCenter = false,
+                topLeft = Offset.Zero,
+                size = arcSize,
+                style = stroke,
+            )
+        }
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(
+                text = value?.let { it.toInt().toString() } ?: "--",
+                color = TextPrimary,
+                fontSize = 52.sp,
+                fontWeight = FontWeight.Bold,
+            )
+            Text(text = unit, color = TextMuted, fontSize = 14.sp)
+            Text(
+                text = label,
+                color = arcColor,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.SemiBold,
+            )
+        }
+    }
+}
+
+/** Compact metric tile with a health-coloured status dot. */
+@Composable
+fun StatTile(
+    label: String,
+    value: String,
+    unit: String,
+    health: Health = Health.UNKNOWN,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(14.dp))
+            .background(Surface)
+            .padding(horizontal = 14.dp, vertical = 10.dp),
+        verticalArrangement = Arrangement.Center,
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                modifier = Modifier
+                    .size(8.dp)
+                    .clip(RoundedCornerShape(4.dp))
+                    .background(health.color()),
+            )
+            Text(
+                text = "  $label",
+                color = TextMuted,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Medium,
+            )
+        }
+        Row(verticalAlignment = Alignment.Bottom) {
+            Text(
+                text = value,
+                color = if (health == Health.UNKNOWN) TextPrimary else health.color(),
+                fontSize = 24.sp,
+                fontWeight = FontWeight.Bold,
+            )
+            if (unit.isNotEmpty()) {
+                Text(text = " $unit", color = TextMuted, fontSize = 12.sp)
+            }
+        }
+    }
+}
+
+/** Central gear / PRND style indicator. */
+@Composable
+fun GearIndicator(gear: Int?, modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(16.dp))
+            .background(Surface)
+            .padding(horizontal = 22.dp, vertical = 12.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Text(text = "GEAR", color = TextMuted, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+        Text(
+            text = gear?.toString() ?: "N",
+            color = Accent,
+            fontSize = 44.sp,
+            fontWeight = FontWeight.Bold,
+        )
+    }
+}
