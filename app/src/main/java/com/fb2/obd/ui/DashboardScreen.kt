@@ -1,6 +1,7 @@
 package com.fb2.obd.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -27,6 +28,7 @@ import com.fb2.obd.ui.theme.Accent
 import com.fb2.obd.ui.theme.Background
 import com.fb2.obd.ui.theme.CritRed
 import com.fb2.obd.ui.theme.GoodGreen
+import com.fb2.obd.ui.theme.Surface
 import com.fb2.obd.ui.theme.TextMuted
 import kotlin.math.roundToInt
 
@@ -40,7 +42,11 @@ private fun Double?.fmt(digits: Int = 0): String = this?.let {
  * below (temps, voltage, trims, load, throttle).
  */
 @Composable
-fun DashboardScreen(state: DashboardUiState, modifier: Modifier = Modifier) {
+fun DashboardScreen(
+    state: DashboardUiState,
+    modifier: Modifier = Modifier,
+    onConnectClick: () -> Unit = {},
+) {
     val s = state.snapshot
     Column(
         modifier = modifier
@@ -48,7 +54,7 @@ fun DashboardScreen(state: DashboardUiState, modifier: Modifier = Modifier) {
             .background(Background)
             .padding(16.dp),
     ) {
-        TopBar(state)
+        TopBar(state, onConnectClick)
 
         Row(
             modifier = Modifier
@@ -83,7 +89,7 @@ fun DashboardScreen(state: DashboardUiState, modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun TopBar(state: DashboardUiState) {
+private fun TopBar(state: DashboardUiState, onConnectClick: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -111,6 +117,19 @@ private fun TopBar(state: DashboardUiState) {
                     .background(dot),
             )
             Text(text = "  $text", color = TextMuted, fontSize = 13.sp)
+
+            Text(
+                text = "CONNECT",
+                color = Accent,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier
+                    .padding(start = 16.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .clickable { onConnectClick() }
+                    .background(Surface)
+                    .padding(horizontal = 14.dp, vertical = 8.dp),
+            )
         }
     }
 }
