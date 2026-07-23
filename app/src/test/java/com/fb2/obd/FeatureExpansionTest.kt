@@ -1,6 +1,7 @@
 package com.fb2.obd
 
 import com.fb2.obd.data.DemoObdSource
+import com.fb2.obd.obd.ColdStartIdleCatalog
 import com.fb2.obd.obd.DiagnosticParsers
 import com.fb2.obd.obd.DtcCatalog
 import com.fb2.obd.obd.HealthScoreCalculator
@@ -100,5 +101,19 @@ class FeatureExpansionTest {
         assertEquals("JHMFB2123456789", info.vin)
         val deep = demo.readReadiness()
         assertTrue(deep.monitors.isNotEmpty())
+    }
+
+    @Test
+    fun coldStartIdlePack_probesMisfireAndFuel() = runBlocking {
+        assertTrue(ColdStartIdleCatalog.allPids.size >= 20)
+        assertTrue(ColdStartIdleCatalog.sections.any { it.title.contains("Misfire", true) })
+        assertTrue(ColdStartIdleCatalog.sections.any { it.title.contains("Fuel", true) })
+        val demo = DemoObdSource()
+        val results = demo.probePids(ColdStartIdleCatalog.allPids)
+        assertTrue(results.any { it.pid.label.contains("Misfire cyl 2") && it.supported })
+        assertTrue(results.any { it.pid.label.contains("Fuel pump pressure") && it.supported })
+        val tips = ColdStartIdleCatalog.analyze(results)
+        assertTrue(tips.isNotEmpty())
+        assertTrue(tips.any { it.contains("Misfire", true) || it.contains("cyl", true) })
     }
 }

@@ -66,6 +66,7 @@ data class SettingsNav(
     val onPerformance: () -> Unit = {},
     val onCustom: () -> Unit = {},
     val onFuel: () -> Unit = {},
+    val onIdle: () -> Unit = {},
     val onTrip: () -> Unit = {},
     val onVehicle: () -> Unit = {},
     val onDeepDiag: () -> Unit = {},
@@ -114,6 +115,7 @@ fun SettingsScreen(
 
         SectionLabel("Live pages")
         NavRow("Custom sensors (+ full catalog)", nav.onCustom)
+        NavRow("Cold start / rough idle (misfire + fuel)", nav.onIdle)
         NavRow("Fuel system page", nav.onFuel)
         NavRow("Trip computer / economy", nav.onTrip)
         NavRow("Transmission dashboard", nav.onTrans)

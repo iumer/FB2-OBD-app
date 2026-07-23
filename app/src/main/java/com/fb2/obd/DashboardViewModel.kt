@@ -9,6 +9,7 @@ import com.fb2.obd.data.MaintenanceEntry
 import com.fb2.obd.data.MaintenanceStore
 import com.fb2.obd.data.ObdLogger
 import com.fb2.obd.data.ObdSource
+import com.fb2.obd.obd.ColdStartIdleCatalog
 import com.fb2.obd.obd.Dtc
 import com.fb2.obd.obd.FreezeFrame
 import com.fb2.obd.obd.HealthScore
@@ -92,6 +93,12 @@ data class DeepDiagState(
     val mode06: List<Mode06Result> = emptyList(),
 )
 
+data class IdleDiagState(
+    val loading: Boolean = false,
+    val values: Map<String, String> = emptyMap(),
+    val tips: List<String> = emptyList(),
+)
+
 /**
  * Collects snapshots from the active [ObdSource] and exposes them as UI state.
  */
@@ -131,6 +138,9 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
 
     private val _deepDiag = MutableStateFlow(DeepDiagState())
     val deepDiag: StateFlow<DeepDiagState> = _deepDiag.asStateFlow()
+
+    private val _idleDiag = MutableStateFlow(IdleDiagState())
+    val idleDiag: StateFlow<IdleDiagState> = _idleDiag.asStateFlow()
 
     private val _health = MutableStateFlow<HealthScore?>(null)
     val health: StateFlow<HealthScore?> = _health.asStateFlow()
@@ -306,8 +316,9 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
         val source = currentSource ?: return
         viewModelScope.launch {
             val defs = StandardPidCatalog.fuelPageDefaults() +
-                HondaPidCatalog.engine.pids.filter { it.label.contains("Injector", true) }
-            val results = source.probePids(defs)
+                HondaPidCatalog.engine.pids.filter { it.label.contains("Injector", true) } +
+                HondaPidCatalog.engine.pids.filter { it.label.contains("Fuel", true) }
+            val results = source.probePids(defs.distinctBy { it.id })
             _fuelValues.value = results.associate { r ->
                 r.pid.label to when {
                     !r.supported -> "n/s"
@@ -315,6 +326,32 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
                     else -> "—"
                 }
             }
+        }
+    }
+
+    fun refreshIdleDiagnostics() {
+        val source = currentSource ?: return
+        viewModelScope.launch {
+            _idleDiag.update { it.copy(loading = true) }
+            val results = source.probePids(ColdStartIdleCatalog.allPids)
+            val values = results.associate { r ->
+                r.pid.id to when {
+                    !r.supported -> "n/s"
+                    r.sample != null -> "%.2f %s".format(r.sample, r.pid.unit).trim()
+                    else -> "—"
+                }
+            } + results.associate { r ->
+                r.pid.label to when {
+                    !r.supported -> "n/s"
+                    r.sample != null -> "%.2f %s".format(r.sample, r.pid.unit).trim()
+                    else -> "—"
+                }
+            }
+            _idleDiag.value = IdleDiagState(
+                loading = false,
+                values = values,
+                tips = ColdStartIdleCatalog.analyze(results),
+            )
         }
     }
 
