@@ -105,11 +105,11 @@ private fun DtcRow(dtc: Dtc, color: androidx.compose.ui.graphics.Color) {
             .padding(14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(text = dtc.code, color = color, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            Text(text = dtc.code, color = color, fontSize = 18.sp, fontWeight = FontWeight.Bold)
         Text(
-            text = "   ${dtc.description}",
+            text = "   ${com.fb2.obd.obd.DtcCatalog.explain(dtc.code)}",
             color = TextPrimary,
-            fontSize = 14.sp,
+            fontSize = 13.sp,
             modifier = Modifier.padding(start = 4.dp),
         )
     }

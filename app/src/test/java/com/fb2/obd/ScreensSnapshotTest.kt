@@ -32,10 +32,7 @@ class ScreensSnapshotTest {
                     settings = SettingsState(valueLogging = true, showEstimatedGear = true),
                     onToggleValueLogging = {},
                     onToggleEstimatedGear = {},
-                    onOpenFaults = {},
-                    onOpenPerformance = {},
-                    onOpenDebugLog = {},
-                    onOpenValueLog = {},
+                    nav = com.fb2.obd.ui.SettingsNav(),
                     onBack = {},
                 )
             }

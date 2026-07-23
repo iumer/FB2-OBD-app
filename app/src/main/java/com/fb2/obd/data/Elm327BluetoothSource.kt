@@ -4,13 +4,23 @@ import android.annotation.SuppressLint
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothSocket
+import com.fb2.obd.obd.DiagnosticParsers
 import com.fb2.obd.obd.Dtc
 import com.fb2.obd.obd.DtcDecoder
+import com.fb2.obd.obd.FreezeFrame
 import com.fb2.obd.obd.GearEstimator
 import com.fb2.obd.obd.GearSource
+import com.fb2.obd.obd.HondaPidCatalog
+import com.fb2.obd.obd.Mode06Result
+import com.fb2.obd.obd.ModuleScanResult
+import com.fb2.obd.obd.O2TestResult
 import com.fb2.obd.obd.ObdPid
 import com.fb2.obd.obd.ObdResponseParser
+import com.fb2.obd.obd.PidDefinition
+import com.fb2.obd.obd.PidProbeResult
+import com.fb2.obd.obd.ReadinessStatus
 import com.fb2.obd.obd.SupportedPids
+import com.fb2.obd.obd.VehicleInfo
 import com.fb2.obd.obd.VehicleSnapshot
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.awaitClose
@@ -147,6 +157,110 @@ class Elm327BluetoothSource(
     override suspend fun clearDtcs(): Boolean {
         val conn = connection ?: return false
         return runCatching { conn.exec("04").uppercase().contains("44") }.getOrDefault(false)
+    }
+
+    override suspend fun command(raw: String): String? {
+        val conn = connection ?: return null
+        return runCatching { conn.exec(raw.trim()) }.getOrNull()
+    }
+
+    override suspend fun readVehicleInfo(): VehicleInfo {
+        val conn = connection ?: return VehicleInfo()
+        val vinRaw = runCatching { conn.exec("0902") }.getOrNull()
+        val calRaw = runCatching { conn.exec("0904") }.getOrNull()
+        val nameRaw = runCatching { conn.exec("090A") }.getOrNull()
+        return VehicleInfo(
+            vin = vinRaw?.let { DiagnosticParsers.parseMode09Vin(it) },
+            calibrationIds = calRaw?.let { DiagnosticParsers.parseMode09CalIds(it) } ?: emptyList(),
+            ecuName = nameRaw?.let { DiagnosticParsers.parseMode09CalIds(it).firstOrNull() },
+            rawNotes = listOfNotNull(vinRaw?.take(80), calRaw?.take(80)),
+        )
+    }
+
+    override suspend fun readReadiness(): ReadinessStatus {
+        val conn = connection ?: return ReadinessStatus()
+        val raw = runCatching { conn.exec("0101") }.getOrNull() ?: return ReadinessStatus()
+        return DiagnosticParsers.parseReadiness(raw)
+    }
+
+    override suspend fun readFreezeFrame(): FreezeFrame {
+        val conn = connection ?: return FreezeFrame()
+        // Request freeze-frame DTC + a few common PIDs.
+        val raw = runCatching {
+            conn.exec("0202") + " " + conn.exec("020C") + " " + conn.exec("020D") +
+                " " + conn.exec("0205") + " " + conn.exec("0204")
+        }.getOrNull() ?: return FreezeFrame()
+        return DiagnosticParsers.parseFreezeFrame(raw)
+    }
+
+    override suspend fun readMode05(): List<O2TestResult> {
+        val conn = connection ?: return emptyList()
+        val raw = runCatching { conn.exec("05") }.getOrNull() ?: return emptyList()
+        return DiagnosticParsers.dumpMode05(raw)
+    }
+
+    override suspend fun readMode06(): List<Mode06Result> {
+        val conn = connection ?: return emptyList()
+        val raw = runCatching { conn.exec("06") }.getOrNull() ?: return emptyList()
+        return DiagnosticParsers.dumpMode06(raw)
+    }
+
+    override suspend fun probePids(pids: List<PidDefinition>): List<PidProbeResult> {
+        val conn = connection ?: return emptyList()
+        return pids.map { pid ->
+            val raw = runCatching { conn.exec(pid.request) }.getOrNull()
+            val up = raw?.uppercase().orEmpty()
+            val bad = raw == null || listOf("NO DATA", "UNABLE", "ERROR", "?", "STOPPED").any { up.contains(it) }
+            if (bad) {
+                PidProbeResult(pid, false, null, raw)
+            } else {
+                val bytes = when {
+                    pid.request.startsWith("01") && pid.request.length == 4 ->
+                        ObdResponseParser.rawDataBytes(pid.request, pid.dataBytes, raw!!)
+                    pid.request.startsWith("22") -> extractMode22(pid.request, raw!!)
+                    else -> null
+                }
+                val value = bytes?.let { pid.decode(it) }
+                PidProbeResult(pid, true, value, raw)
+            }
+        }
+    }
+
+    override suspend fun probeHondaModules(): List<ModuleScanResult> {
+        return HondaPidCatalog.allPacks.map { pack ->
+            val results = probePids(pack.pids)
+            val ok = results.filter { it.supported }
+            ModuleScanResult(
+                module = pack.title,
+                profileId = pack.id,
+                supportedCount = ok.size,
+                totalCount = pack.pids.size,
+                samplePids = ok.take(5).map { it.pid.label },
+                status = when {
+                    ok.isEmpty() -> "No response (not supported / wrong header)"
+                    ok.size == pack.pids.size -> "All PIDs answered"
+                    else -> "${ok.size}/${pack.pids.size} PIDs answered"
+                },
+            )
+        }
+    }
+
+    override suspend fun readPid(pid: PidDefinition): Double? {
+        return probePids(listOf(pid)).firstOrNull()?.sample
+    }
+
+    private fun extractMode22(request: String, raw: String): IntArray? {
+        // Positive response 62 + PID bytes.
+        val pidHex = request.removePrefix("22")
+        val header = "62$pidHex".uppercase()
+        val cleaned = raw.replace(">", " ").replace("\r", " ").replace("\n", " ").uppercase()
+        val hex = cleaned.filter { it.isDigit() || it in 'A'..'F' || it == ' ' }
+        val joined = hex.split(Regex("\\s+")).filter { it.matches(Regex("[0-9A-F]+")) }.joinToString("")
+        val idx = joined.indexOf(header)
+        if (idx < 0) return null
+        val data = joined.substring(idx + header.length).chunked(2)
+            .filter { it.length == 2 }.mapNotNull { it.toIntOrNull(16) }
+        return if (data.isEmpty()) null else data.toIntArray()
     }
 
     private suspend fun probeSupportedPids(conn: Elm327Connection): Set<Int> {

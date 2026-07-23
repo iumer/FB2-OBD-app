@@ -1,6 +1,14 @@
 package com.fb2.obd.data
 
 import com.fb2.obd.obd.Dtc
+import com.fb2.obd.obd.FreezeFrame
+import com.fb2.obd.obd.Mode06Result
+import com.fb2.obd.obd.ModuleScanResult
+import com.fb2.obd.obd.O2TestResult
+import com.fb2.obd.obd.PidDefinition
+import com.fb2.obd.obd.PidProbeResult
+import com.fb2.obd.obd.ReadinessStatus
+import com.fb2.obd.obd.VehicleInfo
 import com.fb2.obd.obd.VehicleSnapshot
 import kotlinx.coroutines.flow.Flow
 
@@ -9,23 +17,30 @@ enum class ConnectionState { DISCONNECTED, CONNECTING, CONNECTED, ERROR }
 
 /**
  * A source of live vehicle data. Implementations may be a simulated demo feed or
- * a real ELM327 Bluetooth adapter. The dashboard only depends on this interface.
+ * a real ELM327 Bluetooth adapter.
  */
 interface ObdSource {
     val name: String
-
-    /** True for a real vehicle connection; false for the simulated demo feed. */
     val isLive: Boolean
-
-    /** Emits a decoded snapshot on every poll cycle. */
     fun snapshots(): Flow<VehicleSnapshot>
 
-    /** Mode 03 stored diagnostic trouble codes. */
     suspend fun readStoredDtcs(): List<Dtc> = emptyList()
-
-    /** Mode 07 pending diagnostic trouble codes. */
     suspend fun readPendingDtcs(): List<Dtc> = emptyList()
-
-    /** Mode 04 clear DTCs + freeze frame. Returns true on a positive response. */
     suspend fun clearDtcs(): Boolean = false
+    suspend fun command(raw: String): String? = null
+
+    suspend fun readVehicleInfo(): VehicleInfo = VehicleInfo()
+    suspend fun readReadiness(): ReadinessStatus = ReadinessStatus()
+    suspend fun readFreezeFrame(): FreezeFrame = FreezeFrame()
+    suspend fun readMode05(): List<O2TestResult> = emptyList()
+    suspend fun readMode06(): List<Mode06Result> = emptyList()
+
+    /** Probe a list of PIDs; returns support + sample value when possible. */
+    suspend fun probePids(pids: List<PidDefinition>): List<PidProbeResult> = emptyList()
+
+    /** Probe all Honda enhanced packs and return per-module results. */
+    suspend fun probeHondaModules(): List<ModuleScanResult> = emptyList()
+
+    /** Read + decode one catalog PID. */
+    suspend fun readPid(pid: PidDefinition): Double? = null
 }

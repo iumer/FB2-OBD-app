@@ -61,15 +61,29 @@ fun ScreenHeader(title: String, onBack: () -> Unit, action: (@Composable () -> U
     }
 }
 
+data class SettingsNav(
+    val onFaults: () -> Unit = {},
+    val onPerformance: () -> Unit = {},
+    val onCustom: () -> Unit = {},
+    val onFuel: () -> Unit = {},
+    val onTrip: () -> Unit = {},
+    val onVehicle: () -> Unit = {},
+    val onDeepDiag: () -> Unit = {},
+    val onTrans: () -> Unit = {},
+    val onHealth: () -> Unit = {},
+    val onMaintenance: () -> Unit = {},
+    val onHonda: () -> Unit = {},
+    val onGForce: () -> Unit = {},
+    val onDebug: () -> Unit = {},
+    val onValues: () -> Unit = {},
+)
+
 @Composable
 fun SettingsScreen(
     settings: SettingsState,
     onToggleValueLogging: (Boolean) -> Unit,
     onToggleEstimatedGear: (Boolean) -> Unit,
-    onOpenFaults: () -> Unit,
-    onOpenPerformance: () -> Unit,
-    onOpenDebugLog: () -> Unit,
-    onOpenValueLog: () -> Unit,
+    nav: SettingsNav,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -85,7 +99,7 @@ fun SettingsScreen(
         SectionLabel("Gear")
         ToggleRow(
             title = "Show estimated gear",
-            subtitle = "When the ECU can't report the actual gear, estimate it from speed & RPM (labelled EST).",
+            subtitle = "When the ECU can't report the actual gear, estimate from speed & RPM (EST).",
             checked = settings.showEstimatedGear,
             onCheckedChange = onToggleEstimatedGear,
         )
@@ -93,18 +107,28 @@ fun SettingsScreen(
         SectionLabel("Logging")
         ToggleRow(
             title = "Record value log",
-            subtitle = "Continuously log decoded readings so you can export them as CSV.",
+            subtitle = "Continuously log decoded readings for CSV export.",
             checked = settings.valueLogging,
             onCheckedChange = onToggleValueLogging,
         )
 
-        SectionLabel("Tools")
-        NavRow(title = "Fault codes (read / clear DTCs)", onClick = onOpenFaults)
-        NavRow(title = "Performance (0\u2013100, \u00BC mile)", onClick = onOpenPerformance)
+        SectionLabel("Live pages")
+        NavRow("Custom sensors (+ full catalog)", nav.onCustom)
+        NavRow("Fuel system page", nav.onFuel)
+        NavRow("Trip computer / economy", nav.onTrip)
+        NavRow("Transmission dashboard", nav.onTrans)
+        NavRow("Performance (0\u2013100 / \u00BC mile)", nav.onPerformance)
+        NavRow("G-force meter", nav.onGForce)
+        NavRow("Health scores", nav.onHealth)
 
         SectionLabel("Diagnostics")
-        NavRow(title = "Debug log (raw ELM327 traffic)", onClick = onOpenDebugLog)
-        NavRow(title = "Value log (recorded readings)", onClick = onOpenValueLog)
+        NavRow("Fault codes (read / clear + AI tips)", nav.onFaults)
+        NavRow("Deep diagnostics (freeze / readiness / Mode 05+06)", nav.onDeepDiag)
+        NavRow("Vehicle info (VIN / Mode 09)", nav.onVehicle)
+        NavRow("Honda modules / full-system probe", nav.onHonda)
+        NavRow("Maintenance log book", nav.onMaintenance)
+        NavRow("Debug log (raw ELM327)", nav.onDebug)
+        NavRow("Value log (CSV)", nav.onValues)
     }
 }
 
@@ -163,7 +187,7 @@ private fun NavRow(title: String, onClick: () -> Unit) {
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(text = title, color = TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+        Text(text = title, color = TextPrimary, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
         Text(text = "\u203A", color = TextMuted, fontSize = 20.sp)
     }
 }
