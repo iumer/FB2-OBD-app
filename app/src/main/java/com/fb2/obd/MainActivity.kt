@@ -33,12 +33,14 @@ import com.fb2.obd.ui.BtDeviceUi
 import com.fb2.obd.ui.ConnectDialog
 import com.fb2.obd.ui.DashboardScreen
 import com.fb2.obd.ui.DebugLogScreen
+import com.fb2.obd.ui.FaultsScreen
+import com.fb2.obd.ui.PerformanceScreen
 import com.fb2.obd.ui.SettingsScreen
 import com.fb2.obd.ui.ValueLogScreen
 import com.fb2.obd.ui.theme.FB2Theme
 import kotlinx.coroutines.delay
 
-private enum class Screen { DASHBOARD, SETTINGS, DEBUG_LOG, VALUE_LOG }
+private enum class Screen { DASHBOARD, SETTINGS, FAULTS, PERFORMANCE, DEBUG_LOG, VALUE_LOG }
 
 class MainActivity : ComponentActivity() {
 
@@ -52,6 +54,8 @@ class MainActivity : ComponentActivity() {
             FB2Theme {
                 val state by viewModel.uiState.collectAsState()
                 val settings by viewModel.settings.collectAsState()
+                val faults by viewModel.faults.collectAsState()
+                val performance by viewModel.performance.collectAsState()
                 var screen by remember { mutableStateOf(Screen.DASHBOARD) }
                 var showConnect by remember { mutableStateOf(false) }
                 var devices by remember { mutableStateOf(emptyList<BtDeviceUi>()) }
@@ -114,9 +118,26 @@ class MainActivity : ComponentActivity() {
                         settings = settings,
                         onToggleValueLogging = viewModel::setValueLogging,
                         onToggleEstimatedGear = viewModel::setShowEstimatedGear,
+                        onOpenFaults = { screen = Screen.FAULTS },
+                        onOpenPerformance = { screen = Screen.PERFORMANCE },
                         onOpenDebugLog = { screen = Screen.DEBUG_LOG },
                         onOpenValueLog = { screen = Screen.VALUE_LOG },
                         onBack = { screen = Screen.DASHBOARD },
+                        modifier = Modifier.fillMaxSize(),
+                    )
+
+                    Screen.FAULTS -> FaultsScreen(
+                        state = faults,
+                        onRead = { viewModel.readFaults() },
+                        onClear = { viewModel.clearFaults() },
+                        onBack = { screen = Screen.SETTINGS },
+                        modifier = Modifier.fillMaxSize(),
+                    )
+
+                    Screen.PERFORMANCE -> PerformanceScreen(
+                        state = performance,
+                        onReset = { viewModel.resetPerformance() },
+                        onBack = { screen = Screen.SETTINGS },
                         modifier = Modifier.fillMaxSize(),
                     )
 

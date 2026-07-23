@@ -1,5 +1,6 @@
 package com.fb2.obd.data
 
+import com.fb2.obd.obd.Dtc
 import com.fb2.obd.obd.VehicleSnapshot
 import kotlinx.coroutines.flow.Flow
 
@@ -18,4 +19,13 @@ interface ObdSource {
 
     /** Emits a decoded snapshot on every poll cycle. */
     fun snapshots(): Flow<VehicleSnapshot>
+
+    /** Mode 03 stored diagnostic trouble codes. */
+    suspend fun readStoredDtcs(): List<Dtc> = emptyList()
+
+    /** Mode 07 pending diagnostic trouble codes. */
+    suspend fun readPendingDtcs(): List<Dtc> = emptyList()
+
+    /** Mode 04 clear DTCs + freeze frame. Returns true on a positive response. */
+    suspend fun clearDtcs(): Boolean = false
 }
