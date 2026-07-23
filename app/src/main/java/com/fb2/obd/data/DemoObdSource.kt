@@ -2,8 +2,16 @@ package com.fb2.obd.data
 
 import com.fb2.obd.obd.Dtc
 import com.fb2.obd.obd.DtcCatalog
+import com.fb2.obd.obd.FreezeFrame
 import com.fb2.obd.obd.GearEstimator
 import com.fb2.obd.obd.GearSource
+import com.fb2.obd.obd.HondaPidCatalog
+import com.fb2.obd.obd.MonitorItem
+import com.fb2.obd.obd.ModuleScanResult
+import com.fb2.obd.obd.PidDefinition
+import com.fb2.obd.obd.PidProbeResult
+import com.fb2.obd.obd.ReadinessStatus
+import com.fb2.obd.obd.VehicleInfo
 import com.fb2.obd.obd.VehicleSnapshot
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
@@ -89,4 +97,100 @@ class DemoObdSource(
         demoCleared = true
         return true
     }
+
+    override suspend fun command(raw: String): String? {
+        val cmd = raw.trim().uppercase()
+        return when {
+            cmd == "ATI" -> "ELM327 v1.5"
+            cmd == "ATRV" -> "13.9V"
+            cmd == "ATDP" -> "AUTO, ISO 15765-4 (CAN 11/500)"
+            cmd == "0100" -> "41 00 BE 3E B8 11"
+            cmd == "0101" -> "41 01 00 07 E5 E5"
+            cmd == "0105" -> "41 05 7B"
+            cmd == "010C" -> "41 0C 0B 20"
+            cmd == "0902" -> "49 02 01 4A 48 4D 46 42 32 31 32 33 34 35 36 37 38 39"
+            cmd == "0904" -> "49 04 01 R18A2-DEMO-CAL"
+            cmd.startsWith("09") -> "NO DATA"
+            cmd.startsWith("22") -> "NO DATA"
+            cmd == "03" || cmd == "07" || cmd == "0A" -> "43 00"
+            cmd == "05" || cmd == "06" -> "NO DATA"
+            cmd.startsWith("01") -> "41 ${cmd.drop(2)} 00 00"
+            else -> "OK"
+        }
+    }
+
+    override suspend fun readVehicleInfo() = VehicleInfo(
+        vin = "JHMFB2123456789",
+        calibrationIds = listOf("R18A2-DEMO-CAL"),
+        ecuName = "DEMO-ECM",
+    )
+
+    override suspend fun readReadiness() = ReadinessStatus(
+        milOn = !demoCleared,
+        dtcCount = if (demoCleared) 0 else 2,
+        monitors = listOf(
+            MonitorItem("Misfire", true, true),
+            MonitorItem("Fuel system", true, true),
+            MonitorItem("Catalyst", true, false),
+            MonitorItem("EVAP", true, true),
+            MonitorItem("O2 sensor", true, true),
+        ),
+    )
+
+    override suspend fun readFreezeFrame() = FreezeFrame(
+        dtc = if (demoCleared) null else "P0133",
+        values = mapOf("RPM" to "850", "Coolant" to "86 °C", "Load" to "22 %"),
+    )
+
+    // A few Mode 22 IDs answer in demo so Transmission / Honda scan UIs are exerciseable.
+    private val demoMode22 = mapOf(
+        "221101" to 86.0, // ATF temp
+        "221201" to 3.0, // gear
+        "221202" to 4.0, // range D
+        "221206" to 40.0, // TC slip
+        "221207" to 1.0, // lock status
+        "221208" to 980.0, // line pressure
+        "221304" to 2.8, // injector PW
+    )
+
+    override suspend fun probePids(pids: List<PidDefinition>) = pids.map { pid ->
+        when {
+            pid.request.startsWith("01") -> {
+                val sample = pid.decode(intArrayOf(120, 0, 0, 0)) ?: 1.0
+                PidProbeResult(pid, true, sample, "OK")
+            }
+            demoMode22.containsKey(pid.request) ->
+                PidProbeResult(pid, true, demoMode22[pid.request], "62 OK")
+            else -> PidProbeResult(pid, false, null, "NO DATA")
+        }
+    }
+
+    override suspend fun probeHondaModules(): List<ModuleScanResult> {
+        return HondaPidCatalog.allPacks.map { pack ->
+            val results = probePids(pack.pids)
+            val ok = results.filter { it.supported }
+            ModuleScanResult(
+                module = pack.title,
+                profileId = pack.id,
+                supportedCount = ok.size,
+                totalCount = pack.pids.size,
+                samplePids = ok.take(5).map { it.pid.label },
+                status = when {
+                    ok.isEmpty() -> "No response (demo placeholder)"
+                    else -> "${ok.size}/${pack.pids.size} demo PIDs answered"
+                },
+            )
+        }
+    }
+
+    override suspend fun readMode05() = listOf(
+        com.fb2.obd.obd.O2TestResult("B1S1", "05", "0.45 V", "05 DEMO"),
+    )
+
+    override suspend fun readMode06() = listOf(
+        com.fb2.obd.obd.Mode06Result("01", "00", "0", "0", "FF", true, "06 01 00 00 00 FF"),
+    )
+
+    override suspend fun readPid(pid: PidDefinition): Double? =
+        probePids(listOf(pid)).firstOrNull()?.sample
 }

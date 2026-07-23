@@ -5,10 +5,14 @@ automatic), built around an ELM327 OBD-II adapter. The goal is a single-screen,
 instrument-cluster style dashboard that goes beyond generic OBD apps (Torque
 etc.) with Honda-focused diagnostics and a strong transmission dashboard.
 
-> Status: **v1 foundation.** Live single-screen dashboard, ELM327 Bluetooth
-> layer, a simulated demo feed, and the core OBD/gear/health logic (unit-tested).
-> The larger feature set (transmission dashboard, health scores, recorder,
-> graphs, maintenance tracker, AI assistant, etc.) is planned on top of this.
+> Status: **feature-rich diagnostic build.** Live dashboard + ELM327 Bluetooth,
+> full SAE Mode 01 catalog (~150+), custom sensor picker, fuel/trip/transmission
+> pages, Mode 02/05/06/09 diagnostics, Honda Mode 22 profile packs (probed against
+> the ECU), health scores, maintenance template, G-force, DTC database with tips.
+>
+> Honda Mode 22 PIDs are **best-effort placeholders** — use **Honda modules /
+> full-system probe** on the car and share the debug log so addresses can be
+> refined for FB2 Pakistan ECUs.
 
 ## Tech stack
 

@@ -1,12 +1,28 @@
 package com.fb2.obd
 
-import androidx.lifecycle.ViewModel
+import android.app.Application
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.fb2.obd.data.ConnectionState
 import com.fb2.obd.data.DemoObdSource
+import com.fb2.obd.data.MaintenanceEntry
+import com.fb2.obd.data.MaintenanceStore
 import com.fb2.obd.data.ObdLogger
 import com.fb2.obd.data.ObdSource
 import com.fb2.obd.obd.Dtc
+import com.fb2.obd.obd.FreezeFrame
+import com.fb2.obd.obd.HealthScore
+import com.fb2.obd.obd.HealthScoreCalculator
+import com.fb2.obd.obd.HondaPidCatalog
+import com.fb2.obd.obd.Mode06Result
+import com.fb2.obd.obd.ModuleScanResult
+import com.fb2.obd.obd.O2TestResult
+import com.fb2.obd.obd.PidCategory
+import com.fb2.obd.obd.PidDefinition
+import com.fb2.obd.obd.ReadinessStatus
+import com.fb2.obd.obd.StandardPidCatalog
+import com.fb2.obd.obd.TripComputer
+import com.fb2.obd.obd.VehicleInfo
 import com.fb2.obd.obd.VehicleSnapshot
 import com.fb2.obd.perf.AccelResult
 import com.fb2.obd.perf.AccelerationTimer
@@ -19,6 +35,7 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.launch
+import java.io.File
 
 /** UI state for the dashboard screen. */
 data class DashboardUiState(
@@ -32,6 +49,7 @@ data class DashboardUiState(
 data class SettingsState(
     val valueLogging: Boolean = false,
     val showEstimatedGear: Boolean = true,
+    val fuelPricePerLiter: Double = 280.0,
 )
 
 /** Diagnostic trouble code state for the Faults screen. */
@@ -50,12 +68,36 @@ data class PerformanceState(
     val currentSpeedKmh: Double? = null,
 )
 
+data class TripState(
+    val distanceKm: Double = 0.0,
+    val kmPerLiter: Double? = null,
+    val litersPer100: Double? = null,
+    val cost: Double = 0.0,
+    val idleSeconds: Double = 0.0,
+    val fuelPrice: Double = 280.0,
+)
+
+data class CustomSensorsState(
+    val selectedIds: Set<String> = emptySet(),
+    val filter: PidCategory? = null,
+    val liveValues: Map<String, String> = emptyMap(),
+    val probing: Boolean = false,
+)
+
+data class DeepDiagState(
+    val loading: Boolean = false,
+    val readiness: ReadinessStatus? = null,
+    val freeze: FreezeFrame? = null,
+    val o2: List<O2TestResult> = emptyList(),
+    val mode06: List<Mode06Result> = emptyList(),
+)
+
 /**
  * Collects snapshots from the active [ObdSource] and exposes them as UI state.
- * Defaults to the simulated demo feed so the dashboard is fully usable without an
- * adapter; call [useSource] to switch to a real ELM327 connection.
  */
-class DashboardViewModel : ViewModel() {
+class DashboardViewModel(app: Application) : AndroidViewModel(app) {
+
+    private val filesDir: File = app.filesDir
 
     private val _uiState = MutableStateFlow(DashboardUiState())
     val uiState: StateFlow<DashboardUiState> = _uiState.asStateFlow()
@@ -69,13 +111,54 @@ class DashboardViewModel : ViewModel() {
     private val _performance = MutableStateFlow(PerformanceState())
     val performance: StateFlow<PerformanceState> = _performance.asStateFlow()
 
-    private val accelTimer = AccelerationTimer()
+    private val _trip = MutableStateFlow(TripState())
+    val trip: StateFlow<TripState> = _trip.asStateFlow()
 
+    private val _custom = MutableStateFlow(CustomSensorsState())
+    val custom: StateFlow<CustomSensorsState> = _custom.asStateFlow()
+
+    private val _fuelValues = MutableStateFlow<Map<String, String>>(emptyMap())
+    val fuelValues: StateFlow<Map<String, String>> = _fuelValues.asStateFlow()
+
+    private val _transValues = MutableStateFlow<Map<String, String>>(emptyMap())
+    val transValues: StateFlow<Map<String, String>> = _transValues.asStateFlow()
+
+    private val _vehicleInfo = MutableStateFlow(VehicleInfo())
+    val vehicleInfo: StateFlow<VehicleInfo> = _vehicleInfo.asStateFlow()
+
+    private val _vehicleInfoLoading = MutableStateFlow(false)
+    val vehicleInfoLoading: StateFlow<Boolean> = _vehicleInfoLoading.asStateFlow()
+
+    private val _deepDiag = MutableStateFlow(DeepDiagState())
+    val deepDiag: StateFlow<DeepDiagState> = _deepDiag.asStateFlow()
+
+    private val _health = MutableStateFlow<HealthScore?>(null)
+    val health: StateFlow<HealthScore?> = _health.asStateFlow()
+
+    private val _hondaScan = MutableStateFlow<List<ModuleScanResult>>(emptyList())
+    val hondaScan: StateFlow<List<ModuleScanResult>> = _hondaScan.asStateFlow()
+
+    private val _hondaScanning = MutableStateFlow(false)
+    val hondaScanning: StateFlow<Boolean> = _hondaScanning.asStateFlow()
+
+    private val _maintenance = MutableStateFlow(MaintenanceStore.defaultTemplate())
+    val maintenance: StateFlow<List<MaintenanceEntry>> = _maintenance.asStateFlow()
+
+    val pidCatalog: List<PidDefinition> =
+        StandardPidCatalog.all + HondaPidCatalog.allPids
+
+    private val accelTimer = AccelerationTimer()
+    private val tripComputer = TripComputer()
     private var collectJob: Job? = null
     private var currentSource: ObdSource? = null
 
     init {
         ObdLogger.valueLoggingEnabled = _settings.value.valueLogging
+        tripComputer.fuelPricePerLiter = _settings.value.fuelPricePerLiter
+        _maintenance.value = MaintenanceStore(File(filesDir, "maintenance.json")).load()
+        _custom.update {
+            it.copy(selectedIds = StandardPidCatalog.fuelPageDefaults().map { p -> p.id }.toSet())
+        }
         useSource(DemoObdSource())
     }
 
@@ -102,13 +185,28 @@ class DashboardViewModel : ViewModel() {
         collectJob = source.snapshots()
             .onEach { snapshot ->
                 ObdLogger.logSnapshot(snapshot)
-                snapshot.speedKmh?.let { accelTimer.onSample(System.currentTimeMillis(), it) }
+                val now = System.currentTimeMillis()
+                snapshot.speedKmh?.let { accelTimer.onSample(now, it) }
+                tripComputer.onSample(now, snapshot.speedKmh, snapshot.mafGps, null)
+                _trip.update {
+                    TripState(
+                        tripComputer.distanceKm,
+                        tripComputer.kmPerLiter,
+                        tripComputer.litersPer100Km,
+                        tripComputer.tripCost,
+                        tripComputer.idleSeconds,
+                        tripComputer.fuelPricePerLiter,
+                    )
+                }
                 _performance.update {
                     it.copy(
                         current = accelTimer.current,
                         best = accelTimer.best,
                         currentSpeedKmh = snapshot.speedKmh,
                     )
+                }
+                _health.update {
+                    HealthScoreCalculator.compute(snapshot, _faults.value.stored.size)
                 }
                 _uiState.update {
                     it.copy(
@@ -138,6 +236,9 @@ class DashboardViewModel : ViewModel() {
                     message = if (stored.isEmpty() && pending.isEmpty()) "No fault codes found." else null,
                 )
             }
+            _health.update {
+                HealthScoreCalculator.compute(_uiState.value.snapshot, stored.size)
+            }
         }
     }
 
@@ -165,8 +266,118 @@ class DashboardViewModel : ViewModel() {
         _performance.update { it.copy(current = accelTimer.current, best = accelTimer.best) }
     }
 
+    fun resetTrip() {
+        tripComputer.reset()
+        _trip.update {
+            TripState(fuelPrice = tripComputer.fuelPricePerLiter)
+        }
+    }
+
+    fun setCustomFilter(cat: PidCategory?) {
+        _custom.update { it.copy(filter = cat) }
+    }
+
+    fun toggleCustomPid(pid: PidDefinition) {
+        _custom.update {
+            val next = it.selectedIds.toMutableSet()
+            if (!next.add(pid.id)) next.remove(pid.id)
+            it.copy(selectedIds = next)
+        }
+    }
+
+    fun probeCustomSelected() {
+        val source = currentSource ?: return
+        viewModelScope.launch {
+            _custom.update { it.copy(probing = true) }
+            val selected = pidCatalog.filter { it.id in _custom.value.selectedIds }
+            val results = source.probePids(selected)
+            val live = results.associate { r ->
+                r.pid.id to when {
+                    !r.supported -> "n/s"
+                    r.sample != null -> "%.2f %s".format(r.sample, r.pid.unit).trim()
+                    else -> "ok"
+                }
+            }
+            _custom.update { it.copy(probing = false, liveValues = live) }
+        }
+    }
+
+    fun refreshFuelPage() {
+        val source = currentSource ?: return
+        viewModelScope.launch {
+            val defs = StandardPidCatalog.fuelPageDefaults() +
+                HondaPidCatalog.engine.pids.filter { it.label.contains("Injector", true) }
+            val results = source.probePids(defs)
+            _fuelValues.value = results.associate { r ->
+                r.pid.label to when {
+                    !r.supported -> "n/s"
+                    r.sample != null -> "%.2f %s".format(r.sample, r.pid.unit).trim()
+                    else -> "—"
+                }
+            }
+        }
+    }
+
+    fun refreshTransmission() {
+        val source = currentSource ?: return
+        viewModelScope.launch {
+            val results = source.probePids(HondaPidCatalog.transmission.pids)
+            _transValues.value = results.associate { r ->
+                r.pid.label to when {
+                    !r.supported -> "n/s"
+                    r.sample != null -> "%.2f %s".format(r.sample, r.pid.unit).trim()
+                    else -> "—"
+                }
+            }
+            val atf = results.find { it.pid.label.startsWith("ATF") }?.sample
+            val slip = results.find { it.pid.label.contains("slip", true) }?.sample
+            _health.update {
+                HealthScoreCalculator.compute(_uiState.value.snapshot, _faults.value.stored.size, atf, slip)
+            }
+        }
+    }
+
+    fun readVehicleInfo() {
+        val source = currentSource ?: return
+        viewModelScope.launch {
+            _vehicleInfoLoading.value = true
+            _vehicleInfo.value = source.readVehicleInfo()
+            _vehicleInfoLoading.value = false
+        }
+    }
+
+    fun scanDeepDiagnostics() {
+        val source = currentSource ?: return
+        viewModelScope.launch {
+            _deepDiag.update { it.copy(loading = true) }
+            _deepDiag.value = DeepDiagState(
+                loading = false,
+                readiness = source.readReadiness(),
+                freeze = source.readFreezeFrame(),
+                o2 = source.readMode05(),
+                mode06 = source.readMode06(),
+            )
+        }
+    }
+
+    fun scanHondaModules() {
+        val source = currentSource ?: return
+        viewModelScope.launch {
+            _hondaScanning.value = true
+            _hondaScan.value = source.probeHondaModules()
+            _hondaScanning.value = false
+        }
+    }
+
+    fun recalcHealth() {
+        _health.update {
+            HealthScoreCalculator.compute(_uiState.value.snapshot, _faults.value.stored.size)
+        }
+    }
+
     override fun onCleared() {
         super.onCleared()
         collectJob?.cancel()
+        MaintenanceStore(File(filesDir, "maintenance.json")).save(_maintenance.value)
     }
 }
