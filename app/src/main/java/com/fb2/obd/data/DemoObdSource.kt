@@ -33,6 +33,10 @@ class DemoObdSource(
             val rpm = (baseRpm + (if (accelerating) 700.0 else 0.0)).coerceIn(750.0, 6500.0)
 
             coolant = (coolant + 0.6).coerceAtMost(92.0)
+            // Post-thermostat sensor stays cool until the thermostat opens (~82C),
+            // then tracks a few degrees below the main sensor.
+            val coolant2 = if (coolant < 82.0) 30.0 + (coolant - 40.0).coerceAtLeast(0.0) * 0.25
+            else coolant - 3.0
 
             val throttle = (10.0 + 40.0 * (0.5 + 0.5 * phase)).coerceIn(0.0, 100.0)
             val load = (15.0 + 55.0 * (0.5 + 0.5 * phase)).coerceIn(0.0, 100.0)
@@ -41,6 +45,7 @@ class DemoObdSource(
                 rpm = rpm.roundToInt().toDouble(),
                 speedKmh = speed.roundToInt().toDouble(),
                 coolantC = coolant.roundToInt().toDouble(),
+                coolant2C = coolant2.roundToInt().toDouble(),
                 intakeC = 32.0,
                 ambientC = 28.0,
                 engineLoadPct = load,

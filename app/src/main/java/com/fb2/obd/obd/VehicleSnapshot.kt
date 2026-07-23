@@ -9,6 +9,7 @@ data class VehicleSnapshot(
     val rpm: Double? = null,
     val speedKmh: Double? = null,
     val coolantC: Double? = null,
+    val coolant2C: Double? = null,
     val intakeC: Double? = null,
     val ambientC: Double? = null,
     val engineLoadPct: Double? = null,

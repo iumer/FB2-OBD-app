@@ -35,6 +35,7 @@ class Elm327BluetoothSource(
         ObdPid.ENGINE_RPM,
         ObdPid.SPEED,
         ObdPid.COOLANT_TEMP,
+        ObdPid.COOLANT_TEMP_2,
         ObdPid.INTAKE_TEMP,
         ObdPid.ENGINE_LOAD,
         ObdPid.THROTTLE,
@@ -120,6 +121,7 @@ class Elm327BluetoothSource(
         ObdPid.ENGINE_RPM -> copy(rpm = value ?: rpm)
         ObdPid.SPEED -> copy(speedKmh = value ?: speedKmh)
         ObdPid.COOLANT_TEMP -> copy(coolantC = value ?: coolantC)
+        ObdPid.COOLANT_TEMP_2 -> copy(coolant2C = value ?: coolant2C)
         ObdPid.INTAKE_TEMP -> copy(intakeC = value ?: intakeC)
         ObdPid.AMBIENT_TEMP -> copy(ambientC = value ?: ambientC)
         ObdPid.ENGINE_LOAD -> copy(engineLoadPct = value ?: engineLoadPct)
