@@ -14,7 +14,7 @@ object ObdResponseParser {
 
     /** Decode a Mode 01 PID response. Returns null if the frame can't be parsed. */
     fun parse(pid: ObdPid, raw: String): Double? {
-        val bytes = extractDataBytes(pid.responseHeader, raw) ?: return null
+        val bytes = extractDataBytes(pid.responseHeader, pid.dataBytes, raw) ?: return null
         return pid.decode(bytes)
     }
 
@@ -26,7 +26,7 @@ object ObdResponseParser {
         return match?.value?.toDoubleOrNull()
     }
 
-    private fun extractDataBytes(header: String, raw: String): IntArray? {
+    private fun extractDataBytes(header: String, expected: Int, raw: String): IntArray? {
         val cleaned = raw
             .replace(">", " ")
             .replace("\r", " ")
@@ -52,11 +52,16 @@ object ObdResponseParser {
         val headerHi = header.substring(0, 2).toInt(16)
         val headerLo = header.substring(2, 4).toInt(16)
 
-        // Find the response header pair (mode+0x40, pid); take everything after it.
+        // Find the response header pair (mode+0x40, pid); take exactly the number
+        // of data bytes this PID carries. Slicing to the expected length avoids
+        // pulling in a second module's appended "41 XX ..." on multi-ECU replies.
         // Skips any command echo that appears before the real response.
         for (i in 0 until bytes.size - 1) {
             if (bytes[i] == headerHi && bytes[i + 1] == headerLo) {
-                val data = bytes.subList(i + 2, bytes.size)
+                val start = i + 2
+                if (start >= bytes.size) return null
+                val end = minOf(start + expected, bytes.size)
+                val data = bytes.subList(start, end)
                 return if (data.isEmpty()) null else data.toIntArray()
             }
         }

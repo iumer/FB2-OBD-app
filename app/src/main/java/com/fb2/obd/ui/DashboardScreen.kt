@@ -30,6 +30,7 @@ import com.fb2.obd.ui.theme.CritRed
 import com.fb2.obd.ui.theme.GoodGreen
 import com.fb2.obd.ui.theme.Surface
 import com.fb2.obd.ui.theme.TextMuted
+import com.fb2.obd.ui.theme.WarnAmber
 import kotlin.math.roundToInt
 
 private fun Double?.fmt(digits: Int = 0): String = this?.let {
@@ -105,7 +106,12 @@ private fun TopBar(state: DashboardUiState, onConnectClick: () -> Unit) {
         )
         Row(verticalAlignment = Alignment.CenterVertically) {
             val (dot, text) = when (state.connection) {
-                ConnectionState.CONNECTED -> GoodGreen to "LIVE \u00B7 ${state.sourceName}"
+                ConnectionState.CONNECTED ->
+                    if (state.sourceIsLive) {
+                        GoodGreen to "LIVE \u00B7 ${state.sourceName}"
+                    } else {
+                        WarnAmber to "DEMO \u00B7 simulated"
+                    }
                 ConnectionState.CONNECTING -> Accent to "CONNECTING \u00B7 ${state.sourceName}"
                 ConnectionState.ERROR -> CritRed to "ERROR \u00B7 ${state.sourceName}"
                 ConnectionState.DISCONNECTED -> TextMuted to "OFFLINE"
@@ -136,10 +142,11 @@ private fun TopBar(state: DashboardUiState, onConnectClick: () -> Unit) {
 
 @Composable
 private fun MetricGrid(s: VehicleSnapshot) {
+    val engineRunning = (s.rpm ?: 0.0) > 0.0
     val tiles: List<TileData> = listOf(
         TileData("Coolant 1", s.coolantC.fmt(), "\u00B0C", HealthEvaluator.coolant(s.coolantC)),
         TileData("Coolant 2", s.coolant2C.fmt(), "\u00B0C", HealthEvaluator.coolant(s.coolant2C)),
-        TileData("Battery", s.batteryVolts.fmt(1), "V", HealthEvaluator.battery(s.batteryVolts)),
+        TileData("Battery", s.batteryVolts.fmt(1), "V", HealthEvaluator.battery(s.batteryVolts, engineRunning)),
         TileData("Intake", s.intakeC.fmt(), "\u00B0C"),
         TileData("Ambient", s.ambientC.fmt(), "\u00B0C"),
         TileData("Load", s.engineLoadPct.fmt(), "%"),
@@ -180,5 +187,5 @@ private data class TileData(
     val label: String,
     val value: String,
     val unit: String,
-    val health: Health = Health.UNKNOWN,
+    val health: Health? = null,
 )

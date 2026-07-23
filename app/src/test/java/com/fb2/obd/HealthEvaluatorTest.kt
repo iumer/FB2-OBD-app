@@ -16,11 +16,19 @@ class HealthEvaluatorTest {
     }
 
     @Test
-    fun battery_thresholds() {
-        assertEquals(Health.GOOD, HealthEvaluator.battery(14.2))
-        assertEquals(Health.WARN, HealthEvaluator.battery(13.0))
-        assertEquals(Health.CRITICAL, HealthEvaluator.battery(12.1))
-        assertEquals(Health.CRITICAL, HealthEvaluator.battery(15.5)) // overcharge
+    fun battery_thresholds_engineRunning() {
+        assertEquals(Health.GOOD, HealthEvaluator.battery(14.2, engineRunning = true))
+        assertEquals(Health.WARN, HealthEvaluator.battery(13.0, engineRunning = true))
+        assertEquals(Health.CRITICAL, HealthEvaluator.battery(12.1, engineRunning = true))
+        assertEquals(Health.CRITICAL, HealthEvaluator.battery(15.5, engineRunning = true)) // overcharge
+    }
+
+    @Test
+    fun battery_thresholds_engineOff_restingVoltageNotFlaggedRed() {
+        // A healthy resting battery ~12.5 V must not read CRITICAL when engine off.
+        assertEquals(Health.GOOD, HealthEvaluator.battery(12.5, engineRunning = false))
+        assertEquals(Health.WARN, HealthEvaluator.battery(12.1, engineRunning = false))
+        assertEquals(Health.CRITICAL, HealthEvaluator.battery(11.5, engineRunning = false))
     }
 
     @Test

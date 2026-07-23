@@ -10,6 +10,7 @@ import android.bluetooth.BluetoothAdapter
 import android.os.Build
 import android.os.Bundle
 import android.view.WindowManager
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -46,9 +47,13 @@ class MainActivity : ComponentActivity() {
 
                 val enableBtLauncher = rememberLauncherForActivityResult(
                     ActivityResultContracts.StartActivityForResult(),
-                ) {
-                    devices = loadBondedDevices()
-                    showConnect = true
+                ) { result ->
+                    if (result.resultCode == RESULT_OK) {
+                        devices = loadBondedDevices()
+                        showConnect = true
+                    } else {
+                        toast("Bluetooth must be on to connect to the adapter")
+                    }
                 }
 
                 val permLauncher = rememberLauncherForActivityResult(
@@ -59,6 +64,8 @@ class MainActivity : ComponentActivity() {
                             onNeedEnable = { enableBtLauncher.launch(Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE)) },
                             onReady = { devices = it; showConnect = true },
                         )
+                    } else {
+                        toast("Bluetooth permission is required to connect to the ELM327")
                     }
                 }
 
@@ -90,6 +97,10 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    private fun toast(message: String) {
+        Toast.makeText(this, message, Toast.LENGTH_LONG).show()
     }
 
     private fun requiredBtPermissions(): List<String> =
