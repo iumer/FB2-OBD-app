@@ -51,7 +51,9 @@ fun DashboardScreen(state: DashboardUiState, modifier: Modifier = Modifier) {
         TopBar(state)
 
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f),
             horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -60,6 +62,7 @@ fun DashboardScreen(state: DashboardUiState, modifier: Modifier = Modifier) {
                 value = s.rpm,
                 maxValue = 7000.0,
                 unit = "rpm",
+                size = 190.dp,
                 arcColor = Accent,
             )
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -70,6 +73,7 @@ fun DashboardScreen(state: DashboardUiState, modifier: Modifier = Modifier) {
                 value = s.speedKmh,
                 maxValue = 200.0,
                 unit = "km/h",
+                size = 190.dp,
                 arcColor = GoodGreen,
             )
         }
