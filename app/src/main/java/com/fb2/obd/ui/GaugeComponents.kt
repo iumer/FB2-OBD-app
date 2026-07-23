@@ -28,6 +28,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.fb2.obd.obd.GearSource
 import com.fb2.obd.obd.Health
 import com.fb2.obd.ui.theme.Accent
 import com.fb2.obd.ui.theme.CritRed
@@ -172,9 +173,13 @@ fun StatTile(
     }
 }
 
-/** Central gear / PRND style indicator. */
+/** Central gear indicator with a source badge (ECU actual vs estimated). */
 @Composable
-fun GearIndicator(gear: Int?, modifier: Modifier = Modifier) {
+fun GearIndicator(
+    gear: Int?,
+    source: GearSource,
+    modifier: Modifier = Modifier,
+) {
     Column(
         modifier = modifier
             .clip(RoundedCornerShape(16.dp))
@@ -190,5 +195,13 @@ fun GearIndicator(gear: Int?, modifier: Modifier = Modifier) {
             fontSize = 44.sp,
             fontWeight = FontWeight.Bold,
         )
+        val (badge, badgeColor) = when (source) {
+            GearSource.ECU -> "ECU" to GoodGreen
+            GearSource.ESTIMATED -> "EST" to WarnAmber
+            GearSource.NONE -> "" to TextMuted
+        }
+        if (badge.isNotEmpty()) {
+            Text(text = badge, color = badgeColor, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+        }
     }
 }

@@ -21,8 +21,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.fb2.obd.DashboardUiState
 import com.fb2.obd.data.ConnectionState
+import com.fb2.obd.obd.GearSource
 import com.fb2.obd.obd.Health
 import com.fb2.obd.obd.HealthEvaluator
+import com.fb2.obd.obd.ObdPid
 import com.fb2.obd.obd.VehicleSnapshot
 import com.fb2.obd.ui.theme.Accent
 import com.fb2.obd.ui.theme.Background
@@ -46,7 +48,9 @@ private fun Double?.fmt(digits: Int = 0): String = this?.let {
 fun DashboardScreen(
     state: DashboardUiState,
     modifier: Modifier = Modifier,
+    showEstimatedGear: Boolean = true,
     onConnectClick: () -> Unit = {},
+    onSettingsClick: () -> Unit = {},
 ) {
     val s = state.snapshot
     Column(
@@ -55,7 +59,7 @@ fun DashboardScreen(
             .background(Background)
             .padding(16.dp),
     ) {
-        TopBar(state, onConnectClick)
+        TopBar(state, onConnectClick, onSettingsClick)
 
         Row(
             modifier = Modifier
@@ -73,7 +77,13 @@ fun DashboardScreen(
                 arcColor = Accent,
             )
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                GearIndicator(gear = s.gear)
+                val gearSource = if (!showEstimatedGear && s.gearSource == GearSource.ESTIMATED) {
+                    GearSource.NONE
+                } else {
+                    s.gearSource
+                }
+                val gear = if (gearSource == GearSource.NONE) null else s.gear
+                GearIndicator(gear = gear, source = gearSource)
             }
             CircularGauge(
                 label = "SPEED",
@@ -90,7 +100,11 @@ fun DashboardScreen(
 }
 
 @Composable
-private fun TopBar(state: DashboardUiState, onConnectClick: () -> Unit) {
+private fun TopBar(
+    state: DashboardUiState,
+    onConnectClick: () -> Unit,
+    onSettingsClick: () -> Unit,
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -125,12 +139,25 @@ private fun TopBar(state: DashboardUiState, onConnectClick: () -> Unit) {
             Text(text = "  $text", color = TextMuted, fontSize = 13.sp)
 
             Text(
+                text = "SETTINGS",
+                color = TextMuted,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier
+                    .padding(start = 16.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .clickable { onSettingsClick() }
+                    .background(Surface)
+                    .padding(horizontal = 14.dp, vertical = 8.dp),
+            )
+
+            Text(
                 text = "CONNECT",
                 color = Accent,
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier
-                    .padding(start = 16.dp)
+                    .padding(start = 10.dp)
                     .clip(RoundedCornerShape(8.dp))
                     .clickable { onConnectClick() }
                     .background(Surface)
@@ -144,18 +171,18 @@ private fun TopBar(state: DashboardUiState, onConnectClick: () -> Unit) {
 private fun MetricGrid(s: VehicleSnapshot) {
     val engineRunning = (s.rpm ?: 0.0) > 0.0
     val tiles: List<TileData> = listOf(
-        TileData("Coolant 1", s.coolantC.fmt(), "\u00B0C", HealthEvaluator.coolant(s.coolantC)),
-        TileData("Coolant 2", s.coolant2C.fmt(), "\u00B0C", HealthEvaluator.coolant(s.coolant2C)),
-        TileData("Battery", s.batteryVolts.fmt(1), "V", HealthEvaluator.battery(s.batteryVolts, engineRunning)),
-        TileData("Intake", s.intakeC.fmt(), "\u00B0C"),
-        TileData("Ambient", s.ambientC.fmt(), "\u00B0C"),
-        TileData("Load", s.engineLoadPct.fmt(), "%"),
-        TileData("Throttle", s.throttlePct.fmt(), "%"),
-        TileData("STFT", s.stftPct.fmt(1), "%", HealthEvaluator.fuelTrim(s.stftPct)),
-        TileData("LTFT", s.ltftPct.fmt(1), "%", HealthEvaluator.fuelTrim(s.ltftPct)),
-        TileData("MAF", s.mafGps.fmt(1), "g/s"),
-        TileData("MAP", s.mapKpa.fmt(), "kPa"),
-        TileData("Timing", s.timingAdvance.fmt(), "\u00B0"),
+        TileData("Coolant 1", s.coolantC.fmt(), "\u00B0C", HealthEvaluator.coolant(s.coolantC), ObdPid.COOLANT_TEMP),
+        TileData("Coolant 2", s.coolant2C.fmt(), "\u00B0C", HealthEvaluator.coolant(s.coolant2C), ObdPid.COOLANT_TEMP_2),
+        TileData("Battery", s.batteryVolts.fmt(1), "V", HealthEvaluator.battery(s.batteryVolts, engineRunning), ObdPid.CONTROL_MODULE_VOLTAGE),
+        TileData("Intake", s.intakeC.fmt(), "\u00B0C", pid = ObdPid.INTAKE_TEMP),
+        TileData("Ambient", s.ambientC.fmt(), "\u00B0C", pid = ObdPid.AMBIENT_TEMP),
+        TileData("Load", s.engineLoadPct.fmt(), "%", pid = ObdPid.ENGINE_LOAD),
+        TileData("Throttle", s.throttlePct.fmt(), "%", pid = ObdPid.THROTTLE),
+        TileData("STFT", s.stftPct.fmt(1), "%", HealthEvaluator.fuelTrim(s.stftPct), ObdPid.STFT_B1),
+        TileData("LTFT", s.ltftPct.fmt(1), "%", HealthEvaluator.fuelTrim(s.ltftPct), ObdPid.LTFT_B1),
+        TileData("MAF", s.mafGps.fmt(1), "g/s", pid = ObdPid.MAF),
+        TileData("MAP", s.mapKpa.fmt(), "kPa", pid = ObdPid.INTAKE_MAP),
+        TileData("Timing", s.timingAdvance.fmt(), "\u00B0", pid = ObdPid.TIMING_ADVANCE),
     )
 
     Column(
@@ -170,11 +197,12 @@ private fun MetricGrid(s: VehicleSnapshot) {
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 rowTiles.forEach { t ->
+                    val unsupported = t.pid != null && t.pid.number in s.unsupportedPids
                     StatTile(
                         label = t.label,
-                        value = t.value,
-                        unit = t.unit,
-                        health = t.health,
+                        value = if (unsupported) "n/s" else t.value,
+                        unit = if (unsupported) "" else t.unit,
+                        health = if (unsupported) null else t.health,
                         modifier = Modifier.weight(1f),
                     )
                 }
@@ -188,4 +216,5 @@ private data class TileData(
     val value: String,
     val unit: String,
     val health: Health? = null,
+    val pid: ObdPid? = null,
 )

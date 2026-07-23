@@ -19,6 +19,18 @@ object ObdResponseParser {
     }
 
     /**
+     * Extract raw data bytes for an arbitrary Mode 01 request (used by the
+     * supported-PID probe). [request] is e.g. "0100"; [expected] is the number of
+     * data bytes to slice.
+     */
+    fun rawDataBytes(request: String, expected: Int, raw: String): IntArray? {
+        val mode = request.substring(0, 2).toInt(16) + 0x40
+        val pid = request.substring(2)
+        val header = "%02X%s".format(mode, pid)
+        return extractDataBytes(header, expected, raw)
+    }
+
+    /**
      * ELM327 "ATRV" battery voltage reply, e.g. "12.5V" or "13.9". Returns volts.
      */
     fun parseAtVoltage(raw: String): Double? {

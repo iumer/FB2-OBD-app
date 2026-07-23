@@ -45,4 +45,17 @@ class GearEstimatorTest {
         // 50 km/h @ ~2850 rpm -> 2nd
         assertEquals(2, estimator.estimate(speedKmh = 50.0, rpm = 2850.0))
     }
+
+    @Test
+    fun gearFromRatio_mapsActualRatioToGear() {
+        assertEquals(1, estimator.gearFromRatio(2.666))
+        assertEquals(3, estimator.gearFromRatio(1.022))
+        assertEquals(5, estimator.gearFromRatio(0.525))
+    }
+
+    @Test
+    fun gearFromRatio_rejectsImplausibleRatios() {
+        assertNull(estimator.gearFromRatio(0.0))
+        assertNull(estimator.gearFromRatio(4.0)) // e.g. neutral / not a forward gear
+    }
 }

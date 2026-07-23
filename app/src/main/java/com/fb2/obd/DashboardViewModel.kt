@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.fb2.obd.data.ConnectionState
 import com.fb2.obd.data.DemoObdSource
+import com.fb2.obd.data.ObdLogger
 import com.fb2.obd.data.ObdSource
 import com.fb2.obd.obd.VehicleSnapshot
 import kotlinx.coroutines.Job
@@ -23,6 +24,12 @@ data class DashboardUiState(
     val sourceIsLive: Boolean = false,
 )
 
+/** User-adjustable settings. */
+data class SettingsState(
+    val valueLogging: Boolean = false,
+    val showEstimatedGear: Boolean = true,
+)
+
 /**
  * Collects snapshots from the active [ObdSource] and exposes them as UI state.
  * Defaults to the simulated demo feed so the dashboard is fully usable without an
@@ -33,10 +40,23 @@ class DashboardViewModel : ViewModel() {
     private val _uiState = MutableStateFlow(DashboardUiState())
     val uiState: StateFlow<DashboardUiState> = _uiState.asStateFlow()
 
+    private val _settings = MutableStateFlow(SettingsState())
+    val settings: StateFlow<SettingsState> = _settings.asStateFlow()
+
     private var collectJob: Job? = null
 
     init {
+        ObdLogger.valueLoggingEnabled = _settings.value.valueLogging
         useSource(DemoObdSource())
+    }
+
+    fun setValueLogging(enabled: Boolean) {
+        _settings.update { it.copy(valueLogging = enabled) }
+        ObdLogger.valueLoggingEnabled = enabled
+    }
+
+    fun setShowEstimatedGear(enabled: Boolean) {
+        _settings.update { it.copy(showEstimatedGear = enabled) }
     }
 
     fun useSource(source: ObdSource) {
@@ -50,6 +70,7 @@ class DashboardViewModel : ViewModel() {
         }
         collectJob = source.snapshots()
             .onEach { snapshot ->
+                ObdLogger.logSnapshot(snapshot)
                 _uiState.update {
                     it.copy(
                         snapshot = snapshot,

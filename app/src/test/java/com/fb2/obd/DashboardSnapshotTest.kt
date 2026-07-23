@@ -5,6 +5,7 @@ import app.cash.paparazzi.Paparazzi
 import com.android.resources.ScreenOrientation
 import com.fb2.obd.data.ConnectionState
 import com.fb2.obd.obd.GearEstimator
+import com.fb2.obd.obd.GearSource
 import com.fb2.obd.obd.VehicleSnapshot
 import com.fb2.obd.ui.DashboardScreen
 import com.fb2.obd.ui.theme.FB2Theme
@@ -43,11 +44,15 @@ class DashboardSnapshotTest {
             ltftPct = 3.5,
             batteryVolts = 14.2,
             gear = GearEstimator().estimate(speed, rpm),
+            gearSource = GearSource.ESTIMATED,
+            // Mirror the real FB2: these PIDs aren't supported by the ECU.
+            unsupportedPids = setOf(0x67, 0x46, 0x07),
         )
         val state = DashboardUiState(
             snapshot = snapshot,
             connection = ConnectionState.CONNECTED,
-            sourceName = "Demo (simulated)",
+            sourceName = "ELM327 (Bluetooth)",
+            sourceIsLive = true,
         )
         paparazzi.snapshot {
             FB2Theme {
@@ -76,6 +81,7 @@ class DashboardSnapshotTest {
             ltftPct = 8.5,      // elevated -> amber
             batteryVolts = 12.1, // low charge -> red
             gear = GearEstimator().estimate(speed, rpm),
+            gearSource = GearSource.ESTIMATED,
         )
         val state = DashboardUiState(
             snapshot = snapshot,
