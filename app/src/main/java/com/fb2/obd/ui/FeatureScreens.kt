@@ -87,7 +87,7 @@ fun CustomSensorsScreen(
 ) {
     Column(modifier.fillMaxSize().background(Background).padding(16.dp)) {
         ScreenHeader(title = "Custom sensors", onBack = onBack) {
-            Chip(if (probing) "Probing\u2026" else "Probe selected", onProbeSelected)
+            Chip(if (probing) "Probing\u2026" else "Probe selected") { onProbeSelected() }
         }
         Text("Tap + to add / remove. Probe tests which ones your ECU answers.", color = TextMuted, fontSize = 12.sp)
         Row(
@@ -137,7 +137,7 @@ fun IdleDiagnosticsScreen(
 ) {
     Column(modifier.fillMaxSize().background(Background).padding(16.dp)) {
         ScreenHeader(title = "Cold start / rough idle", onBack = onBack) {
-            Chip(if (loading) "Probing\u2026" else "Probe now", onRefresh)
+            Chip(if (loading) "Probing\u2026" else "Probe now") { onRefresh() }
         }
         Column(Modifier.verticalScroll(rememberScrollState())) {
             Text(
@@ -196,7 +196,7 @@ fun FuelPageScreen(
     modifier: Modifier = Modifier,
 ) {
     Column(modifier.fillMaxSize().background(Background).padding(16.dp)) {
-        ScreenHeader(title = "Fuel system", onBack = onBack) { Chip("Refresh", onRefresh) }
+        ScreenHeader(title = "Fuel system", onBack = onBack) { Chip("Refresh") { onRefresh() } }
         Column(Modifier.verticalScroll(rememberScrollState())) {
             listOf(
                 "STFT Bank 1", "LTFT Bank 1", "STFT Bank 2", "LTFT Bank 2",
@@ -224,7 +224,7 @@ fun TripScreen(
     modifier: Modifier = Modifier,
 ) {
     Column(modifier.fillMaxSize().background(Background).padding(16.dp)) {
-        ScreenHeader(title = "Trip computer", onBack = onBack) { Chip("Reset trip", onReset) }
+        ScreenHeader(title = "Trip computer", onBack = onBack) { Chip("Reset trip") { onReset() } }
         CardRow("Distance", "%.1f km".format(distanceKm))
         CardRow("Economy", kmPerL?.let { "%.1f km/L".format(it) } ?: "—")
         CardRow("Consumption", lPer100?.let { "%.1f L/100km".format(it) } ?: "—")
@@ -238,7 +238,7 @@ fun TripScreen(
 fun VehicleInfoScreen(info: VehicleInfo, loading: Boolean, onRefresh: () -> Unit, onBack: () -> Unit, modifier: Modifier = Modifier) {
     Column(modifier.fillMaxSize().background(Background).padding(16.dp)) {
         ScreenHeader(title = "Vehicle info", onBack = onBack) {
-            Chip(if (loading) "Reading\u2026" else "Read Mode 09", onRefresh)
+            Chip(if (loading) "Reading\u2026" else "Read Mode 09") { onRefresh() }
         }
         CardRow("VIN", info.vin ?: "—")
         CardRow("ECU name", info.ecuName ?: "—")
@@ -262,7 +262,7 @@ fun DiagnosticsDepthScreen(
 ) {
     Column(modifier.fillMaxSize().background(Background).padding(16.dp)) {
         ScreenHeader(title = "Deep diagnostics", onBack = onBack) {
-            Chip(if (loading) "Scanning\u2026" else "Scan all", onScan)
+            Chip(if (loading) "Scanning\u2026" else "Scan all") { onScan() }
         }
         Column(Modifier.verticalScroll(rememberScrollState())) {
             Text("I/M READINESS", color = TextMuted, fontSize = 12.sp, fontWeight = FontWeight.Bold)
@@ -304,7 +304,7 @@ fun TransmissionDashScreen(
     modifier: Modifier = Modifier,
 ) {
     Column(modifier.fillMaxSize().background(Background).padding(16.dp)) {
-        ScreenHeader(title = "Transmission", onBack = onBack) { Chip("Probe / refresh", onRefresh) }
+        ScreenHeader(title = "Transmission", onBack = onBack) { Chip("Probe / refresh") { onRefresh() } }
         health?.let {
             CardRow("Trans health", "${it.transmissionPct}%", if (it.transmissionPct >= 85) GoodGreen else WarnAmber)
             it.transmissionNotes.forEach { n -> Text("• $n", color = TextMuted, fontSize = 12.sp) }
@@ -323,7 +323,7 @@ fun TransmissionDashScreen(
 @Composable
 fun HealthScoresScreen(score: HealthScore?, onRefresh: () -> Unit, onBack: () -> Unit, modifier: Modifier = Modifier) {
     Column(modifier.fillMaxSize().background(Background).padding(16.dp)) {
-        ScreenHeader(title = "Health scores", onBack = onBack) { Chip("Recalc", onRefresh) }
+        ScreenHeader(title = "Health scores", onBack = onBack) { Chip("Recalc") { onRefresh() } }
         if (score == null) {
             Text("Connect and open this page to compute scores.", color = TextMuted)
         } else {
@@ -371,7 +371,7 @@ fun HiddenHondaMenuScreen(
 ) {
     Column(modifier.fillMaxSize().background(Background).padding(16.dp)) {
         ScreenHeader(title = "Honda modules", onBack = onBack) {
-            Chip(if (loading) "Scanning\u2026" else "Full-system probe", onScan)
+            Chip(if (loading) "Scanning\u2026" else "Full-system probe") { onScan() }
         }
         Text("Probes ABS / EPS / SRS / TCM / Body / Climate / TPMS / Engine enhanced Mode 22 packs against your ECU.", color = TextMuted, fontSize = 12.sp)
         Column(Modifier.verticalScroll(rememberScrollState()).padding(top = 8.dp)) {
