@@ -8,11 +8,15 @@ package com.fb2.obd.obd
  * Ratios are editable in one place so the estimator can be tuned per car.
  */
 object VehicleConfig {
-    /** Forward gear ratios, index 0 == 1st gear. */
-    val gearRatios = doubleArrayOf(2.995, 1.678, 1.066, 0.760, 0.512)
+    /**
+     * Forward gear ratios (index 0 == 1st gear) for the FB2 "Compact 5-speed
+     * automatic" (torque-converter auto with a D / D3 / 2 / 1 gate — not a CVT).
+     * Source: Honda 2012/2013 Civic 1.8 sedan specs.
+     */
+    val gearRatios = doubleArrayOf(2.666, 1.534, 1.022, 0.721, 0.525)
 
-    /** Final drive ratio. */
-    const val finalDrive = 4.438
+    /** Final drive ratio for the 5-speed automatic. */
+    const val finalDrive = 4.44
 
     /** Rolling circumference in metres for 195/65 R15 (~0.634 m diameter). */
     const val tireCircumferenceMeters = 1.993

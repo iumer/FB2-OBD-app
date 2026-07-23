@@ -31,6 +31,7 @@ class DashboardSnapshotTest {
             rpm = rpm,
             speedKmh = speed,
             coolantC = 92.0,
+            coolant2C = 89.0,
             intakeC = 34.0,
             ambientC = 28.0,
             engineLoadPct = 47.0,
@@ -63,6 +64,7 @@ class DashboardSnapshotTest {
             rpm = rpm,
             speedKmh = speed,
             coolantC = 112.0,   // overheating -> red
+            coolant2C = 109.0,  // post-thermostat also hot -> red
             intakeC = 51.0,
             ambientC = 39.0,
             engineLoadPct = 88.0,

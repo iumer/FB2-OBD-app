@@ -35,6 +35,19 @@ class ObdResponseParserTest {
     }
 
     @Test
+    fun coolant2_decodesSensor2FromPid67() {
+        // 41 67 [support=03] [B=7B->83C sensor1] [C=78->80C sensor2]; we read sensor 2.
+        val value = ObdResponseParser.parse(ObdPid.COOLANT_TEMP_2, "41 67 03 7B 78")
+        assertEquals(80.0, value!!, 0.001)
+    }
+
+    @Test
+    fun coolant2_nullWhenSensor2Absent() {
+        // Only support byte + sensor 1 present -> no sensor 2 data.
+        assertNull(ObdResponseParser.parse(ObdPid.COOLANT_TEMP_2, "41 67 01 7B"))
+    }
+
+    @Test
     fun engineLoad_scalesToPercent() {
         val value = ObdResponseParser.parse(ObdPid.ENGINE_LOAD, "41 04 FF")
         assertEquals(100.0, value!!, 0.001)

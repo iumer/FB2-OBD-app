@@ -21,8 +21,14 @@ enum class ObdPid(
     SPEED("010D", "Speed", "km/h", { d ->
         if (d.isNotEmpty()) d[0].toDouble() else null
     }),
-    COOLANT_TEMP("0105", "Coolant", "\u00B0C", { d ->
+    COOLANT_TEMP("0105", "Coolant 1", "\u00B0C", { d ->
         if (d.isNotEmpty()) (d[0] - 40).toDouble() else null
+    }),
+    // PID 0x67 returns [support, ECT1, ECT2]; we take sensor 2 (byte C = index 2).
+    // This is the second coolant sensor (e.g. post-thermostat) that most generic
+    // OBD apps ignore. Falls back to null when the ECU doesn't support it.
+    COOLANT_TEMP_2("0167", "Coolant 2", "\u00B0C", { d ->
+        if (d.size >= 3) (d[2] - 40).toDouble() else null
     }),
     INTAKE_TEMP("010F", "Intake", "\u00B0C", { d ->
         if (d.isNotEmpty()) (d[0] - 40).toDouble() else null

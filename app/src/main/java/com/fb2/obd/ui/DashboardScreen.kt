@@ -137,7 +137,8 @@ private fun TopBar(state: DashboardUiState, onConnectClick: () -> Unit) {
 @Composable
 private fun MetricGrid(s: VehicleSnapshot) {
     val tiles: List<TileData> = listOf(
-        TileData("Coolant", s.coolantC.fmt(), "\u00B0C", HealthEvaluator.coolant(s.coolantC)),
+        TileData("Coolant 1", s.coolantC.fmt(), "\u00B0C", HealthEvaluator.coolant(s.coolantC)),
+        TileData("Coolant 2", s.coolant2C.fmt(), "\u00B0C", HealthEvaluator.coolant(s.coolant2C)),
         TileData("Battery", s.batteryVolts.fmt(1), "V", HealthEvaluator.battery(s.batteryVolts)),
         TileData("Intake", s.intakeC.fmt(), "\u00B0C"),
         TileData("Ambient", s.ambientC.fmt(), "\u00B0C"),
