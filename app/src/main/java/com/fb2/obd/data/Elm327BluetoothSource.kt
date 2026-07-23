@@ -1,6 +1,7 @@
 package com.fb2.obd.data
 
 import android.annotation.SuppressLint
+import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothSocket
 import com.fb2.obd.obd.GearEstimator
@@ -11,6 +12,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import java.io.InputStream
 import java.io.OutputStream
 import java.util.UUID
@@ -47,13 +49,16 @@ class Elm327BluetoothSource(
 
     @SuppressLint("MissingPermission")
     override fun snapshots(): Flow<VehicleSnapshot> = flow {
-        val socket: BluetoothSocket = device.createRfcommSocketToServiceRecord(SPP_UUID)
-        socket.connect()
+        // Discovery must be off before connecting or the connect will be slow/fail.
+        runCatching { BluetoothAdapter.getDefaultAdapter()?.cancelDiscovery() }
+
+        val socket = openSocket()
         val input = socket.inputStream
         val output = socket.outputStream
         try {
             for (cmd in INIT_SEQUENCE) {
                 sendCommand(input, output, cmd)
+                delay(120L)
             }
 
             var snapshot = VehicleSnapshot.EMPTY
@@ -74,6 +79,27 @@ class Elm327BluetoothSource(
             runCatching { socket.close() }
         }
     }.flowOn(Dispatchers.IO)
+
+    /**
+     * Opens the RFCOMM socket, falling back to the reflection-based channel-1
+     * socket that many cheap ELM327 clones require when the standard SPP
+     * service-record connect fails.
+     */
+    @SuppressLint("MissingPermission")
+    private fun openSocket(): BluetoothSocket {
+        val secure = device.createRfcommSocketToServiceRecord(SPP_UUID)
+        try {
+            secure.connect()
+            return secure
+        } catch (e: Exception) {
+            runCatching { secure.close() }
+            val fallback = device.javaClass
+                .getMethod("createRfcommSocket", Int::class.javaPrimitiveType)
+                .invoke(device, 1) as BluetoothSocket
+            fallback.connect()
+            return fallback
+        }
+    }
 
     private fun sendCommand(input: InputStream, output: OutputStream, command: String): String {
         output.write((command + "\r").toByteArray())
