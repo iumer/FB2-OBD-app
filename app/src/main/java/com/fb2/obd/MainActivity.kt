@@ -46,6 +46,7 @@ import com.fb2.obd.ui.FuelPageScreen
 import com.fb2.obd.ui.GForceScreen
 import com.fb2.obd.ui.HealthScoresScreen
 import com.fb2.obd.ui.HiddenHondaMenuScreen
+import com.fb2.obd.ui.IdleDiagnosticsScreen
 import com.fb2.obd.ui.MaintenanceScreen
 import com.fb2.obd.ui.PerformanceScreen
 import com.fb2.obd.ui.SettingsNav
@@ -59,7 +60,7 @@ import kotlinx.coroutines.delay
 
 private enum class Screen {
     DASHBOARD, SETTINGS, FAULTS, PERFORMANCE, DEBUG_LOG, VALUE_LOG,
-    CUSTOM, FUEL, TRIP, VEHICLE, DEEP_DIAG, TRANS, HEALTH, MAINTENANCE, HONDA, GFORCE,
+    CUSTOM, FUEL, IDLE, TRIP, VEHICLE, DEEP_DIAG, TRANS, HEALTH, MAINTENANCE, HONDA, GFORCE,
 }
 
 class MainActivity : ComponentActivity() {
@@ -83,6 +84,7 @@ class MainActivity : ComponentActivity() {
                 val vehicleInfo by viewModel.vehicleInfo.collectAsState()
                 val vehicleInfoLoading by viewModel.vehicleInfoLoading.collectAsState()
                 val deepDiag by viewModel.deepDiag.collectAsState()
+                val idleDiag by viewModel.idleDiag.collectAsState()
                 val health by viewModel.health.collectAsState()
                 val hondaScan by viewModel.hondaScan.collectAsState()
                 val hondaScanning by viewModel.hondaScanning.collectAsState()
@@ -153,6 +155,10 @@ class MainActivity : ComponentActivity() {
                         viewModel.refreshFuelPage()
                         screen = Screen.FUEL
                     },
+                    onIdle = {
+                        viewModel.refreshIdleDiagnostics()
+                        screen = Screen.IDLE
+                    },
                     onTrip = { screen = Screen.TRIP },
                     onVehicle = {
                         viewModel.readVehicleInfo()
@@ -220,6 +226,15 @@ class MainActivity : ComponentActivity() {
                     Screen.FUEL -> FuelPageScreen(
                         values = fuelValues,
                         onRefresh = viewModel::refreshFuelPage,
+                        onBack = { screen = Screen.SETTINGS },
+                        modifier = Modifier.fillMaxSize(),
+                    )
+
+                    Screen.IDLE -> IdleDiagnosticsScreen(
+                        values = idleDiag.values,
+                        tips = idleDiag.tips,
+                        loading = idleDiag.loading,
+                        onRefresh = viewModel::refreshIdleDiagnostics,
                         onBack = { screen = Screen.SETTINGS },
                         modifier = Modifier.fillMaxSize(),
                     )

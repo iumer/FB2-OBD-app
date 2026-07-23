@@ -82,6 +82,16 @@ object HondaPidCatalog {
             m22("22130C", "ECU voltage", "V", PidCategory.ELECTRICAL, 2, "honda_engine") { d ->
                 if (d.size >= 2) (d[0] * 256 + d[1]) / 1000.0 else null
             },
+            // Fuel pump / rail / idle — candidates; ColdStartIdleCatalog also probes these.
+            m22("221310", "Fuel pump pressure (cand A)", "kPa", PidCategory.FUEL, 2, "honda_engine", ::u16),
+            m22("221311", "Fuel pump pressure (cand B)", "kPa", PidCategory.FUEL, 2, "honda_engine", ::u16),
+            m22("221312", "Fuel rail pressure (Honda)", "kPa", PidCategory.FUEL, 2, "honda_engine") { d ->
+                if (d.size >= 2) (d[0] * 256 + d[1]) * 0.1 else null
+            },
+            m22("221313", "Fuel pump duty / command", "%", PidCategory.FUEL, 1, "honda_engine", ::pctLike),
+            m22("221314", "Target idle RPM", "rpm", PidCategory.ENGINE, 2, "honda_engine", ::u16),
+            m22("221315", "IAC / idle air command", "%", PidCategory.ENGINE, 1, "honda_engine", ::pctLike),
+            m22("221316", "Total misfire count", "", PidCategory.ENGINE, 2, "honda_engine", ::u16),
         ),
     )
 

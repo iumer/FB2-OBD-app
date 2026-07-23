@@ -142,7 +142,7 @@ class DemoObdSource(
         values = mapOf("RPM" to "850", "Coolant" to "86 °C", "Load" to "22 %"),
     )
 
-    // A few Mode 22 IDs answer in demo so Transmission / Honda scan UIs are exerciseable.
+    // A few Mode 22 IDs answer in demo so Transmission / Honda / idle UIs are exerciseable.
     private val demoMode22 = mapOf(
         "221101" to 86.0, // ATF temp
         "221201" to 3.0, // gear
@@ -151,6 +151,14 @@ class DemoObdSource(
         "221207" to 1.0, // lock status
         "221208" to 980.0, // line pressure
         "221304" to 2.8, // injector PW
+        "221307" to 0.0, // knock
+        "221308" to 0.0, // misfire cyl 1
+        "221309" to 12.0, // misfire cyl 2 (demo rough-idle signal)
+        "22130A" to 0.0,
+        "22130B" to 0.0,
+        "221310" to 340.0, // fuel pump pressure cand A
+        "221314" to 750.0, // target idle
+        "221316" to 12.0, // total misfire
     )
 
     override suspend fun probePids(pids: List<PidDefinition>) = pids.map { pid ->

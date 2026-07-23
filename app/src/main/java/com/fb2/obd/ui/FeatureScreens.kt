@@ -21,6 +21,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.fb2.obd.data.MaintenanceEntry
+import com.fb2.obd.obd.ColdStartIdleCatalog
 import com.fb2.obd.obd.FreezeFrame
 import com.fb2.obd.obd.HealthScore
 import com.fb2.obd.obd.Mode06Result
@@ -117,6 +118,68 @@ fun CustomSensorsScreen(
                     }
                     Text(liveValues[pid.id] ?: if (on) "—" else "", color = Accent, fontSize = 13.sp)
                     Text(if (on) "  \u2713" else "  +", color = if (on) GoodGreen else Accent, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun IdleDiagnosticsScreen(
+    values: Map<String, String>,
+    tips: List<String>,
+    loading: Boolean,
+    onRefresh: () -> Unit,
+    onBack: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(modifier.fillMaxSize().background(Background).padding(16.dp)) {
+        ScreenHeader(title = "Cold start / rough idle", onBack = onBack) {
+            Chip(if (loading) "Probing\u2026" else "Probe now", onRefresh)
+        }
+        Column(Modifier.verticalScroll(rememberScrollState())) {
+            Text(
+                "For rough idle: probe once cold (AC off, Park), wait for warm idle, probe again. " +
+                    "Share Debug log so we can lock real Honda misfire / fuel-pressure addresses.",
+                color = TextMuted,
+                fontSize = 12.sp,
+            )
+            if (tips.isNotEmpty()) {
+                Text(
+                    "CHECKS / TIPS",
+                    color = WarnAmber,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(top = 12.dp, bottom = 6.dp),
+                )
+                tips.forEach { tip ->
+                    Text(
+                        "• $tip",
+                        color = TextPrimary,
+                        fontSize = 13.sp,
+                        modifier = Modifier.padding(bottom = 6.dp),
+                    )
+                }
+            }
+            ColdStartIdleCatalog.sections.forEach { section ->
+                Text(
+                    section.title.uppercase(),
+                    color = TextMuted,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(top = 14.dp, bottom = 4.dp),
+                )
+                Text(section.hint, color = TextMuted, fontSize = 11.sp, modifier = Modifier.padding(bottom = 8.dp))
+                section.pids.distinctBy { it.id }.forEach { pid ->
+                    val display = values[pid.id] ?: values[pid.label] ?: "—"
+                    val numeric = display.substringBefore(" ").toDoubleOrNull()
+                    val color = when {
+                        display == "n/s" || display == "—" -> TextMuted
+                        pid.label.contains("Misfire", true) && numeric != null && numeric > 0 -> CritRed
+                        pid.label.contains("Misfire", true) && numeric == 0.0 -> GoodGreen
+                        else -> Accent
+                    }
+                    CardRow(pid.label, display, color)
                 }
             }
         }
