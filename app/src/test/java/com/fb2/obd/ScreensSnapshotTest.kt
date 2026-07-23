@@ -4,9 +4,13 @@ import app.cash.paparazzi.DeviceConfig
 import app.cash.paparazzi.Paparazzi
 import com.android.resources.ScreenOrientation
 import com.fb2.obd.data.ObdLogger
+import com.fb2.obd.obd.Dtc
 import com.fb2.obd.obd.GearSource
 import com.fb2.obd.obd.VehicleSnapshot
+import com.fb2.obd.perf.AccelResult
 import com.fb2.obd.ui.DebugLogScreen
+import com.fb2.obd.ui.FaultsScreen
+import com.fb2.obd.ui.PerformanceScreen
 import com.fb2.obd.ui.SettingsScreen
 import com.fb2.obd.ui.ValueLogScreen
 import com.fb2.obd.ui.theme.FB2Theme
@@ -28,6 +32,8 @@ class ScreensSnapshotTest {
                     settings = SettingsState(valueLogging = true, showEstimatedGear = true),
                     onToggleValueLogging = {},
                     onToggleEstimatedGear = {},
+                    onOpenFaults = {},
+                    onOpenPerformance = {},
                     onOpenDebugLog = {},
                     onOpenValueLog = {},
                     onBack = {},
@@ -70,4 +76,42 @@ class ScreensSnapshotTest {
             }
         }
     }
+
+    @Test
+    fun faults_screen() {
+        val state = FaultsState(
+            hasRead = true,
+            stored = listOf(
+                Dtc("P0133", "O2 sensor slow response (B1S1)"),
+                Dtc("P0420", "Catalyst efficiency below threshold (Bank 1)"),
+            ),
+            pending = listOf(Dtc("P0300", "Random/multiple cylinder misfire")),
+        )
+        paparazzi.snapshot {
+            FB2Theme {
+                FaultsScreen(state = state, onRead = {}, onClear = {}, onBack = {})
+            }
+        }
+    }
+
+    @Test
+    fun performance_screen() {
+        val state = PerformanceState(
+            current = AccelResult(
+                zeroTo100Kmh = 10.42,
+                zeroTo60Mph = 9.15,
+                sixtyTo100Kmh = 4.80,
+                quarterMileSec = 17.6,
+                quarterMileTrapKmh = 130.0,
+            ),
+            best = AccelResult(zeroTo100Kmh = 10.42),
+            currentSpeedKmh = 48.0,
+        )
+        paparazzi.snapshot {
+            FB2Theme {
+                PerformanceScreen(state = state, onReset = {}, onBack = {})
+            }
+        }
+    }
 }
+

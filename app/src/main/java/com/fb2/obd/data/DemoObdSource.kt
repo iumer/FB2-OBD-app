@@ -1,5 +1,7 @@
 package com.fb2.obd.data
 
+import com.fb2.obd.obd.Dtc
+import com.fb2.obd.obd.DtcCatalog
 import com.fb2.obd.obd.GearEstimator
 import com.fb2.obd.obd.GearSource
 import com.fb2.obd.obd.VehicleSnapshot
@@ -69,5 +71,22 @@ class DemoObdSource(
             t += 1.0
             delay(250L)
         }
+    }
+
+    // Sample codes so the Faults screen is demonstrable without a car.
+    private var demoCleared = false
+
+    override suspend fun readStoredDtcs(): List<Dtc> = if (demoCleared) emptyList() else listOf(
+        Dtc("P0133", DtcCatalog.describe("P0133")),
+        Dtc("P0420", DtcCatalog.describe("P0420")),
+    )
+
+    override suspend fun readPendingDtcs(): List<Dtc> = if (demoCleared) emptyList() else listOf(
+        Dtc("P0300", DtcCatalog.describe("P0300")),
+    )
+
+    override suspend fun clearDtcs(): Boolean {
+        demoCleared = true
+        return true
     }
 }

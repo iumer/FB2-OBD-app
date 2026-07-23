@@ -66,6 +66,8 @@ fun SettingsScreen(
     settings: SettingsState,
     onToggleValueLogging: (Boolean) -> Unit,
     onToggleEstimatedGear: (Boolean) -> Unit,
+    onOpenFaults: () -> Unit,
+    onOpenPerformance: () -> Unit,
     onOpenDebugLog: () -> Unit,
     onOpenValueLog: () -> Unit,
     onBack: () -> Unit,
@@ -95,6 +97,10 @@ fun SettingsScreen(
             checked = settings.valueLogging,
             onCheckedChange = onToggleValueLogging,
         )
+
+        SectionLabel("Tools")
+        NavRow(title = "Fault codes (read / clear DTCs)", onClick = onOpenFaults)
+        NavRow(title = "Performance (0\u2013100, \u00BC mile)", onClick = onOpenPerformance)
 
         SectionLabel("Diagnostics")
         NavRow(title = "Debug log (raw ELM327 traffic)", onClick = onOpenDebugLog)
