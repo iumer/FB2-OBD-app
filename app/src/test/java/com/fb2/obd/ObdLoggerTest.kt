@@ -41,8 +41,22 @@ class ObdLoggerTest {
         ObdLogger.valueLoggingEnabled = true
         ObdLogger.logSnapshot(VehicleSnapshot(rpm = 900.0, coolantC = 88.0))
         val csv = ObdLogger.valuesCsv()
-        assertTrue(csv.startsWith("time_ms,rpm,speed_kmh,coolant1_c"))
+        assertTrue(csv.contains("time_ms,rpm,speed_kmh,coolant1_c"))
         assertTrue(csv.contains("900"))
         assertTrue(csv.contains("88"))
+        assertTrue(csv.contains("# page_probes"))
+    }
+
+    @Test
+    fun probeLog_alwaysRecordsEvenWithoutValueToggle() {
+        val pid = com.fb2.obd.obd.StandardPidCatalog.byId("010C")!!
+        ObdLogger.logProbe(
+            "Custom sensors",
+            listOf(com.fb2.obd.obd.PidProbeResult(pid, true, 712.0, "41 0C 0B 20")),
+        )
+        assertTrue(ObdLogger.debugText().contains("PROBE [Custom sensors]"))
+        assertTrue(ObdLogger.debugText().contains("010C"))
+        assertEquals(1, ObdLogger.probeRows().size)
+        assertTrue(ObdLogger.valuesCsv().contains("Custom sensors"))
     }
 }

@@ -41,17 +41,17 @@ import com.fb2.obd.ui.theme.TextPrimary
 import com.fb2.obd.ui.theme.WarnAmber
 
 @Composable
-private fun Chip(text: String, onClick: () -> Unit) {
+private fun Chip(text: String, selected: Boolean = false, onClick: () -> Unit) {
     Text(
         text = text,
-        color = Accent,
+        color = if (selected) Background else Accent,
         fontSize = 13.sp,
         fontWeight = FontWeight.Bold,
         modifier = Modifier
             .padding(end = 8.dp, bottom = 8.dp)
             .clip(RoundedCornerShape(8.dp))
             .clickable { onClick() }
-            .background(Surface)
+            .background(if (selected) Accent else Surface)
             .padding(horizontal = 12.dp, vertical = 8.dp),
     )
 }
@@ -94,9 +94,11 @@ fun CustomSensorsScreen(
             modifier = Modifier.padding(vertical = 8.dp),
             horizontalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            Chip("All") { onFilter(null) }
+            Chip("All", selected = filter == null) { onFilter(null) }
             listOf(PidCategory.FUEL, PidCategory.ENGINE, PidCategory.TEMPS, PidCategory.TRANSMISSION, PidCategory.AIR)
-                .forEach { c -> Chip(c.name.take(6)) { onFilter(c) } }
+                .forEach { c ->
+                    Chip(c.name.take(6), selected = filter == c) { onFilter(c) }
+                }
         }
         Column(Modifier.verticalScroll(rememberScrollState())) {
             catalog.filter { filter == null || it.category == filter }.forEach { pid ->

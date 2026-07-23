@@ -301,6 +301,7 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
             _custom.update { it.copy(probing = true) }
             val selected = pidCatalog.filter { it.id in _custom.value.selectedIds }
             val results = source.probePids(selected)
+            ObdLogger.logProbe("Custom sensors", results)
             val live = results.associate { r ->
                 r.pid.id to when {
                     !r.supported -> "n/s"
@@ -319,6 +320,7 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
                 HondaPidCatalog.engine.pids.filter { it.label.contains("Injector", true) } +
                 HondaPidCatalog.engine.pids.filter { it.label.contains("Fuel", true) }
             val results = source.probePids(defs.distinctBy { it.id })
+            ObdLogger.logProbe("Fuel system", results)
             _fuelValues.value = results.associate { r ->
                 r.pid.label to when {
                     !r.supported -> "n/s"
@@ -334,6 +336,7 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             _idleDiag.update { it.copy(loading = true) }
             val results = source.probePids(ColdStartIdleCatalog.allPids)
+            ObdLogger.logProbe("Cold start / rough idle", results)
             val values = results.associate { r ->
                 r.pid.id to when {
                     !r.supported -> "n/s"
@@ -359,6 +362,7 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
         val source = currentSource ?: return
         viewModelScope.launch {
             val results = source.probePids(HondaPidCatalog.transmission.pids)
+            ObdLogger.logProbe("Transmission", results)
             _transValues.value = results.associate { r ->
                 r.pid.label to when {
                     !r.supported -> "n/s"
@@ -378,7 +382,13 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
         val source = currentSource ?: return
         viewModelScope.launch {
             _vehicleInfoLoading.value = true
-            _vehicleInfo.value = source.readVehicleInfo()
+            val info = source.readVehicleInfo()
+            _vehicleInfo.value = info
+            ObdLogger.logProbeNote(
+                "Vehicle info",
+                "VIN=${info.vin ?: "—"} ECU=${info.ecuName ?: "—"} " +
+                    "CAL=${info.calibrationIds.joinToString("|").ifBlank { "—" }}",
+            )
             _vehicleInfoLoading.value = false
         }
     }
@@ -387,12 +397,24 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
         val source = currentSource ?: return
         viewModelScope.launch {
             _deepDiag.update { it.copy(loading = true) }
+            val readiness = source.readReadiness()
+            val freeze = source.readFreezeFrame()
+            val o2 = source.readMode05()
+            val mode06 = source.readMode06()
+            ObdLogger.logProbeNote(
+                "Deep diagnostics",
+                "MIL=${readiness.milOn} dtcCount=${readiness.dtcCount} " +
+                    "freeze=${freeze.dtc ?: "none"} o2=${o2.size} mode06=${mode06.size}",
+            )
+            freeze.values.forEach { (k, v) ->
+                ObdLogger.logProbeNote("Deep diagnostics freeze", "$k=$v")
+            }
             _deepDiag.value = DeepDiagState(
                 loading = false,
-                readiness = source.readReadiness(),
-                freeze = source.readFreezeFrame(),
-                o2 = source.readMode05(),
-                mode06 = source.readMode06(),
+                readiness = readiness,
+                freeze = freeze,
+                o2 = o2,
+                mode06 = mode06,
             )
         }
     }
@@ -401,7 +423,12 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
         val source = currentSource ?: return
         viewModelScope.launch {
             _hondaScanning.value = true
-            _hondaScan.value = source.probeHondaModules()
+            val modules = source.probeHondaModules()
+            _hondaScan.value = modules
+            ObdLogger.logProbeNote(
+                "Honda modules",
+                modules.joinToString(" | ") { "${it.module}:${it.supportedCount}/${it.totalCount}" },
+            )
             _hondaScanning.value = false
         }
     }

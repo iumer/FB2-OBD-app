@@ -229,6 +229,7 @@ class Elm327BluetoothSource(
     override suspend fun probeHondaModules(): List<ModuleScanResult> {
         return HondaPidCatalog.allPacks.map { pack ->
             val results = probePids(pack.pids)
+            ObdLogger.logProbe("Honda:${pack.id}", results)
             val ok = results.filter { it.supported }
             ModuleScanResult(
                 module = pack.title,
