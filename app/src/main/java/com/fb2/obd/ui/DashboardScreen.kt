@@ -48,6 +48,7 @@ import com.fb2.obd.obd.Health
 import com.fb2.obd.obd.HealthEvaluator
 import com.fb2.obd.obd.LiveSnapshotOverlay
 import com.fb2.obd.obd.ObdPid
+import com.fb2.obd.obd.PidCategory
 import com.fb2.obd.obd.PidDefinition
 import com.fb2.obd.obd.StandardPidCatalog
 import com.fb2.obd.obd.VehicleSnapshot
@@ -503,27 +504,137 @@ private fun EmptyTile(modifier: Modifier = Modifier, onClick: () -> Unit) {
     }
 }
 
+private fun PidCategory.displayName(): String = when (this) {
+    PidCategory.ENGINE -> "Engine"
+    PidCategory.FUEL -> "Fuel"
+    PidCategory.TEMPS -> "Temperatures"
+    PidCategory.AIR -> "Air / Intake"
+    PidCategory.ELECTRICAL -> "Electrical"
+    PidCategory.EMISSIONS -> "Emissions"
+    PidCategory.TRANSMISSION -> "Transmission"
+    PidCategory.ABS -> "ABS / Brakes"
+    PidCategory.EPS -> "Steering (EPS)"
+    PidCategory.SRS -> "SRS / Airbags"
+    PidCategory.BODY -> "Body"
+    PidCategory.CLIMATE -> "HVAC / Climate"
+    PidCategory.TPMS -> "Tire pressure"
+    PidCategory.OTHER -> "Other"
+}
+
+private fun profileDisplayName(profile: String): String = when {
+    profile.equals("SAE", ignoreCase = true) -> "Standard OBD (Mode 01)"
+    profile.contains("tcm", ignoreCase = true) -> "Honda Transmission"
+    profile.contains("engine", ignoreCase = true) -> "Honda Engine"
+    profile.contains("abs", ignoreCase = true) -> "Honda ABS"
+    profile.contains("eps", ignoreCase = true) -> "Honda EPS"
+    profile.contains("srs", ignoreCase = true) -> "Honda SRS"
+    profile.contains("body", ignoreCase = true) -> "Honda Body"
+    profile.contains("climate", ignoreCase = true) -> "Honda HVAC"
+    profile.contains("tpms", ignoreCase = true) -> "Honda TPMS"
+    else -> profile
+}
+
+/**
+ * In-dialog drill-down: Categories → Subcategories (profile packs) → Sensors.
+ * Stays in the same AlertDialog list — no separate screen.
+ */
 @Composable
 private fun SensorPickerDialog(
     catalog: List<PidDefinition>,
     onPick: (PidDefinition) -> Unit,
     onDismiss: () -> Unit,
 ) {
+    var category by remember { mutableStateOf<PidCategory?>(null) }
+    var subProfile by remember { mutableStateOf<String?>(null) }
+
+    val title = when {
+        category == null -> "Add sensor — pick category"
+        subProfile == null -> category!!.displayName()
+        else -> "${category!!.displayName()} › ${profileDisplayName(subProfile!!)}"
+    }
+
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Add sensor", color = TextPrimary) },
+        title = { Text(title, color = TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold) },
         text = {
-            Column(modifier = Modifier.fillMaxHeight(0.7f).verticalScroll(rememberScrollState())) {
-                catalog.forEach { pid ->
+            Column(modifier = Modifier.fillMaxHeight(0.75f).verticalScroll(rememberScrollState())) {
+                // Back row inside the same list
+                if (category != null) {
                     Text(
-                        text = "${pid.label}  (${pid.request})",
-                        color = TextPrimary,
-                        fontSize = 14.sp,
+                        text = if (subProfile != null) "← Subcategories" else "← Categories",
+                        color = Accent,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clickable { onPick(pid) }
+                            .clickable {
+                                if (subProfile != null) {
+                                    subProfile = null
+                                } else {
+                                    category = null
+                                }
+                            }
                             .padding(vertical = 10.dp),
                     )
+                }
+
+                when {
+                    category == null -> {
+                        val cats = catalog
+                            .groupBy { it.category }
+                            .entries
+                            .sortedBy { it.key.displayName() }
+                        cats.forEach { (cat, pids) ->
+                            PickerRow(
+                                title = cat.displayName(),
+                                subtitle = "${pids.size} sensors",
+                                trailing = "›",
+                                onClick = {
+                                    category = cat
+                                    subProfile = null
+                                },
+                            )
+                        }
+                    }
+
+                    subProfile == null -> {
+                        val inCat = catalog.filter { it.category == category }
+                        val groups = inCat.groupBy { it.profile }.entries.sortedBy { profileDisplayName(it.key) }
+                        if (groups.size <= 1) {
+                            // Only one pack — skip subcategory and list sensors directly.
+                            inCat.sortedBy { it.label }.forEach { pid ->
+                                PickerRow(
+                                    title = pid.label,
+                                    subtitle = pid.request + if (pid.unit.isNotBlank()) " · ${pid.unit}" else "",
+                                    trailing = "+",
+                                    onClick = { onPick(pid) },
+                                )
+                            }
+                        } else {
+                            groups.forEach { (profile, pids) ->
+                                PickerRow(
+                                    title = profileDisplayName(profile),
+                                    subtitle = "${pids.size} sensors",
+                                    trailing = "›",
+                                    onClick = { subProfile = profile },
+                                )
+                            }
+                        }
+                    }
+
+                    else -> {
+                        catalog
+                            .filter { it.category == category && it.profile == subProfile }
+                            .sortedBy { it.label }
+                            .forEach { pid ->
+                                PickerRow(
+                                    title = pid.label,
+                                    subtitle = pid.request + if (pid.unit.isNotBlank()) " · ${pid.unit}" else "",
+                                    trailing = "+",
+                                    onClick = { onPick(pid) },
+                                )
+                            }
+                    }
                 }
             }
         },
@@ -532,6 +643,33 @@ private fun SensorPickerDialog(
         },
         containerColor = Background,
     )
+}
+
+@Composable
+private fun PickerRow(
+    title: String,
+    subtitle: String,
+    trailing: String,
+    onClick: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
+            .clickable(onClick = onClick)
+            .background(Surface)
+            .padding(horizontal = 12.dp, vertical = 10.dp)
+            .padding(bottom = 4.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(title, color = TextPrimary, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+            Text(subtitle, color = TextMuted, fontSize = 11.sp)
+        }
+        Text(trailing, color = Accent, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+    }
+    Box(modifier = Modifier.height(6.dp))
 }
 
 @Composable
