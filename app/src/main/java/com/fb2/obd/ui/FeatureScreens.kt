@@ -239,7 +239,14 @@ fun TripScreen(
     modifier: Modifier = Modifier,
     embedded: Boolean = false,
 ) {
-    Column(modifier.fillMaxSize().background(Background).padding(if (embedded) 4.dp else 16.dp)) {
+    Column(
+        modifier
+            .fillMaxSize()
+            .background(Background)
+            .verticalScroll(rememberScrollState())
+            .padding(if (embedded) 4.dp else 16.dp)
+            .padding(bottom = 16.dp),
+    ) {
         if (embedded) {
             Row(
                 Modifier.fillMaxWidth().padding(bottom = 6.dp),
@@ -365,7 +372,14 @@ fun HealthScoresScreen(
     modifier: Modifier = Modifier,
     embedded: Boolean = false,
 ) {
-    Column(modifier.fillMaxSize().background(Background).padding(if (embedded) 4.dp else 16.dp)) {
+    Column(
+        modifier
+            .fillMaxSize()
+            .background(Background)
+            .verticalScroll(rememberScrollState())
+            .padding(if (embedded) 4.dp else 16.dp)
+            .padding(bottom = 16.dp),
+    ) {
         if (embedded) {
             Row(
                 Modifier.fillMaxWidth().padding(bottom = 6.dp),
@@ -460,7 +474,14 @@ fun GForceScreen(
     embedded: Boolean = false,
 ) {
     val g = kotlin.math.sqrt((ax * ax + ay * ay + az * az).toDouble()) / 9.81
-    Column(modifier.fillMaxSize().background(Background).padding(if (embedded) 4.dp else 16.dp)) {
+    Column(
+        modifier
+            .fillMaxSize()
+            .background(Background)
+            .verticalScroll(rememberScrollState())
+            .padding(if (embedded) 4.dp else 16.dp)
+            .padding(bottom = 16.dp),
+    ) {
         if (embedded) {
             Text(
                 "G-force",
