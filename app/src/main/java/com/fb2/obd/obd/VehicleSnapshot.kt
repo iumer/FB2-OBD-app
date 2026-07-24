@@ -22,6 +22,8 @@ data class VehicleSnapshot(
     val batteryVolts: Double? = null,
     val gear: Int? = null,
     val gearSource: GearSource = GearSource.NONE,
+    /** 0–99 confidence when [gearSource] is ESTIMATED; null for ECU / none. */
+    val gearConfidencePct: Int? = null,
     /** Actual transmission gear ratio from ECU PID 0xA4, if available. */
     val gearRatioActual: Double? = null,
     /** PID numbers the ECU reported as NOT supported (for "n/s" tiles). */

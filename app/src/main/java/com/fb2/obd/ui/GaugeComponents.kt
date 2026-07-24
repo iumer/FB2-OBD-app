@@ -31,8 +31,10 @@ import androidx.compose.ui.unit.sp
 import com.fb2.obd.obd.GearSource
 import com.fb2.obd.obd.Health
 import com.fb2.obd.ui.theme.Accent
+import com.fb2.obd.ui.theme.ColdBlue
 import com.fb2.obd.ui.theme.CritRed
 import com.fb2.obd.ui.theme.GoodGreen
+import com.fb2.obd.ui.theme.HotOrange
 import com.fb2.obd.ui.theme.Surface
 import com.fb2.obd.ui.theme.TextMuted
 import com.fb2.obd.ui.theme.TextPrimary
@@ -40,8 +42,10 @@ import com.fb2.obd.ui.theme.WarnAmber
 import kotlin.math.roundToInt
 
 fun Health.color(): Color = when (this) {
+    Health.COLD -> ColdBlue
     Health.GOOD -> GoodGreen
     Health.WARN -> WarnAmber
+    Health.ELEVATED -> HotOrange
     Health.CRITICAL -> CritRed
     Health.UNKNOWN -> TextMuted
 }

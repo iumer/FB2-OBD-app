@@ -292,12 +292,17 @@ class Elm327BluetoothSource(
     private fun VehicleSnapshot.withGear(hasEcuGear: Boolean): VehicleSnapshot {
         if (hasEcuGear && gearRatioActual != null) {
             val g = gearEstimator.gearFromRatio(gearRatioActual)
-            if (g != null) return copy(gear = g, gearSource = GearSource.ECU)
+            if (g != null) return copy(gear = g, gearSource = GearSource.ECU, gearConfidencePct = null)
         }
-        val est = if (speedKmh != null && rpm != null) gearEstimator.estimate(speedKmh, rpm) else null
+        val est = if (speedKmh != null && rpm != null) {
+            gearEstimator.estimateDetailed(speedKmh, rpm)
+        } else {
+            null
+        }
         return copy(
-            gear = est,
+            gear = est?.gear,
             gearSource = if (est != null) GearSource.ESTIMATED else GearSource.NONE,
+            gearConfidencePct = est?.confidencePct,
         )
     }
 
