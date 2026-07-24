@@ -68,7 +68,7 @@ fun DebugLogScreen(
     ) {
         ScreenHeader(title = "Debug log", onBack = onBack) {
             Row {
-                HeaderAction("Share/Save", onShare)
+                HeaderAction("Save", onShare)
                 HeaderAction("Clear", onClear)
             }
         }
@@ -123,7 +123,7 @@ fun ValueLogScreen(
     ) {
         ScreenHeader(title = "Value log", onBack = onBack) {
             Row {
-                HeaderAction("Share/Save", onShare)
+                HeaderAction("Save", onShare)
                 HeaderAction("Clear current", onClear)
             }
         }

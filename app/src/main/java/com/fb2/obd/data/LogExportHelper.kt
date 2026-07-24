@@ -13,9 +13,11 @@ import android.provider.MediaStore
 import java.io.File
 
 /**
- * Share / export helpers for Debug + Value logs.
- * Car HUs often have **zero** ACTION_SEND targets → fall back to saving into
- * public Downloads (MediaStore) + app Documents, then copy the path.
+ * Save / share helpers for Debug + Value logs.
+ *
+ * Car HUs often only expose **Bluetooth** as an ACTION_SEND target, which
+ * opens a useless BT search UI. We therefore **always save to Downloads** and
+ * only offer Share when a real app (Drive, email, WhatsApp, Files…) exists.
  */
 object LogExportHelper {
 
@@ -25,7 +27,28 @@ object LogExportHelper {
         val mediaStoreUri: Uri?,
     )
 
-    fun hasShareTargets(context: Context, intent: Intent): Boolean {
+    /** Packages that look like share targets but are useless for log export. */
+    private val USELESS_SHARE_PACKAGES = listOf(
+        "bluetooth",
+        "bluetoothopp",
+        "btservice",
+        "nearby",
+        "nearbyshare",
+        "android.sharing",
+        "intentresolver",
+        "com.android.internal.app",
+        "com.google.android.gms.nearby",
+        "com.samsung.android.app.sharelive",
+        "com.miui.mishare",
+    )
+
+    fun isUsefulSharePackage(packageName: String): Boolean {
+        val pkg = packageName.lowercase()
+        if (pkg.isBlank()) return false
+        return USELESS_SHARE_PACKAGES.none { bad -> pkg.contains(bad) }
+    }
+
+    fun hasUsefulShareTargets(context: Context, intent: Intent): Boolean {
         val pm = context.packageManager
         @Suppress("DEPRECATION")
         val list = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -36,17 +59,12 @@ object LogExportHelper {
         } else {
             pm.queryIntentActivities(intent, PackageManager.MATCH_DEFAULT_ONLY)
         }
-        return list.any { ri ->
-            val pkg = ri.activityInfo?.packageName.orEmpty()
-            pkg.isNotBlank() &&
-                !pkg.contains("intentresolver", ignoreCase = true) &&
-                !pkg.contains("com.android.internal.app", ignoreCase = true)
-        }
+        return list.any { ri -> isUsefulSharePackage(ri.activityInfo?.packageName.orEmpty()) }
     }
 
     /**
      * Persist [source] under Downloads/FB2-Diag/ (when possible) and
-     * app-specific Documents/exports/ (always). Returns a human path for the UI.
+     * app-specific Documents/exports/ (always).
      */
     fun exportFile(context: Context, source: File, displayName: String, mime: String): ExportResult {
         require(source.isFile) { "missing ${source.absolutePath}" }
@@ -93,6 +111,7 @@ object LogExportHelper {
                 val dest = File(dir, safeName)
                 source.copyTo(dest, overwrite = true)
                 publicLabel = dest.absolutePath
+                mediaUri = Uri.fromFile(dest)
             }
         }
 
@@ -107,6 +126,38 @@ object LogExportHelper {
             absolutePath = appCopy.absolutePath,
             mediaStoreUri = mediaUri,
         )
+    }
+
+    /** Best-effort open in the unit's Files / Downloads UI. */
+    fun openInFileManager(context: Context, result: ExportResult, mime: String): Boolean {
+        val uri = result.mediaStoreUri ?: return false
+        val view = Intent(Intent.ACTION_VIEW).apply {
+            setDataAndType(uri, mime)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        return runCatching {
+            if (view.resolveActivity(context.packageManager) != null) {
+                context.startActivity(view)
+                true
+            } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                // Try opening the Downloads collection (API 29+).
+                val downloads = Intent(Intent.ACTION_VIEW).apply {
+                    setDataAndType(
+                        MediaStore.Downloads.EXTERNAL_CONTENT_URI,
+                        "vnd.android.document/directory",
+                    )
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                if (downloads.resolveActivity(context.packageManager) != null) {
+                    context.startActivity(downloads)
+                    true
+                } else {
+                    false
+                }
+            } else {
+                false
+            }
+        }.getOrDefault(false)
     }
 
     fun copyToClipboard(context: Context, label: String, text: String) {

@@ -38,7 +38,7 @@ Keep these fixed. If a change might touch one of these areas, re-verify it.
 | I23 | MIN toast shows but bubble missing on Home | Fixed | FGS + attach/READY before `moveTaskToBack`; clamp on-screen |
 | I24 | Dash text too small to read while driving on HU | Fixed | `DashType` larger hero/tiles; fewer wider columns |
 | I25 | Floating bubble ring too small on HU | Fixed | Center 96dp / satellites 112dp / ring ~460dp; larger text |
-| I26 | Log Share shows “No apps can perform this action” on HU | Fixed | Detect no SEND targets → save Downloads/FB2-Diag + Documents/exports |
+| I26 | Log Share shows “No apps…” / opens Bluetooth search on HU | Fixed | Always save to Downloads/FB2-Diag; ignore BT as share target |
 
 When the user reports a **new** bug, add a new `Ixx` row here (Status: Open → Fixed)
 and add a matching automated or manual check in sections 2–3.
@@ -90,8 +90,8 @@ touches ELM, Dash health, deep search, logging, or share:
 3. **Idle stability** — leave idling several minutes; Dash stays populated; on drop chip shows `RETRY` and auto-recovers without tapping.
 4. **Deep analysis (Battery)** — triple-tap Battery when n/s (or after a glitch) → should recover via ATRV when adapter is powered.
 5. **Rough Idle page** — opens with live values quickly; does not hang on Probing if bus is unhealthy.
-6. **Debug log Share/Save** — Settings → Debug log → Share/Save. On phone: chooser. On bare HU: dialog with saved path under `Downloads/FB2-Diag` (path copied).
-7. **Value LOG Share/Save** — stop a LOG session → Share/Save current or Save a listed file (same HU fallback).
+6. **Debug log Save** — Settings → Debug log → **Save**. Writes `Downloads/FB2-Diag/` (never opens Bluetooth-only share). Dialog can Open file / optional Share… if a real app exists.
+7. **Value LOG Save** — same Save flow for current buffer or listed sessions.
 8. **Screen off alerts** — real ELM connected → sticky notification present; with voice alerts on, a critical condition still speaks after screen off.
 9. **Floating bubble (MIN)** — grant overlay permission → MIN → collapsed circle appears; drag works; tap expands **radial ring** (up to 5 live values around center); vertical swipe pages next/previous groups; idle ~6s auto-collapses to circle; tap center collapses; hold opens app. **Back → Exit & disconnect** must remove the bubble entirely. (On Dellson: verify over CarPlay if used.)
 10. **Car HU layout (automated)** — Paparazzi at 1024×600, 1280×720, 1920×720 in `CarHuSnapshotTest` / `CarHuBubbleSnapshotTest` (collapsed + radial expanded). Adaptive column counts for Dash/dense pages.
