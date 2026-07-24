@@ -921,8 +921,6 @@ private fun TopBar(
     onDiagnosticsClick: () -> Unit,
     onToggleLogging: () -> Unit,
 ) {
-    val linked = state.connection == ConnectionState.CONNECTED ||
-        state.connection == ConnectionState.CONNECTING
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -962,13 +960,15 @@ private fun TopBar(
             TopBarChip(if (loggingActive) "STOP LOG" else "LOG", if (loggingActive) CritRed else Accent, onToggleLogging)
             TopBarChip("DIAG", Accent, onDiagnosticsClick)
             TopBarChip("SETTINGS", TextMuted, onSettingsClick)
+            // CONNECTED only for a real ELM adapter — Demo keeps CONNECT (+ yellow DEMO badge).
+            val liveConnected = state.connection == ConnectionState.CONNECTED && state.sourceIsLive
             TopBarChip(
                 text = when {
-                    state.connection == ConnectionState.CONNECTED -> "CONNECTED"
+                    liveConnected -> "CONNECTED"
                     state.connection == ConnectionState.CONNECTING -> "…"
                     else -> "CONNECT"
                 },
-                color = if (linked && state.connection == ConnectionState.CONNECTED) GoodGreen else Accent,
+                color = if (liveConnected) GoodGreen else Accent,
                 onClick = onConnectClick,
             )
         }
