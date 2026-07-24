@@ -36,6 +36,7 @@ Keep these fixed. If a change might touch one of these areas, re-verify it.
 | I21 | Cannot remap built-in Dash tiles | Fixed | Double-tap tile → same sensor picker as `+`; persisted overrides |
 | I22 | Sensor picker has no text search | Fixed | Search box in `SensorPickerDialog` (label / PID / category) |
 | I23 | MIN toast shows but bubble missing on Home | Fixed | FGS + attach/READY before `moveTaskToBack`; clamp on-screen |
+| I24 | Dash text too small to read while driving on HU | Fixed | `DashType` larger hero/tiles; fewer wider columns |
 
 When the user reports a **new** bug, add a new `Ixx` row here (Status: Open → Fixed)
 and add a matching automated or manual check in sections 2–3.
