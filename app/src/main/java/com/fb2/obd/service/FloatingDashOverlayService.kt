@@ -198,7 +198,7 @@ class FloatingDashOverlayService : Service() {
         val longPress = Runnable {
             if (!moved && mode == TouchMode.NONE) {
                 longPressFired = true
-                openAppAndKeepOverlay()
+                openAppAndDismissOverlay()
             }
         }
 
@@ -389,13 +389,14 @@ class FloatingDashOverlayService : Service() {
         }
     }
 
-    private fun openAppAndKeepOverlay() {
+    private fun openAppAndDismissOverlay() {
         mainHandler.removeCallbacks(autoCollapse)
         val launch = Intent(this, MainActivity::class.java).apply {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
         }
         startActivity(launch)
-        setExpanded(false)
+        // Long-press means "I'm back in the full app" — remove the bubble.
+        stopSelf()
     }
 
     private fun healthColor(health: String?): Int = when (health) {

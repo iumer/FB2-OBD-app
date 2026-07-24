@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.fb2.obd.car.CarDashBuilder
 import com.fb2.obd.car.VehicleLiveStore
 import com.fb2.obd.data.ConnectionState
+import com.fb2.obd.data.DashTileOverrideStore
 import com.fb2.obd.data.DemoObdSource
 import com.fb2.obd.data.HealthThresholdStore
 import com.fb2.obd.data.MaintenanceEntry
@@ -208,6 +209,11 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
     private val _dashExtraValues = MutableStateFlow<Map<String, String>>(emptyMap())
     val dashExtraValues: StateFlow<Map<String, String>> = _dashExtraValues.asStateFlow()
 
+    /** Built-in Dash tile label → catalog PID id (double-tap remap). */
+    private val tileOverrideStore = DashTileOverrideStore(File(filesDir, "dash_tile_overrides.json"))
+    private val _dashTileOverrides = MutableStateFlow(tileOverrideStore.load())
+    val dashTileOverrides: StateFlow<Map<String, String>> = _dashTileOverrides.asStateFlow()
+
     private val sessionLogStore = SessionLogStore(File(filesDir, "value_logs"))
     private val _savedLogs = MutableStateFlow(sessionLogStore.list())
     val savedLogs: StateFlow<List<SavedLogFile>> = _savedLogs.asStateFlow()
@@ -297,6 +303,42 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
             next.filter { it.isNotBlank() }
         }
         // One-shot probe so tiles outside the main poll set still show a value.
+        probeAndCachePid(pid)
+    }
+
+    fun clearDashExtraPid(pidId: String) {
+        _dashExtraPidIds.update { it.filter { id -> id != pidId } }
+        _dashExtraValues.update { it - pidId }
+        publishCarDash()
+    }
+
+    /** Replace a built-in Dash tile (e.g. Coolant 1) with any catalog sensor. */
+    fun setDashTileOverride(baseLabel: String, pid: PidDefinition) {
+        val key = baseLabel.trim()
+        if (key.isEmpty()) return
+        _dashTileOverrides.update { it + (key to pid.id) }
+        tileOverrideStore.save(_dashTileOverrides.value)
+        probeAndCachePid(pid)
+        publishCarDash()
+    }
+
+    fun clearDashTileOverride(baseLabel: String) {
+        val key = baseLabel.trim()
+        val removedId = _dashTileOverrides.value[key]
+        _dashTileOverrides.update { it - key }
+        tileOverrideStore.save(_dashTileOverrides.value)
+        // Drop cached value only if unused by + extras / other overrides.
+        if (removedId != null) {
+            val stillNeeded = removedId in _dashExtraPidIds.value ||
+                _dashTileOverrides.value.values.any { it.equals(removedId, true) }
+            if (!stillNeeded) {
+                _dashExtraValues.update { it - removedId }
+            }
+        }
+        publishCarDash()
+    }
+
+    private fun probeAndCachePid(pid: PidDefinition) {
         val source = currentSource ?: return
         viewModelScope.launch {
             val probed = source.probePids(listOf(pid))
@@ -305,12 +347,6 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
             _dashExtraValues.update { it + (pid.id to text) }
             publishCarDash()
         }
-    }
-
-    fun clearDashExtraPid(pidId: String) {
-        _dashExtraPidIds.update { it.filter { id -> id != pidId } }
-        _dashExtraValues.update { it - pidId }
-        publishCarDash()
     }
 
     private val accelTimer = AccelerationTimer()
@@ -440,10 +476,12 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
         return saved
     }
 
-    /** Re-probe only the sensors the user added with + on the main Dash. */
+    /** Re-probe user-added (+) sensors and remapped built-in tiles. */
     private suspend fun refreshDashExtrasForLog() {
         val source = currentSource ?: return
-        val ids = _dashExtraPidIds.value
+        val ids = (
+            _dashExtraPidIds.value + _dashTileOverrides.value.values
+            ).distinct().filter { it.isNotBlank() }
         if (ids.isEmpty()) return
         val pids = ids.mapNotNull { id -> pidCatalog.find { it.id.equals(id, true) } }
         if (pids.isEmpty()) return

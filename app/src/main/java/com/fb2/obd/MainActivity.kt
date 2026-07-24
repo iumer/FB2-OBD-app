@@ -104,6 +104,7 @@ class MainActivity : ComponentActivity() {
                 val maintenance by viewModel.maintenance.collectAsState()
                 val dashExtraPidIds by viewModel.dashExtraPidIds.collectAsState()
                 val dashExtraValues by viewModel.dashExtraValues.collectAsState()
+                val dashTileOverrides by viewModel.dashTileOverrides.collectAsState()
                 val savedLogs by viewModel.savedLogs.collectAsState()
                 val deepSearch by viewModel.deepSearch.collectAsState()
                 val deepFoundValues by viewModel.deepFoundValues.collectAsState()
@@ -259,7 +260,10 @@ class MainActivity : ComponentActivity() {
                         catalog = viewModel.pidCatalog,
                         extraPidIds = dashExtraPidIds,
                         extraValues = dashExtraValues,
+                        tileOverrides = dashTileOverrides,
                         onSetExtraPid = viewModel::setDashExtraPid,
+                        onSetTileOverride = viewModel::setDashTileOverride,
+                        onClearTileOverride = viewModel::clearDashTileOverride,
                         customValues = buildMap {
                             custom.selectedIds.forEach { id ->
                                 val pid = viewModel.pidCatalog.find { it.id == id } ?: return@forEach
@@ -565,7 +569,7 @@ class MainActivity : ComponentActivity() {
         try {
             FloatingDashOverlayService.startOverlay(this)
             moveTaskToBack(true)
-            toast("Floating Dash on — tap for ring, swipe pages, hold to reopen")
+            toast("Floating Dash on — tap for ring, swipe pages, hold to reopen (closes bubble)")
         } catch (e: Exception) {
             toast("Bubble failed: ${e.message ?: "overlay error"}")
         }
