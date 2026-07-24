@@ -22,6 +22,7 @@
     <!-- Keep voice alerts alive with screen off while ELM is connected -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
@@ -78,10 +79,15 @@
             android:exported="false"
             android:foregroundServiceType="connectedDevice" />
 
-        <!-- Draggable floating Dash bubble (draw-over-apps). -->
+        <!-- Draggable floating Dash bubble (draw-over-apps). FGS so it survives MIN. -->
         <service
             android:name=".service.FloatingDashOverlayService"
-            android:exported="false" />
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Floating OBD Dash bubble over Home / CarPlay" />
+        </service>
 
         <!-- Share saved / current CSV logs via WhatsApp, Drive, email, etc. -->
         <provider

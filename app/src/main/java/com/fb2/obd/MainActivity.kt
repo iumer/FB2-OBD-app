@@ -4,8 +4,10 @@ import android.Manifest
 import android.annotation.SuppressLint
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothManager
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.hardware.Sensor
 import android.hardware.SensorEvent
@@ -13,6 +15,8 @@ import android.hardware.SensorEventListener
 import android.hardware.SensorManager
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.net.Uri
 import android.provider.Settings
 import android.view.WindowManager
@@ -58,6 +62,7 @@ import com.fb2.obd.ui.DashboardScreen
 import com.fb2.obd.ui.DebugLogScreen
 import com.fb2.obd.ui.DeepSearchDialogs
 import com.fb2.obd.ui.DiagnosticsDepthScreen
+import java.util.concurrent.atomic.AtomicBoolean
 import com.fb2.obd.ui.DiagnosticsHubScreen
 import com.fb2.obd.ui.DiagnosticsNav
 import com.fb2.obd.ui.FaultsScreen
@@ -564,13 +569,41 @@ class MainActivity : ComponentActivity() {
         Toast.makeText(this, message, Toast.LENGTH_LONG).show()
     }
 
-    /** Start floating Dash bubble and send the activity to the background. */
+    /** Start floating Dash bubble, wait until it is attached, then background. */
     private fun startFloatingDashBubble() {
-        try {
-            FloatingDashOverlayService.startOverlay(this)
+        if (!FloatingDashOverlayService.isOverlayAllowed(this)) {
+            toast("Allow “Display over other apps” for FB2 Diag, then tap MIN again")
+            return
+        }
+        val done = AtomicBoolean(false)
+        val mainHandler = Handler(Looper.getMainLooper())
+        lateinit var receiver: BroadcastReceiver
+        fun finishMinimize() {
+            if (!done.compareAndSet(false, true)) return
+            runCatching { unregisterReceiver(receiver) }
+            mainHandler.removeCallbacksAndMessages(null)
             moveTaskToBack(true)
-            toast("Floating Dash on — tap for ring, swipe pages, hold to reopen (closes bubble)")
+            toast("Floating Dash on — look for the circle (notification keeps it alive)")
+        }
+        receiver = object : BroadcastReceiver() {
+            override fun onReceive(context: Context?, intent: Intent?) {
+                if (intent?.action == FloatingDashOverlayService.ACTION_READY) {
+                    finishMinimize()
+                }
+            }
+        }
+        try {
+            ContextCompat.registerReceiver(
+                this,
+                receiver,
+                IntentFilter(FloatingDashOverlayService.ACTION_READY),
+                ContextCompat.RECEIVER_NOT_EXPORTED,
+            )
+            FloatingDashOverlayService.startOverlay(this)
+            // Fallback if READY is missed (service already running / OEM quirk).
+            mainHandler.postDelayed({ finishMinimize() }, 900L)
         } catch (e: Exception) {
+            runCatching { unregisterReceiver(receiver) }
             toast("Bubble failed: ${e.message ?: "overlay error"}")
         }
     }

@@ -1,14 +1,20 @@
 package com.fb2.obd.service
 
 import android.annotation.SuppressLint
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
+import android.content.pm.ServiceInfo
 import android.graphics.Color
 import android.graphics.PixelFormat
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
+import android.os.Build
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
@@ -18,7 +24,10 @@ import android.view.View
 import android.view.WindowManager
 import android.widget.FrameLayout
 import android.widget.TextView
+import androidx.core.app.NotificationCompat
+import androidx.core.content.ContextCompat
 import com.fb2.obd.MainActivity
+import com.fb2.obd.R
 import com.fb2.obd.car.CarDashState
 import com.fb2.obd.car.FloatingDashMetrics
 import com.fb2.obd.car.VehicleLiveStore
@@ -42,6 +51,10 @@ import kotlin.math.sin
  * - Vertical swipe pages through remaining metrics (center stays fixed)
  * - Auto-collapses after idle timeout
  *
+ * Runs as a **foreground service** so the bubble stays visible over Home /
+ * CarPlay after MIN. Broadcasts [ACTION_READY] once the WindowManager view is
+ * attached so MainActivity can background itself only after the bubble exists.
+ *
  * Requires [android.Manifest.permission.SYSTEM_ALERT_WINDOW].
  */
 class FloatingDashOverlayService : Service() {
@@ -54,6 +67,7 @@ class FloatingDashOverlayService : Service() {
     private lateinit var prefs: SharedPreferences
     private var root: FrameLayout? = null
     private var params: WindowManager.LayoutParams? = null
+    private var overlayAttached = false
 
     private var expanded = false
     private var pageIndex = 0
@@ -77,6 +91,9 @@ class FloatingDashOverlayService : Service() {
         super.onCreate()
         windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
         prefs = getSharedPreferences(PREFS, MODE_PRIVATE)
+        ensureChannel()
+        // Promote BEFORE addView so OEMs don't defer / kill us as we leave the app.
+        promoteToForeground()
         ObdLogger.logDebug(ObdLogger.Dir.INFO, "Floating dash overlay created")
         attachOverlay()
         collectJob = scope.launch {
@@ -93,14 +110,23 @@ class FloatingDashOverlayService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             ACTION_STOP -> {
+                stopForeground(STOP_FOREGROUND_REMOVE)
                 stopSelf()
                 return START_NOT_STICKY
             }
             ACTION_COLLAPSE -> setExpanded(false)
             ACTION_EXPAND -> setExpanded(true)
+            else -> {
+                promoteToForeground()
+                if (!overlayAttached) {
+                    attachOverlay()
+                } else {
+                    ensureOnScreen()
+                    render()
+                }
+                notifyReady()
+            }
         }
-        // Do not restart after swipe-away / process kill — MIN is intentional only
-        // while the user wants the bubble; Exit must fully dismiss it.
         return START_NOT_STICKY
     }
 
@@ -110,12 +136,24 @@ class FloatingDashOverlayService : Service() {
         scope.cancel()
         root?.let { runCatching { windowManager.removeView(it) } }
         root = null
+        overlayAttached = false
         ObdLogger.logDebug(ObdLogger.Dir.INFO, "Floating dash overlay destroyed")
         super.onDestroy()
     }
 
     @SuppressLint("ClickableViewAccessibility")
     private fun attachOverlay() {
+        if (overlayAttached && root != null) {
+            ensureOnScreen()
+            notifyReady()
+            return
+        }
+        if (!android.provider.Settings.canDrawOverlays(this)) {
+            ObdLogger.logDebug(ObdLogger.Dir.INFO, "Floating dash: overlay permission missing")
+            stopSelf()
+            return
+        }
+
         val density = resources.displayMetrics.density
         fun dp(v: Int) = (v * density).roundToInt()
 
@@ -123,10 +161,15 @@ class FloatingDashOverlayService : Service() {
         val satSize = dp(SAT_DP)
         val centerSize = dp(CENTER_DP)
 
-        val container = FrameLayout(this)
+        val container = FrameLayout(this).apply {
+            // Make the hit-target obvious even before first live metric paint.
+            setBackgroundColor(Color.TRANSPARENT)
+        }
 
         center = TextView(this).apply {
-            layoutParams = FrameLayout.LayoutParams(centerSize, centerSize)
+            layoutParams = FrameLayout.LayoutParams(centerSize, centerSize).apply {
+                gravity = Gravity.CENTER
+            }
             gravity = Gravity.CENTER
             setTextColor(Color.WHITE)
             textSize = 10f
@@ -135,8 +178,10 @@ class FloatingDashOverlayService : Service() {
             setPadding(dp(4), dp(8), dp(4), dp(8))
             background = circleDrawable(COLOR_ACCENT, fillAlpha = 230)
             elevation = dp(6).toFloat()
+            text = "FB2\n…"
         }
 
+        satellites.clear()
         repeat(FloatingDashMetrics.PAGE_SIZE) {
             val sat = TextView(this).apply {
                 layoutParams = FrameLayout.LayoutParams(satSize, satSize)
@@ -169,21 +214,27 @@ class FloatingDashOverlayService : Service() {
             setBackgroundColor(Color.argb(160, 11, 15, 20))
         }
         container.addView(pageHint)
-        container.addView(center) // on top for taps
+        container.addView(center)
 
         val lp = WindowManager.LayoutParams(
             collapsed,
             collapsed,
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
-                WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS or
+                WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
                 WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED,
             PixelFormat.TRANSLUCENT,
         ).apply {
             gravity = Gravity.TOP or Gravity.START
             x = prefs.getInt(KEY_X, dp(24))
             y = prefs.getInt(KEY_Y, dp(120))
+            // Keep above most system UI chrome where OEMs allow it.
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                layoutInDisplayCutoutMode =
+                    WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+            }
         }
+        clampToScreen(lp)
 
         var downRawX = 0f
         var downRawY = 0f
@@ -193,8 +244,6 @@ class FloatingDashOverlayService : Service() {
         var mode = TouchMode.NONE
         var longPressFired = false
 
-        // OnTouchListener consumes events, so long-press must be scheduled here
-        // (View.setOnLongClickListener will not fire).
         val longPress = Runnable {
             if (!moved && mode == TouchMode.NONE) {
                 longPressFired = true
@@ -206,8 +255,9 @@ class FloatingDashOverlayService : Service() {
             val dx = (event.rawX - downRawX).roundToInt()
             val dy = (event.rawY - downRawY).roundToInt()
             if (abs(dx) > dp(4) || abs(dy) > dp(4)) moved = true
-            lp.x = (startX + dx).coerceAtLeast(0)
-            lp.y = (startY + dy).coerceAtLeast(0)
+            lp.x = startX + dx
+            lp.y = startY + dy
+            clampToScreen(lp)
             windowManager.updateViewLayout(container, lp)
         }
 
@@ -238,7 +288,7 @@ class FloatingDashOverlayService : Service() {
                     }
                     when (mode) {
                         TouchMode.DRAG -> applyDrag(event)
-                        TouchMode.PAGE -> { /* wait for UP */ }
+                        TouchMode.PAGE -> Unit
                         TouchMode.NONE -> Unit
                     }
                     true
@@ -256,7 +306,6 @@ class FloatingDashOverlayService : Service() {
                             render()
                         }
                         !moved && event.actionMasked == MotionEvent.ACTION_UP -> {
-                            // Tap center / ring: toggle expand/collapse
                             setExpanded(!expanded)
                         }
                         mode == TouchMode.DRAG -> {
@@ -276,10 +325,33 @@ class FloatingDashOverlayService : Service() {
 
         root = container
         params = lp
-        windowManager.addView(container, lp)
+        val added = runCatching {
+            windowManager.addView(container, lp)
+            true
+        }.onFailure { e ->
+            ObdLogger.logDebug(
+                ObdLogger.Dir.INFO,
+                "Floating dash addView failed: ${e.message}",
+            )
+            root = null
+            params = null
+        }.getOrDefault(false)
+
+        if (!added) {
+            stopForeground(STOP_FOREGROUND_REMOVE)
+            stopSelf()
+            return
+        }
+
+        overlayAttached = true
         metrics = FloatingDashMetrics.from(VehicleLiveStore.dash.value)
         latest = VehicleLiveStore.dash.value
         render()
+        notifyReady()
+        ObdLogger.logDebug(
+            ObdLogger.Dir.INFO,
+            "Floating dash attached at ${lp.x},${lp.y} size ${lp.width}x${lp.height}",
+        )
     }
 
     private fun render() {
@@ -301,7 +373,6 @@ class FloatingDashOverlayService : Service() {
         val worst = FloatingDashMetrics.worstHealth(metrics.mapNotNull { it.health })
         val rim = healthColor(worst)
 
-        // Center always visible
         center.layoutParams = FrameLayout.LayoutParams(centerSize, centerSize).apply {
             gravity = Gravity.CENTER
         }
@@ -312,13 +383,13 @@ class FloatingDashOverlayService : Service() {
             "${first.label.take(4).uppercase()}\n${first.value}"
         }
         center.background = circleDrawable(rim, fillAlpha = 235)
+        center.visibility = View.VISIBLE
 
         if (expanded) {
             lp.width = expandedSize
             lp.height = expandedSize
             pageHint?.visibility = View.VISIBLE
             pageHint?.text = "↕ scroll · tap center to collapse"
-            // Place satellites in a pentagon around center
             val cx = (expandedSize - satSize) / 2f
             val cy = (expandedSize - satSize) / 2f
             for (i in 0 until FloatingDashMetrics.PAGE_SIZE) {
@@ -356,8 +427,29 @@ class FloatingDashOverlayService : Service() {
             satellites.forEach { it.visibility = View.GONE }
         }
 
+        clampToScreen(lp)
         runCatching { windowManager.updateViewLayout(container, lp) }
+        container.visibility = View.VISIBLE
         container.requestLayout()
+    }
+
+    private fun ensureOnScreen() {
+        val lp = params ?: return
+        clampToScreen(lp)
+        root?.let { runCatching { windowManager.updateViewLayout(it, lp) } }
+    }
+
+    private fun clampToScreen(lp: WindowManager.LayoutParams) {
+        val bounds = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            windowManager.currentWindowMetrics.bounds
+        } else {
+            val dm = resources.displayMetrics
+            android.graphics.Rect(0, 0, dm.widthPixels, dm.heightPixels)
+        }
+        val maxX = (bounds.width() - lp.width).coerceAtLeast(0)
+        val maxY = (bounds.height() - lp.height).coerceAtLeast(0)
+        lp.x = lp.x.coerceIn(0, maxX)
+        lp.y = lp.y.coerceIn(0, maxY)
     }
 
     private fun setExpanded(value: Boolean) {
@@ -371,12 +463,13 @@ class FloatingDashOverlayService : Service() {
         fun dp(v: Int) = (v * density).roundToInt()
         val delta = (dp(EXPANDED_DP) - dp(COLLAPSED_DP)) / 2
         if (value) {
-            lp.x = (lp.x - delta).coerceAtLeast(0)
-            lp.y = (lp.y - delta).coerceAtLeast(0)
+            lp.x -= delta
+            lp.y -= delta
         } else {
             lp.x += delta
             lp.y += delta
         }
+        clampToScreen(lp)
         expanded = value
         if (expanded) bumpAutoCollapse() else mainHandler.removeCallbacks(autoCollapse)
         render()
@@ -395,8 +488,69 @@ class FloatingDashOverlayService : Service() {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
         }
         startActivity(launch)
-        // Long-press means "I'm back in the full app" — remove the bubble.
+        stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
+    }
+
+    private fun notifyReady() {
+        val ready = Intent(ACTION_READY).setPackage(packageName)
+        sendBroadcast(ready)
+    }
+
+    private fun promoteToForeground() {
+        val notification = buildNotification()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            startForeground(
+                NOTIFICATION_ID,
+                notification,
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE,
+            )
+        } else {
+            startForeground(NOTIFICATION_ID, notification)
+        }
+    }
+
+    private fun buildNotification(): Notification {
+        val launch = Intent(this, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
+        }
+        val pending = PendingIntent.getActivity(
+            this,
+            0,
+            launch,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+        val stop = PendingIntent.getService(
+            this,
+            1,
+            Intent(this, FloatingDashOverlayService::class.java).setAction(ACTION_STOP),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+        return NotificationCompat.Builder(this, CHANNEL_ID)
+            .setContentTitle("FB2 floating Dash")
+            .setContentText("Bubble is on — tap to open app, or Close to dismiss")
+            .setSmallIcon(R.mipmap.ic_launcher)
+            .setContentIntent(pending)
+            .addAction(0, "Close", stop)
+            .setOngoing(true)
+            .setOnlyAlertOnce(true)
+            .setCategory(NotificationCompat.CATEGORY_SERVICE)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .build()
+    }
+
+    private fun ensureChannel() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
+        val mgr = getSystemService(NotificationManager::class.java) ?: return
+        val channel = NotificationChannel(
+            CHANNEL_ID,
+            "Floating Dash",
+            NotificationManager.IMPORTANCE_LOW,
+        ).apply {
+            description = "Keeps the floating Dash bubble visible over other apps"
+            setShowBadge(false)
+        }
+        mgr.createNotificationChannel(channel)
     }
 
     private fun healthColor(health: String?): Int = when (health) {
@@ -421,6 +575,8 @@ class FloatingDashOverlayService : Service() {
         private const val PREFS = "floating_dash"
         private const val KEY_X = "x"
         private const val KEY_Y = "y"
+        private const val CHANNEL_ID = "floating_dash"
+        private const val NOTIFICATION_ID = 1002
 
         private const val COLLAPSED_DP = 56
         private const val CENTER_DP = 56
@@ -433,6 +589,7 @@ class FloatingDashOverlayService : Service() {
         const val ACTION_STOP = "com.fb2.obd.action.STOP_FLOATING_DASH"
         const val ACTION_EXPAND = "com.fb2.obd.action.EXPAND_FLOATING_DASH"
         const val ACTION_COLLAPSE = "com.fb2.obd.action.COLLAPSE_FLOATING_DASH"
+        const val ACTION_READY = "com.fb2.obd.action.FLOATING_DASH_READY"
 
         private val COLOR_ACCENT = Color.parseColor("#00E5FF")
         private val COLOR_GOOD = Color.parseColor("#29D07B")
@@ -443,12 +600,14 @@ class FloatingDashOverlayService : Service() {
         private val COLOR_MUTED = Color.parseColor("#7A8A99")
 
         fun startOverlay(context: Context) {
-            context.applicationContext.startService(
-                Intent(context, FloatingDashOverlayService::class.java),
-            )
+            val intent = Intent(context, FloatingDashOverlayService::class.java)
+            ContextCompat.startForegroundService(context.applicationContext, intent)
         }
 
         fun stop(context: Context) {
+            // Prefer explicit stop action so FGS tears down cleanly.
+            val intent = Intent(context, FloatingDashOverlayService::class.java).setAction(ACTION_STOP)
+            runCatching { context.applicationContext.startService(intent) }
             context.applicationContext.stopService(
                 Intent(context, FloatingDashOverlayService::class.java),
             )
