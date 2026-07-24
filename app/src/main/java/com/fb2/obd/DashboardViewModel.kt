@@ -9,6 +9,8 @@ import com.fb2.obd.data.MaintenanceEntry
 import com.fb2.obd.data.MaintenanceStore
 import com.fb2.obd.data.ObdLogger
 import com.fb2.obd.data.ObdSource
+import com.fb2.obd.data.SavedLogFile
+import com.fb2.obd.data.SessionLogStore
 import com.fb2.obd.obd.ColdStartIdleCatalog
 import com.fb2.obd.obd.Dtc
 import com.fb2.obd.obd.FreezeFrame
@@ -162,6 +164,11 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
     private val _dashExtraValues = MutableStateFlow<Map<String, String>>(emptyMap())
     val dashExtraValues: StateFlow<Map<String, String>> = _dashExtraValues.asStateFlow()
 
+    private val sessionLogStore = SessionLogStore(File(filesDir, "value_logs"))
+    private val _savedLogs = MutableStateFlow(sessionLogStore.list())
+    val savedLogs: StateFlow<List<SavedLogFile>> = _savedLogs.asStateFlow()
+    private var sessionStartedMs: Long = 0L
+
     val pidCatalog: List<PidDefinition> =
         StandardPidCatalog.all + HondaPidCatalog.allPids
 
@@ -195,7 +202,7 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
     private var lastTcmSupportedCount: Int = 0
 
     init {
-        ObdLogger.valueLoggingEnabled = _settings.value.valueLogging
+        ObdLogger.valueLoggingEnabled = false
         tripComputer.fuelPricePerLiter = _settings.value.fuelPricePerLiter
         _maintenance.value = MaintenanceStore(File(filesDir, "maintenance.json")).load()
         _custom.update {
@@ -204,13 +211,75 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
         useSource(DemoObdSource())
     }
 
+    /** Settings toggle and dashboard LOG button both use session start/stop. */
     fun setValueLogging(enabled: Boolean) {
-        _settings.update { it.copy(valueLogging = enabled) }
-        ObdLogger.valueLoggingEnabled = enabled
+        if (enabled) startValueLogging() else stopValueLogging()
+    }
+
+    fun toggleValueLogging() {
+        setValueLogging(!_settings.value.valueLogging)
+    }
+
+    /** Begin a fresh in-memory session (does not erase previously saved CSV files). */
+    fun startValueLogging() {
+        ObdLogger.clearValues()
+        sessionStartedMs = System.currentTimeMillis()
+        ObdLogger.valueLoggingEnabled = true
+        _settings.update { it.copy(valueLogging = true) }
+        ObdLogger.logDebug(ObdLogger.Dir.INFO, "VALUE LOG session start")
+    }
+
+    /**
+     * Stop logging and persist the current buffer as its own timestamped CSV
+     * under app files (`value_logs/`). Returns the saved file, or null if empty.
+     */
+    fun stopValueLogging(): SavedLogFile? {
+        val wasOn = ObdLogger.valueLoggingEnabled
+        ObdLogger.valueLoggingEnabled = false
+        _settings.update { it.copy(valueLogging = false) }
+        if (!wasOn && ObdLogger.valueRows().isEmpty() && ObdLogger.probeRows().isEmpty()) {
+            return null
+        }
+        val csv = ObdLogger.valuesCsv()
+        val started = if (sessionStartedMs > 0L) sessionStartedMs else System.currentTimeMillis()
+        val saved = sessionLogStore.saveSession(csv, started)
+        ObdLogger.logDebug(ObdLogger.Dir.INFO, "VALUE LOG saved ${saved.fileName}")
+        _savedLogs.value = sessionLogStore.list()
+        return saved
+    }
+
+    fun refreshSavedLogs() {
+        _savedLogs.value = sessionLogStore.list()
+    }
+
+    fun readSavedLog(fileName: String): String? = sessionLogStore.read(fileName)
+
+    fun deleteSavedLog(fileName: String) {
+        sessionLogStore.delete(fileName)
+        _savedLogs.value = sessionLogStore.list()
     }
 
     fun setShowEstimatedGear(enabled: Boolean) {
         _settings.update { it.copy(showEstimatedGear = enabled) }
+    }
+
+    /** Cancel the active OBD source (closes ELM socket) and mark offline. */
+    fun disconnect() {
+        if (_settings.value.valueLogging) {
+            stopValueLogging()
+        }
+        collectJob?.cancel()
+        collectJob = null
+        currentSource = null
+        _uiState.update {
+            it.copy(
+                snapshot = VehicleSnapshot.EMPTY,
+                connection = ConnectionState.DISCONNECTED,
+                sourceName = "",
+                sourceIsLive = false,
+            )
+        }
+        ObdLogger.logDebug(ObdLogger.Dir.INFO, "Disconnected")
     }
 
     fun useSource(source: ObdSource) {
@@ -492,8 +561,13 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     override fun onCleared() {
-        super.onCleared()
+        if (_settings.value.valueLogging) {
+            stopValueLogging()
+        }
         collectJob?.cancel()
+        collectJob = null
+        currentSource = null
         MaintenanceStore(File(filesDir, "maintenance.json")).save(_maintenance.value)
+        super.onCleared()
     }
 }

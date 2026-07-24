@@ -114,7 +114,7 @@ fun SettingsScreen(
         SectionLabel("Logging")
         ToggleRow(
             title = "Record value log",
-            subtitle = "Dashboard snapshots + every page Probe (custom/fuel/idle/trans/Honda) into CSV export. Debug Share always includes PROBE lines too.",
+            subtitle = "Same as the dashboard LOG button. Start = new session; Stop = save a separate timestamped CSV (previous files are kept). Also logs page Probes.",
             checked = settings.valueLogging,
             onCheckedChange = onToggleValueLogging,
         )
