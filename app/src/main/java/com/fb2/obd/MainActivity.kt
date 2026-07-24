@@ -13,6 +13,8 @@ import android.hardware.SensorEventListener
 import android.hardware.SensorManager
 import android.os.Build
 import android.os.Bundle
+import android.net.Uri
+import android.provider.Settings
 import android.view.WindowManager
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -48,6 +50,7 @@ import com.fb2.obd.data.Elm327BluetoothSource
 import com.fb2.obd.data.ObdLogger
 import com.fb2.obd.data.SavedLogFile
 import com.fb2.obd.obd.LiveSnapshotOverlay
+import com.fb2.obd.service.FloatingDashOverlayService
 import com.fb2.obd.ui.BtDeviceUi
 import com.fb2.obd.ui.ConnectDialog
 import com.fb2.obd.ui.CustomSensorsScreen
@@ -167,6 +170,29 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
+                val overlayPermLauncher = rememberLauncherForActivityResult(
+                    ActivityResultContracts.StartActivityForResult(),
+                ) {
+                    if (FloatingDashOverlayService.isOverlayAllowed(this@MainActivity)) {
+                        startFloatingDashBubble()
+                    } else {
+                        toast("Overlay permission needed for the floating Dash bubble")
+                    }
+                }
+
+                fun requestMinimizeToBubble() {
+                    if (FloatingDashOverlayService.isOverlayAllowed(this@MainActivity)) {
+                        startFloatingDashBubble()
+                    } else {
+                        toast("Allow “Display over other apps” for FB2 Diag, then tap MIN again")
+                        val intent = Intent(
+                            Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                            Uri.parse("package:$packageName"),
+                        )
+                        overlayPermLauncher.launch(intent)
+                    }
+                }
+
                 BackHandler {
                     when (screen) {
                         Screen.DASHBOARD -> showExitConfirm = true
@@ -229,6 +255,7 @@ class MainActivity : ComponentActivity() {
                                 toast("Logging started")
                             }
                         },
+                        onMinimizeClick = { requestMinimizeToBubble() },
                         catalog = viewModel.pidCatalog,
                         extraPidIds = dashExtraPidIds,
                         extraValues = dashExtraValues,
@@ -528,6 +555,17 @@ class MainActivity : ComponentActivity() {
 
     private fun toast(message: String) {
         Toast.makeText(this, message, Toast.LENGTH_LONG).show()
+    }
+
+    /** Start floating Dash bubble and send the activity to the background. */
+    private fun startFloatingDashBubble() {
+        try {
+            FloatingDashOverlayService.startOverlay(this)
+            moveTaskToBack(true)
+            toast("Floating Dash on — tap bubble for values, hold to reopen")
+        } catch (e: Exception) {
+            toast("Bubble failed: ${e.message ?: "overlay error"}")
+        }
     }
 
     private fun requiredBtPermissions(): List<String> {

@@ -10,12 +10,14 @@ import com.fb2.obd.obd.PidDefinition
 import com.fb2.obd.obd.VehicleSnapshot
 import kotlin.math.roundToInt
 
-/** One dashboard tile mirrored to Android Auto. */
+/** One dashboard tile mirrored to Android Auto / floating bubble. */
 data class CarDashTile(
     val label: String,
     val value: String,
     val unit: String,
     val status: String?,
+    /** [com.fb2.obd.obd.Health] name, or null when unknown / n/s. */
+    val health: String? = null,
 )
 
 /** Snapshot of the phone main Dash for the car screen. */
@@ -152,6 +154,7 @@ object CarDashBuilder {
                 value = value,
                 unit = unit,
                 status = if (showNs) null else status.label,
+                health = if (showNs) null else status.health.name,
             )
         }
 
