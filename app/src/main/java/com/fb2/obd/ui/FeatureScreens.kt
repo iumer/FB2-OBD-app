@@ -235,11 +235,23 @@ fun TripScreen(
     idleSec: Double,
     fuelPrice: Double,
     onReset: () -> Unit,
-    onBack: () -> Unit,
+    onBack: () -> Unit = {},
     modifier: Modifier = Modifier,
+    embedded: Boolean = false,
 ) {
-    Column(modifier.fillMaxSize().background(Background).padding(16.dp)) {
-        ScreenHeader(title = "Trip computer", onBack = onBack) { Chip("Reset trip") { onReset() } }
+    Column(modifier.fillMaxSize().background(Background).padding(if (embedded) 4.dp else 16.dp)) {
+        if (embedded) {
+            Row(
+                Modifier.fillMaxWidth().padding(bottom = 6.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text("Trip computer", color = TextMuted, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                Chip("Reset trip") { onReset() }
+            }
+        } else {
+            ScreenHeader(title = "Trip computer", onBack = onBack) { Chip("Reset trip") { onReset() } }
+        }
         CardRow("Distance", "%.1f km".format(distanceKm))
         CardRow("Economy", kmPerL?.let { "%.1f km/L".format(it) } ?: "—")
         CardRow("Consumption", lPer100?.let { "%.1f L/100km".format(it) } ?: "—")
@@ -346,9 +358,26 @@ fun TransmissionDashScreen(
 }
 
 @Composable
-fun HealthScoresScreen(score: HealthScore?, onRefresh: () -> Unit, onBack: () -> Unit, modifier: Modifier = Modifier) {
-    Column(modifier.fillMaxSize().background(Background).padding(16.dp)) {
-        ScreenHeader(title = "Health scores", onBack = onBack) { Chip("Recalc") { onRefresh() } }
+fun HealthScoresScreen(
+    score: HealthScore?,
+    onRefresh: () -> Unit,
+    onBack: () -> Unit = {},
+    modifier: Modifier = Modifier,
+    embedded: Boolean = false,
+) {
+    Column(modifier.fillMaxSize().background(Background).padding(if (embedded) 4.dp else 16.dp)) {
+        if (embedded) {
+            Row(
+                Modifier.fillMaxWidth().padding(bottom = 6.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text("Health scores", color = TextMuted, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                Chip("Recalc") { onRefresh() }
+            }
+        } else {
+            ScreenHeader(title = "Health scores", onBack = onBack) { Chip("Recalc") { onRefresh() } }
+        }
         if (score == null) {
             Text("Connect and open this page to compute scores.", color = TextMuted)
         } else {
@@ -426,12 +455,23 @@ fun HiddenHondaMenuScreen(
 @Composable
 fun GForceScreen(
     ax: Float, ay: Float, az: Float,
-    onBack: () -> Unit,
+    onBack: () -> Unit = {},
     modifier: Modifier = Modifier,
+    embedded: Boolean = false,
 ) {
     val g = kotlin.math.sqrt((ax * ax + ay * ay + az * az).toDouble()) / 9.81
-    Column(modifier.fillMaxSize().background(Background).padding(16.dp)) {
-        ScreenHeader(title = "G-force", onBack = onBack)
+    Column(modifier.fillMaxSize().background(Background).padding(if (embedded) 4.dp else 16.dp)) {
+        if (embedded) {
+            Text(
+                "G-force",
+                color = TextMuted,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(bottom = 6.dp),
+            )
+        } else {
+            ScreenHeader(title = "G-force", onBack = onBack)
+        }
         CardRow("Total", "%.2f g".format(g), Accent)
         CardRow("X (lat)", "%.2f m/s\u00B2".format(ax))
         CardRow("Y (long)", "%.2f m/s\u00B2".format(ay))

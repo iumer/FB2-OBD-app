@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
@@ -44,10 +45,13 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.fb2.obd.DashboardUiState
+import com.fb2.obd.PerformanceState
+import com.fb2.obd.TripState
 import com.fb2.obd.data.ConnectionState
 import com.fb2.obd.obd.GearSource
 import com.fb2.obd.obd.Health
 import com.fb2.obd.obd.HealthEvaluator
+import com.fb2.obd.obd.HealthScore
 import com.fb2.obd.obd.LiveSnapshotOverlay
 import com.fb2.obd.obd.ObdPid
 import com.fb2.obd.obd.PidCategory
@@ -69,11 +73,14 @@ private fun Double?.fmt(digits: Int = 0): String = this?.let {
     if (digits == 0) it.roundToInt().toString() else "%.${digits}f".format(it)
 } ?: "--"
 
-private val DashPageTitles = listOf("Dashboard", "Custom", "Cold start", "Fuel", "Transmission")
+/** All former Settings “Live pages” — swipe right on the dashboard. */
+private val DashPageTitles = listOf(
+    "Dash", "Custom", "Idle", "Fuel", "Trip", "Trans", "Perf", "G-force", "Health",
+)
 
 /**
  * Landscape diagnostic cluster optimized for dense sensor visibility:
- * compact RPM/Gear/Speed strip on top; swipeable dense tile pages below.
+ * compact RPM/Gear/Speed strip on top; swipeable live pages below.
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -84,6 +91,7 @@ fun DashboardScreen(
     loggingActive: Boolean = false,
     onConnectClick: () -> Unit = {},
     onSettingsClick: () -> Unit = {},
+    onDiagnosticsClick: () -> Unit = {},
     onToggleLogging: () -> Unit = {},
     catalog: List<PidDefinition> = StandardPidCatalog.all,
     extraPidIds: List<String> = emptyList(),
@@ -94,10 +102,20 @@ fun DashboardScreen(
     idleValues: Map<String, String> = emptyMap(),
     idleTips: List<String> = emptyList(),
     transValues: Map<String, String> = emptyMap(),
+    trip: TripState = TripState(),
+    performance: PerformanceState = PerformanceState(),
+    health: HealthScore? = null,
+    gForceAx: Float = 0f,
+    gForceAy: Float = 0f,
+    gForceAz: Float = 9.81f,
     onRefreshCustom: () -> Unit = {},
     onRefreshIdle: () -> Unit = {},
     onRefreshFuel: () -> Unit = {},
     onRefreshTrans: () -> Unit = {},
+    onManageCustom: () -> Unit = {},
+    onResetTrip: () -> Unit = {},
+    onResetPerformance: () -> Unit = {},
+    onRefreshHealth: () -> Unit = {},
     deepFoundValues: Map<String, String> = emptyMap(),
     onDeepSearch: (label: String, pidId: String?) -> Unit = { _, _ -> },
 ) {
@@ -111,7 +129,8 @@ fun DashboardScreen(
             1 -> onRefreshCustom()
             2 -> onRefreshIdle()
             3 -> onRefreshFuel()
-            4 -> onRefreshTrans()
+            5 -> onRefreshTrans()
+            8 -> onRefreshHealth()
         }
     }
 
@@ -126,6 +145,7 @@ fun DashboardScreen(
             loggingActive = loggingActive,
             onConnectClick = onConnectClick,
             onSettingsClick = onSettingsClick,
+            onDiagnosticsClick = onDiagnosticsClick,
             onToggleLogging = onToggleLogging,
         )
 
@@ -166,9 +186,10 @@ fun DashboardScreen(
                 1 -> DenseSensorGridPage(
                     title = "Custom sensors",
                     rows = customValues.entries.map { it.key to it.value }.ifEmpty {
-                        listOf("Tip" to "Add in Settings → Custom")
+                        listOf("Tip" to "Tap Manage to pick sensors from the catalog")
                     },
                     action = "Probe" to onRefreshCustom,
+                    secondaryAction = "Manage" to onManageCustom,
                     deepFoundValues = deepFoundValues,
                     onDeepSearch = onDeepSearch,
                 )
@@ -193,13 +214,44 @@ fun DashboardScreen(
                     deepFoundValues = deepFoundValues,
                     onDeepSearch = onDeepSearch,
                 )
-                else -> DenseSensorGridPage(
+                4 -> TripScreen(
+                    distanceKm = trip.distanceKm,
+                    kmPerL = trip.kmPerLiter,
+                    lPer100 = trip.litersPer100,
+                    cost = trip.cost,
+                    idleSec = trip.idleSeconds,
+                    fuelPrice = trip.fuelPrice,
+                    onReset = onResetTrip,
+                    embedded = true,
+                    modifier = Modifier.fillMaxSize(),
+                )
+                5 -> DenseSensorGridPage(
                     title = "Transmission",
                     rows = transValues.entries.map { it.key to it.value }
                         .ifEmpty { listOf("Status" to "Probing…") },
                     action = "Probe" to onRefreshTrans,
                     deepFoundValues = deepFoundValues,
                     onDeepSearch = onDeepSearch,
+                )
+                6 -> PerformanceScreen(
+                    state = performance,
+                    onReset = onResetPerformance,
+                    phase = performance.phase,
+                    embedded = true,
+                    modifier = Modifier.fillMaxSize(),
+                )
+                7 -> GForceScreen(
+                    ax = gForceAx,
+                    ay = gForceAy,
+                    az = gForceAz,
+                    embedded = true,
+                    modifier = Modifier.fillMaxSize(),
+                )
+                else -> HealthScoresScreen(
+                    score = health,
+                    onRefresh = onRefreshHealth,
+                    embedded = true,
+                    modifier = Modifier.fillMaxSize(),
                 )
             }
         }
@@ -295,8 +347,9 @@ private fun PageTabs(titles: List<String>, current: Int, onSelect: (Int) -> Unit
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .horizontalScroll(rememberScrollState())
             .padding(bottom = 4.dp),
-        horizontalArrangement = Arrangement.Center,
+        horizontalArrangement = Arrangement.Start,
         verticalAlignment = Alignment.CenterVertically,
     ) {
         titles.forEachIndexed { i, title ->
@@ -419,6 +472,7 @@ private fun DenseSensorGridPage(
     title: String,
     rows: List<Pair<String, String>>,
     action: Pair<String, () -> Unit>,
+    secondaryAction: Pair<String, () -> Unit>? = null,
     deepFoundValues: Map<String, String> = emptyMap(),
     onDeepSearch: (label: String, pidId: String?) -> Unit = { _, _ -> },
 ) {
@@ -428,7 +482,21 @@ private fun DenseSensorGridPage(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(title, color = TextMuted, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+            Text(title, color = TextMuted, fontSize = 11.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+            if (secondaryAction != null) {
+                Text(
+                    text = secondaryAction.first,
+                    color = TextMuted,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable { secondaryAction.second() }
+                        .background(Surface)
+                        .padding(horizontal = 10.dp, vertical = 5.dp)
+                        .padding(end = 6.dp),
+                )
+            }
             Text(
                 text = action.first,
                 color = Accent,
@@ -758,11 +826,28 @@ private fun PickerRow(
 }
 
 @Composable
+private fun TopBarChip(text: String, color: Color, onClick: () -> Unit) {
+    Text(
+        text = text,
+        color = color,
+        fontSize = 11.sp,
+        fontWeight = FontWeight.Bold,
+        modifier = Modifier
+            .padding(start = 6.dp)
+            .clip(RoundedCornerShape(8.dp))
+            .clickable(onClick = onClick)
+            .background(Surface)
+            .padding(horizontal = 8.dp, vertical = 6.dp),
+    )
+}
+
+@Composable
 private fun TopBar(
     state: DashboardUiState,
     loggingActive: Boolean,
     onConnectClick: () -> Unit,
     onSettingsClick: () -> Unit,
+    onDiagnosticsClick: () -> Unit,
     onToggleLogging: () -> Unit,
 ) {
     val linked = state.connection == ConnectionState.CONNECTED ||
@@ -777,20 +862,23 @@ private fun TopBar(
         Text(
             text = "FB2 DIAG",
             color = Accent,
-            fontSize = 16.sp,
+            fontSize = 15.sp,
             fontWeight = FontWeight.Bold,
         )
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.horizontalScroll(rememberScrollState()),
+        ) {
             val (dot, text) = when (state.connection) {
                 ConnectionState.CONNECTED ->
                     if (state.sourceIsLive) {
-                        GoodGreen to "LIVE \u00B7 ${state.sourceName}"
+                        GoodGreen to "LIVE"
                     } else {
-                        WarnAmber to "DEMO \u00B7 simulated"
+                        WarnAmber to "DEMO"
                     }
-                ConnectionState.CONNECTING -> Accent to "CONNECTING \u00B7 ${state.sourceName}"
-                ConnectionState.ERROR -> CritRed to "ERROR \u00B7 ${state.sourceName}"
-                ConnectionState.DISCONNECTED -> TextMuted to "OFFLINE"
+                ConnectionState.CONNECTING -> Accent to "…"
+                ConnectionState.ERROR -> CritRed to "ERR"
+                ConnectionState.DISCONNECTED -> TextMuted to "OFF"
             }
             Box(
                 modifier = Modifier
@@ -798,49 +886,19 @@ private fun TopBar(
                     .clip(RoundedCornerShape(4.dp))
                     .background(dot),
             )
-            Text(text = "  $text", color = TextMuted, fontSize = 11.sp)
+            Text(text = " $text", color = TextMuted, fontSize = 11.sp)
 
-            Text(
-                text = if (loggingActive) "STOP LOG" else "LOG",
-                color = if (loggingActive) CritRed else Accent,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier
-                    .padding(start = 8.dp)
-                    .clip(RoundedCornerShape(8.dp))
-                    .clickable { onToggleLogging() }
-                    .background(Surface)
-                    .padding(horizontal = 10.dp, vertical = 6.dp),
-            )
-
-            Text(
-                text = "SETTINGS",
-                color = TextMuted,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier
-                    .padding(start = 8.dp)
-                    .clip(RoundedCornerShape(8.dp))
-                    .clickable { onSettingsClick() }
-                    .background(Surface)
-                    .padding(horizontal = 10.dp, vertical = 6.dp),
-            )
-
-            Text(
+            TopBarChip(if (loggingActive) "STOP LOG" else "LOG", if (loggingActive) CritRed else Accent, onToggleLogging)
+            TopBarChip("DIAG", Accent, onDiagnosticsClick)
+            TopBarChip("SETTINGS", TextMuted, onSettingsClick)
+            TopBarChip(
                 text = when {
                     state.connection == ConnectionState.CONNECTED -> "CONNECTED"
-                    state.connection == ConnectionState.CONNECTING -> "CONNECTING"
+                    state.connection == ConnectionState.CONNECTING -> "…"
                     else -> "CONNECT"
                 },
                 color = if (linked && state.connection == ConnectionState.CONNECTED) GoodGreen else Accent,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier
-                    .padding(start = 8.dp)
-                    .clip(RoundedCornerShape(8.dp))
-                    .clickable { onConnectClick() }
-                    .background(Surface)
-                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                onClick = onConnectClick,
             )
         }
     }

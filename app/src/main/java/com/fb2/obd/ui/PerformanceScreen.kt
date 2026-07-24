@@ -33,28 +33,51 @@ private fun fmt(sec: Double?): String = sec?.let { "%.2f s".format(it) } ?: "\u2
 fun PerformanceScreen(
     state: PerformanceState,
     onReset: () -> Unit,
-    onBack: () -> Unit,
+    onBack: () -> Unit = {},
     modifier: Modifier = Modifier,
     phase: AccelPhase = AccelPhase.NEED_STOP,
+    /** When true (dashboard swipe embed), hide the Back header. */
+    embedded: Boolean = false,
 ) {
     Column(
         modifier = modifier
             .fillMaxSize()
             .background(Background)
-            .padding(16.dp),
+            .padding(if (embedded) 4.dp else 16.dp),
     ) {
-        ScreenHeader(title = "Performance", onBack = onBack) {
-            Text(
-                text = "Reset",
-                color = Accent,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier
-                    .clip(RoundedCornerShape(8.dp))
-                    .clickable { onReset() }
-                    .background(Surface)
-                    .padding(horizontal = 14.dp, vertical = 8.dp),
-            )
+        if (embedded) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text("Performance", color = TextMuted, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                Text(
+                    text = "Reset",
+                    color = Accent,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable { onReset() }
+                        .background(Surface)
+                        .padding(horizontal = 10.dp, vertical = 5.dp),
+                )
+            }
+        } else {
+            ScreenHeader(title = "Performance", onBack = onBack) {
+                Text(
+                    text = "Reset",
+                    color = Accent,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable { onReset() }
+                        .background(Surface)
+                        .padding(horizontal = 14.dp, vertical = 8.dp),
+                )
+            }
         }
 
         Row(

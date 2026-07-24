@@ -62,20 +62,8 @@ fun ScreenHeader(title: String, onBack: () -> Unit, action: (@Composable () -> U
     }
 }
 
+/** Settings only keeps toggles + log viewers. Live pages → dashboard swipes; diag → DIAG button. */
 data class SettingsNav(
-    val onFaults: () -> Unit = {},
-    val onPerformance: () -> Unit = {},
-    val onCustom: () -> Unit = {},
-    val onFuel: () -> Unit = {},
-    val onIdle: () -> Unit = {},
-    val onTrip: () -> Unit = {},
-    val onVehicle: () -> Unit = {},
-    val onDeepDiag: () -> Unit = {},
-    val onTrans: () -> Unit = {},
-    val onHealth: () -> Unit = {},
-    val onMaintenance: () -> Unit = {},
-    val onHonda: () -> Unit = {},
-    val onGForce: () -> Unit = {},
     val onDebug: () -> Unit = {},
     val onValues: () -> Unit = {},
 )
@@ -88,10 +76,6 @@ fun SettingsScreen(
     nav: SettingsNav,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
-    /**
-     * Hoisted from the activity so scroll survives navigating into a sub-page
-     * (Faults / Deep diag / etc.) and coming Back.
-     */
     scrollState: ScrollState = rememberScrollState(),
 ) {
     Column(
@@ -102,6 +86,13 @@ fun SettingsScreen(
             .verticalScroll(scrollState),
     ) {
         ScreenHeader(title = "Settings", onBack = onBack)
+
+        Text(
+            text = "Live sensor pages (Custom, Idle, Fuel, Trip, Trans, Perf, G-force, Health) are on the dashboard swipe tabs. Diagnostics (faults, deep scan, VIN, Honda, maintenance) open from the DIAGNOSTICS button.",
+            color = TextMuted,
+            fontSize = 12.sp,
+            modifier = Modifier.padding(bottom = 8.dp),
+        )
 
         SectionLabel("Gear")
         ToggleRow(
@@ -114,29 +105,12 @@ fun SettingsScreen(
         SectionLabel("Logging")
         ToggleRow(
             title = "Record value log",
-            subtitle = "Same as the dashboard LOG button. Start = new session; Stop = save a separate timestamped CSV (previous files are kept). Also logs page Probes.",
+            subtitle = "Same as the dashboard LOG button. Start = new session; Stop = save a separate timestamped CSV.",
             checked = settings.valueLogging,
             onCheckedChange = onToggleValueLogging,
         )
-
-        SectionLabel("Live pages")
-        NavRow("Custom sensors (+ full catalog)", nav.onCustom)
-        NavRow("Cold start / rough idle (misfire + fuel)", nav.onIdle)
-        NavRow("Fuel system page", nav.onFuel)
-        NavRow("Trip computer / economy", nav.onTrip)
-        NavRow("Transmission dashboard", nav.onTrans)
-        NavRow("Performance (0\u2013100 / \u00BC mile)", nav.onPerformance)
-        NavRow("G-force meter", nav.onGForce)
-        NavRow("Health scores", nav.onHealth)
-
-        SectionLabel("Diagnostics")
-        NavRow("Fault codes (read / clear + AI tips)", nav.onFaults)
-        NavRow("Deep diagnostics (freeze / readiness / Mode 05+06)", nav.onDeepDiag)
-        NavRow("Vehicle info (VIN / Mode 09)", nav.onVehicle)
-        NavRow("Honda modules / full-system probe", nav.onHonda)
-        NavRow("Maintenance log book", nav.onMaintenance)
         NavRow("Debug log (raw ELM327)", nav.onDebug)
-        NavRow("Value log (CSV)", nav.onValues)
+        NavRow("Saved value logs (CSV)", nav.onValues)
     }
 }
 
