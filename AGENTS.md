@@ -35,6 +35,12 @@ non-obvious cloud specifics.
   Deep diagnostics, Vehicle info (Mode 09), Honda modules probe, Health,
   Maintenance, G-force, Faults, Performance, Debug/Value logs.
 
+- **Android Auto:** Car App Library IOT template (`Fb2CarAppService`). Phone must
+  keep FB2 Diag running (or recent) so `VehicleLiveStore` has live Dash data.
+  Sideload testing needs Android Auto **Developer mode → Unknown sources**.
+  Connect on AA starts Demo if not live; pick real ELM on the phone. LOG toggles
+  from the car Action strip.
+
 ### Notes / gotchas
 
 - Core diagnostic logic is deliberately pure Kotlin under `com.fb2.obd.obd`

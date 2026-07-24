@@ -3,6 +3,8 @@ package com.fb2.obd
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.fb2.obd.car.CarDashBuilder
+import com.fb2.obd.car.VehicleLiveStore
 import com.fb2.obd.data.ConnectionState
 import com.fb2.obd.data.DemoObdSource
 import com.fb2.obd.data.HealthThresholdStore
@@ -277,12 +279,14 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
             val results = LiveSnapshotOverlay.apply(probed, _uiState.value.snapshot)
             val text = results.firstOrNull()?.let { LiveSnapshotOverlay.formatDisplay(it) } ?: "—"
             _dashExtraValues.update { it + (pid.id to text) }
+            publishCarDash()
         }
     }
 
     fun clearDashExtraPid(pidId: String) {
         _dashExtraPidIds.update { it.filter { id -> id != pidId } }
         _dashExtraValues.update { it - pidId }
+        publishCarDash()
     }
 
     private val accelTimer = AccelerationTimer()
@@ -305,10 +309,42 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
         _healthThresholds.value = thresholdStore.load()
         voiceAlerter.enabled = _settings.value.voiceAlerts
         voiceAlerter.start()
+        VehicleLiveStore.onToggleLogging = {
+            if (_settings.value.valueLogging) stopValueLogging() else startValueLogging()
+            publishCarDash()
+        }
+        VehicleLiveStore.onConnectRequest = {
+            // Car cannot pick BT devices — start Demo if offline; live ELM must be chosen on phone.
+            if (!_uiState.value.sourceIsLive) {
+                useSource(DemoObdSource())
+            }
+            publishCarDash()
+        }
         _custom.update {
             it.copy(selectedIds = StandardPidCatalog.fuelPageDefaults().map { p -> p.id }.toSet())
         }
         useSource(DemoObdSource())
+        publishCarDash()
+    }
+
+    /** Push the phone main Dash (tiles + hero) to Android Auto. */
+    fun publishCarDash() {
+        val ui = _uiState.value
+        VehicleLiveStore.publish(
+            CarDashBuilder.build(
+                snapshot = ui.snapshot,
+                thresholds = _healthThresholds.value,
+                extraPidIds = _dashExtraPidIds.value,
+                extraValues = _dashExtraValues.value,
+                deepFoundValues = _deepFoundValues.value,
+                catalog = pidCatalog,
+                connection = ui.connection,
+                sourceIsLive = ui.sourceIsLive,
+                sourceName = ui.sourceName,
+                logging = _settings.value.valueLogging,
+                showEstimatedGear = _settings.value.showEstimatedGear,
+            ),
+        )
     }
 
     fun updateHealthThresholdField(id: String, value: Double) {
@@ -562,6 +598,7 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
             )
         }
         ObdLogger.logDebug(ObdLogger.Dir.INFO, "Disconnected")
+        publishCarDash()
     }
 
     fun useSource(source: ObdSource) {
@@ -575,6 +612,7 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
                 sourceIsLive = source.isLive,
             )
         }
+        publishCarDash()
         collectJob = source.snapshots()
             .onEach { snapshot ->
                 ObdLogger.logSnapshot(snapshot)
@@ -614,6 +652,7 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
                         connection = ConnectionState.CONNECTED,
                     )
                 }
+                publishCarDash()
                 // Sample all tabs into the session file (not only the visible swipe page).
                 if (ObdLogger.valueLoggingEnabled) {
                     logLiveTabs(snapshot)
@@ -873,6 +912,8 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
         collectJob = null
         currentSource = null
         MaintenanceStore(File(filesDir, "maintenance.json")).save(_maintenance.value)
+        VehicleLiveStore.onToggleLogging = null
+        VehicleLiveStore.onConnectRequest = null
         voiceAlerter.shutdown()
         super.onCleared()
     }
