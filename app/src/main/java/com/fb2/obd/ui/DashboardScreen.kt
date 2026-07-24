@@ -97,26 +97,30 @@ private fun denseColumnsForWidth(maxWidth: Dp): Int = when {
     else -> 2
 }
 
-/** In-car type scale — sized for glanceability on a dash HU, not a phone. */
+/**
+ * In-car type scale — glanceable on a dash HU without overflowing short
+ * 1024×600 / denser 1280×720 landscapes. Values use ellipsis; tiles are fixed height.
+ * Grid scrolls for extra rows — never clips text inside a tile.
+ */
 private object DashType {
-    val tileH = 96.dp
-    val tileGap = 8.dp
-    val tileLabel = 13.sp
-    val tileValue = 24.sp
-    val tileUnit = 13.sp
-    val tileStatus = 12.sp
-    val tileHint = 11.sp
+    val tileH = 80.dp
+    val tileGap = 6.dp
+    val tileLabel = 12.sp
+    val tileValue = 22.sp
+    val tileUnit = 12.sp
+    val tileStatus = 11.sp
+    val tileHint = 10.sp
 
-    val heroH = 92.dp
-    val heroLabel = 13.sp
-    val heroValue = 36.sp
-    val heroUnit = 14.sp
-    val heroBadge = 12.sp
+    val heroH = 78.dp
+    val heroLabel = 12.sp
+    val heroValue = 32.sp
+    val heroUnit = 13.sp
+    val heroBadge = 11.sp
 
-    val tab = 15.sp
-    val topTitle = 20.sp
-    val topChip = 14.sp
-    val pageTitle = 14.sp
+    val tab = 14.sp
+    val topTitle = 18.sp
+    val topChip = 13.sp
+    val pageTitle = 13.sp
 }
 private fun Double?.fmt(digits: Int = 0): String = this?.let {
     if (digits == 0) it.roundToInt().toString() else "%.${digits}f".format(it)

@@ -19,6 +19,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.fb2.obd.car.FloatingDashLayout
 import com.fb2.obd.car.FloatingDashMetrics
 import com.fb2.obd.obd.Health
 import com.fb2.obd.ui.theme.Accent
@@ -35,16 +36,20 @@ import kotlin.math.cos
 import kotlin.math.roundToInt
 import kotlin.math.sin
 
-/** Matches [com.fb2.obd.service.FloatingDashOverlayService] HU-sized ring. */
+/**
+ * Matches [com.fb2.obd.service.FloatingDashOverlayService] HU-sized ring.
+ * Preview uses the max expanded size (400dp); the live overlay also shrinks
+ * further on short-edge HUs via [FloatingDashLayout.expandedDp].
+ */
 private object BubbleScale {
-    val collapsed = 96.dp
-    val center = 96.dp
-    val sat = 112.dp
-    val expanded = 460.dp
-    val radius = 160f
-    val centerText = 16.sp
-    val satText = 15.sp
-    val hint = 13.sp
+    val collapsed = FloatingDashLayout.COLLAPSED_DP.dp
+    val center = FloatingDashLayout.CENTER_DP.dp
+    val sat = FloatingDashLayout.SAT_DP.dp
+    val expanded = FloatingDashLayout.EXPANDED_MAX_DP.dp
+    val radius = FloatingDashLayout.radiusDp(FloatingDashLayout.EXPANDED_MAX_DP).toFloat()
+    val centerText = 15.sp
+    val satText = 14.sp
+    val hint = 12.sp
 }
 
 /**
