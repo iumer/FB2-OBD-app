@@ -15,10 +15,10 @@ class HealthThresholdStore(private val file: File) {
             val schema = if (o.has("schemaVersion")) o.optInt("schemaVersion", 1) else 1
             fun d(key: String, fallback: Double) =
                 if (o.has(key) && !o.isNull(key)) o.getDouble(key) else fallback
-            // schema < 2 kept the too-high R18 MAF idle band (6–10). Force new defaults
-            // for MAF fields once; user can still retune afterward (save bumps schema).
+            // schema < 3 kept overly harsh R18 MAF bands (idle 6–10, then 2.5/4.0 cruise).
+            // Force new defaults for MAF fields once; user can still retune afterward.
             fun maf(key: String, fallback: Double) =
-                if (schema >= 2) d(key, fallback) else fallback
+                if (schema >= SCHEMA_VERSION) d(key, fallback) else fallback
             HealthThresholds(
                 coolantColdBelow = d("coolantColdBelow", d.coolantColdBelow),
                 coolantGoodMax = d("coolantGoodMax", d.coolantGoodMax),
@@ -135,7 +135,7 @@ class HealthThresholdStore(private val file: File) {
     }
 
     companion object {
-        /** Bumped when default MAF bands were retuned for R18 idle (~2.5–6.5 g/s). */
-        const val SCHEMA_VERSION = 2
+        /** Bumped when default MAF bands were retuned for R18 idle/coast (~2–8 g/s). */
+        const val SCHEMA_VERSION = 3
     }
 }

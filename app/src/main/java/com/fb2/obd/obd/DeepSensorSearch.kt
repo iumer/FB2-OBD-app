@@ -6,7 +6,13 @@ import kotlinx.coroutines.delay
 
 /**
  * Runs [DeepSearchKnowledgeBase] strategies against a live [ObdSource].
- * Safe teardown is always attempted so the main poll loop can resume.
+ *
+ * Smart flow (learned from FB2 + cheap ELM clones + Torque):
+ * 1. Soft-restore the adapter first (don't start mid-UNABLE storm).
+ * 2. Prefer adapter-local recipes (ATRV) — they work even when the ECU link is down.
+ * 3. Ping the bus; if ECU is unreachable, skip protocol/header thrashing (ATSP6/ATSH)
+ *    that only makes the Dash laggier.
+ * 4. Always restore broadcast Mode 01 so polling can resume.
  */
 object DeepSensorSearch {
 
@@ -21,78 +27,153 @@ object DeepSensorSearch {
         requestHint: String? = null,
         onProgress: (index: Int, total: Int, title: String) -> Unit = { _, _, _ -> },
     ): DeepSearchReport {
-        val strategies = DeepSearchKnowledgeBase.strategiesFor(pid, label, requestHint)
+        val all = DeepSearchKnowledgeBase.strategiesFor(pid, label, requestHint)
         val notes = mutableListOf(DeepSearchKnowledgeBase.explainLikelyCause(label, pid))
-        if (strategies.isEmpty()) {
-            return DeepSearchReport(label, pid?.id ?: requestHint ?: label, 0, notes = notes + "No strategies registered for this sensor.")
+        if (all.isEmpty()) {
+            return DeepSearchReport(
+                label,
+                pid?.id ?: requestHint ?: label,
+                0,
+                notes = notes + "No strategies registered for this sensor.",
+            )
         }
-        ObdLogger.logDebug(ObdLogger.Dir.INFO, "DEEP SEARCH begin [$label] ${strategies.size} strategies")
 
-        var unableStreak = 0
+        ObdLogger.logDebug(ObdLogger.Dir.INFO, "DEEP SEARCH begin [$label] ${all.size} strategies")
+        onProgress(0, all.size, "Restoring adapter…")
+        restore(source)
+
+        val adapterLocal = all.filter { it.isAdapterLocal }
+        val needsBus = all.filter { !it.isAdapterLocal }
+        var attempts = 0
+
         try {
-            strategies.forEachIndexed { idx, strategy ->
-                onProgress(idx + 1, strategies.size, strategy.title)
-                delay(if (source.isLive) 30L else 180L)
-
-                if (unableStreak >= 3) {
-                    notes += "Aborted early — adapter kept returning UNABLE TO CONNECT (ECU link lost)."
-                    return DeepSearchReport(
-                        targetLabel = label,
-                        targetId = pid?.id ?: requestHint ?: label,
-                        attempts = idx,
-                        hit = null,
-                        notes = notes,
-                    )
+            // --- Phase A: adapter-local (ATRV etc.) with retries ---
+            for ((i, strategy) in adapterLocal.withIndex()) {
+                attempts++
+                onProgress(attempts, all.size, strategy.title)
+                delay(if (source.isLive) 40L else 120L)
+                val hit = tryStrategy(source, strategy)
+                if (hit != null) {
+                    return success(label, pid, requestHint, attempts, hit, notes)
                 }
+                // One soft restore + immediate retry for ATRV — clones often need a clean buffer.
+                if (strategy.request.equals("ATRV", true) && i == 0) {
+                    restore(source)
+                    attempts++
+                    onProgress(attempts, all.size, "Retry ${strategy.title}")
+                    tryStrategy(source, strategy)?.let { hit2 ->
+                        return success(label, pid, requestHint, attempts, hit2, notes)
+                    }
+                }
+            }
+
+            // --- Phase B: is the ECU link alive? ---
+            onProgress(attempts, all.size, "Checking ECU link…")
+            val busOk = busHealthy(source)
+            if (!busOk) {
+                notes += "ECU link is down (UNABLE / timeout). Skipped protocol/header switches that would make the app lag. Adapter-local reads already tried."
+                // Still try a couple of simple broadcast Mode 01 forces after one more restore.
+                restore(source)
+                val simple = needsBus.filter { it.isSimpleForce }.take(3)
+                for (strategy in simple) {
+                    attempts++
+                    onProgress(attempts, all.size, strategy.title)
+                    delay(30L)
+                    tryStrategy(source, strategy)?.let { hit ->
+                        return success(label, pid, requestHint, attempts, hit, notes)
+                    }
+                }
+                return DeepSearchReport(
+                    targetLabel = label,
+                    targetId = pid?.id ?: requestHint ?: label,
+                    attempts = attempts,
+                    hit = null,
+                    notes = notes + "Still unable to find this sensor while the ECU link is down. Reconnect the ELM (or wait for LIVE) and run deep analysis again — ATRV/0142 usually work once the bus recovers.",
+                )
+            }
+
+            // --- Phase C: full strategy list (headers / protocols) while bus is healthy ---
+            var unableStreak = 0
+            for (strategy in needsBus) {
+                if (unableStreak >= 3) {
+                    notes += "Aborted early — adapter kept returning UNABLE TO CONNECT after restores."
+                    break
+                }
+                attempts++
+                onProgress(attempts, all.size, strategy.title)
+                delay(if (source.isLive) 25L else 150L)
 
                 val hit = tryStrategy(source, strategy)
                 if (hit != null) {
-                    ObdLogger.logDebug(
-                        ObdLogger.Dir.INFO,
-                        "DEEP SEARCH HIT [$label] via ${strategy.id} = ${hit.value} ${strategy.unit}",
-                    )
-                    onProgress(idx + 1, strategies.size, "FOUND — ${strategy.title}")
-                    delay(if (source.isLive) 60L else 350L)
-                    return DeepSearchReport(
-                        targetLabel = label,
-                        targetId = pid?.id ?: requestHint ?: label,
-                        attempts = idx + 1,
-                        hit = hit,
-                        notes = notes + "Found with: ${strategy.title}",
-                    )
+                    return success(label, pid, requestHint, attempts, hit, notes)
                 }
-                // Track consecutive bus failures across strategies.
-                // tryStrategy already tore down; peek with a cheap RPM ping.
+
+                // Peek bus health; soft-restore every other miss so we don't leave a weird ATSH.
                 val ping = source.command("010C")?.uppercase().orEmpty()
-                if (BAD.any { ping.contains(it) } || ping.isBlank()) unableStreak++
-                else unableStreak = 0
+                if (BAD.any { ping.contains(it) } || ping.isBlank()) {
+                    unableStreak++
+                    if (unableStreak % 2 == 0) restore(source)
+                } else {
+                    unableStreak = 0
+                }
             }
         } finally {
-            // Always restore broadcast Mode 01 so Dash polling isn't left on a weird header.
-            FULL_RESTORE.forEach { cmd ->
-                runCatching { source.command(cmd) }
-                delay(25L)
-            }
+            restore(source)
             ObdLogger.logDebug(ObdLogger.Dir.INFO, "DEEP SEARCH restore done [$label]")
         }
 
-        ObdLogger.logDebug(ObdLogger.Dir.INFO, "DEEP SEARCH miss [$label] after ${strategies.size} tries")
+        ObdLogger.logDebug(ObdLogger.Dir.INFO, "DEEP SEARCH miss [$label] after $attempts tries")
         return DeepSearchReport(
             targetLabel = label,
             targetId = pid?.id ?: requestHint ?: label,
-            attempts = strategies.size,
+            attempts = attempts,
             hit = null,
-            notes = notes + "Still unable to find this sensor. Likely unsupported on this ECU, wrong Honda ID, or the adapter cannot reach that module. Try again later after capturing a debug log.",
+            notes = notes + "Still unable to find this sensor. Likely unsupported on this ECU, wrong Honda ID, or the adapter cannot reach that module. Capture a debug log and try again when LIVE is stable.",
         )
+    }
+
+    private fun success(
+        label: String,
+        pid: PidDefinition?,
+        requestHint: String?,
+        attempts: Int,
+        hit: DeepSearchHit,
+        notes: MutableList<String>,
+    ): DeepSearchReport {
+        ObdLogger.logDebug(
+            ObdLogger.Dir.INFO,
+            "DEEP SEARCH HIT [$label] via ${hit.strategy.id} = ${hit.value} ${hit.strategy.unit}",
+        )
+        return DeepSearchReport(
+            targetLabel = label,
+            targetId = pid?.id ?: requestHint ?: label,
+            attempts = attempts,
+            hit = hit,
+            notes = notes + "Found with: ${hit.strategy.title}",
+        )
+    }
+
+    private suspend fun restore(source: ObdSource) {
+        FULL_RESTORE.forEach { cmd ->
+            runCatching { source.command(cmd) }
+            delay(20L)
+        }
+    }
+
+    private suspend fun busHealthy(source: ObdSource): Boolean {
+        val ping = source.command("010C")?.uppercase().orEmpty()
+        if (ping.isBlank() || BAD.any { ping.contains(it) }) return false
+        // Need a real RPM frame, not just echo.
+        return ping.contains("41") || ping.any { it.isDigit() }
     }
 
     private suspend fun tryStrategy(source: ObdSource, strategy: DeepSearchStrategy): DeepSearchHit? {
         try {
             strategy.setup.forEach { cmd ->
                 source.command(cmd)
-                delay(25L)
+                delay(20L)
             }
-            delay(30L)
+            delay(25L)
             val raw = source.command(strategy.request) ?: return null
             val up = raw.uppercase()
             if (BAD.any { up.contains(it) }) return null
@@ -119,7 +200,7 @@ object DeepSensorSearch {
         } finally {
             strategy.teardown.forEach { cmd ->
                 runCatching { source.command(cmd) }
-                delay(15L)
+                delay(12L)
             }
         }
     }

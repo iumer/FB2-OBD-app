@@ -29,6 +29,17 @@ data class DeepSearchStrategy(
     /** Commands to restore a safe ELM state after the attempt. */
     val teardown: List<String> = DEFAULT_TEARDOWN,
 ) {
+    /** Adapter-local (no ECU) — e.g. ATRV rail voltage. */
+    val isAdapterLocal: Boolean
+        get() = request.equals("ATRV", ignoreCase = true)
+
+    /** Simple broadcast Mode 01 force — safe to try even when bus is shaky. */
+    val isSimpleForce: Boolean
+        get() = setup.any { it.equals("ATSP0", true) } &&
+            setup.none { it.startsWith("ATSP") && !it.equals("ATSP0", true) } &&
+            !request.startsWith("22") &&
+            setup.none { it.startsWith("ATSH") && !it.equals("ATSH7DF", true) }
+
     companion object {
         val DEFAULT_TEARDOWN = listOf(
             "ATAR",      // auto receive
@@ -180,12 +191,25 @@ object DeepSearchKnowledgeBase {
     )
 
     private fun battery() = listOf(
-        // ATRV first — Torque-style adapter rail voltage; works when ECU omits 0142.
+        // ATRV first — Torque-style adapter rail voltage; works when ECU omits 0142
+        // AND when the ECU link is momentarily UNABLE (adapter still powered).
         DeepSearchStrategy(
             id = "atrv",
             title = "ELM adapter voltage (ATRV)",
-            rationale = "Reads OBD-plug voltage at the adapter (same source Torque uses). Works even when the ECM does not advertise PID 0142.",
+            rationale = "Reads OBD-plug voltage at the adapter (same source Torque uses). Works even when the ECM does not advertise PID 0142, and even while the ECU bus is flaky.",
             setup = emptyList(),
+            request = "ATRV",
+            dataBytes = 0,
+            decode = { null },
+            unit = "V",
+            teardown = emptyList(),
+        ),
+        // ATRV after an explicit soft restore — clones often need a clean buffer.
+        DeepSearchStrategy(
+            id = "atrv_after_restore",
+            title = "Restore + ATRV",
+            rationale = "Soft-restore then ATRV — recovers voltage after UNABLE storms / deep-search leftovers.",
+            setup = listOf("ATD", "ATE0", "ATL0", "ATS0", "ATSP0"),
             request = "ATRV",
             dataBytes = 0,
             decode = { null },
@@ -194,6 +218,17 @@ object DeepSearchKnowledgeBase {
         ),
         forceMode01("0142", "Force Control module voltage (0142)", 2, "V", ::volts),
         can11("7E0", "0142", "ECM 7E0 + voltage", "Direct ECM voltage.", 2, "V", ::volts),
+        // Some FB2 clones answer 0142 only after ATSP6 (ISO-CAN fixed).
+        DeepSearchStrategy(
+            id = "can_auto_0142",
+            title = "CAN auto + 0142",
+            rationale = "Lock ISO 15765-4 CAN then ask for module voltage.",
+            setup = listOf("ATSP6", "ATSH7DF"),
+            request = "0142",
+            dataBytes = 2,
+            decode = ::volts,
+            unit = "V",
+        ),
         can11("7E0", "22130C", "Honda ECU voltage candidate", "Mode 22 placeholder.", 2, "V", ::volts),
         can11("7E0", "221703", "Honda battery sensor candidate", "Body pack placeholder.", 2, "V", ::volts),
     )
@@ -303,7 +338,7 @@ object DeepSearchKnowledgeBase {
         val key = normalize(label, pid?.id, pid?.request)
         return when (key) {
             "battery" ->
-                "PID 0142 is often missing from this Civic's support bitmask. Deep search tries ATRV (adapter rail voltage — same as Torque) first, then forced 0142 / Honda Mode 22 candidates."
+                "Battery on this Civic is usually adapter rail voltage (ATRV), same as Torque — PID 0142 is often missing from the ECM bitmask. Deep analysis restores the ELM, retries ATRV, then only tries ECU headers if the bus is alive (it will not thrash ATSP/ATSH while UNABLE)."
             "coolant2", "ambient", "ltft" ->
                 "Usually the ECM does not advertise this SAE PID (not an ELM failure). Deep search still forces the request and tries ECU headers."
             "atf", "gear", "misfire", "hvac", "oil temperature", "fuel pressure" ->

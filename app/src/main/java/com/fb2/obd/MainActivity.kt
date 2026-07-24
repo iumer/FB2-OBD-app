@@ -435,7 +435,8 @@ class MainActivity : ComponentActivity() {
             val safeName = subject.replace(Regex("[^A-Za-z0-9._-]+"), "_").take(40)
             val dir = File(cacheDir, "share").also { it.mkdirs() }
             val out = File(dir, "${safeName}.txt")
-            out.writeText(text.ifBlank { "(empty log)" })
+            val body = text.ifBlank { "(empty log)" }
+            out.writeText(body)
             val uri = FileProvider.getUriForFile(
                 this,
                 "${packageName}.fileprovider",
@@ -445,11 +446,24 @@ class MainActivity : ComponentActivity() {
                 type = "text/plain"
                 putExtra(Intent.EXTRA_STREAM, uri)
                 putExtra(Intent.EXTRA_SUBJECT, subject)
-                putExtra(Intent.EXTRA_TEXT, subject)
+                // Some targets only read EXTRA_TEXT — keep a short preview + file stream.
+                putExtra(Intent.EXTRA_TEXT, body.take(4000))
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                 clipData = android.content.ClipData.newUri(contentResolver, subject, uri)
             }
-            startActivity(Intent.createChooser(intent, subject))
+            // Grant every resolver so WhatsApp / Drive / Files don't get SecurityException.
+            packageManager.queryIntentActivities(intent, 0).forEach { ri ->
+                grantUriPermission(
+                    ri.activityInfo.packageName,
+                    uri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION,
+                )
+            }
+            val chooser = Intent.createChooser(intent, subject).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            startActivity(chooser)
+            toast("Opening share sheet…")
         } catch (e: Exception) {
             toast("Share failed: ${e.message ?: "no app"}")
         }
