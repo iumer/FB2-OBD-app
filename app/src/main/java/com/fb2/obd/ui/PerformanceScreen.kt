@@ -18,12 +18,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.fb2.obd.PerformanceState
+import com.fb2.obd.perf.AccelPhase
 import com.fb2.obd.ui.theme.Accent
 import com.fb2.obd.ui.theme.Background
 import com.fb2.obd.ui.theme.GoodGreen
 import com.fb2.obd.ui.theme.Surface
 import com.fb2.obd.ui.theme.TextMuted
 import com.fb2.obd.ui.theme.TextPrimary
+import com.fb2.obd.ui.theme.WarnAmber
 
 private fun fmt(sec: Double?): String = sec?.let { "%.2f s".format(it) } ?: "\u2014"
 
@@ -33,6 +35,7 @@ fun PerformanceScreen(
     onReset: () -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
+    phase: AccelPhase = AccelPhase.NEED_STOP,
 ) {
     Column(
         modifier = modifier
@@ -55,7 +58,7 @@ fun PerformanceScreen(
         }
 
         Row(
-            modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
+            modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
             verticalAlignment = Alignment.Bottom,
         ) {
             Text(
@@ -67,8 +70,23 @@ fun PerformanceScreen(
             Text(text = " km/h", color = TextMuted, fontSize = 16.sp, modifier = Modifier.padding(bottom = 10.dp))
         }
 
+        val (status, statusColor) = when (phase) {
+            AccelPhase.NEED_STOP ->
+                "Drive, then come to a COMPLETE STOP. Timing will arm only after that stop." to WarnAmber
+            AccelPhase.ARMED ->
+                "ARMED \u2014 accelerate hard. Timer starts when speed leaves 0." to GoodGreen
+            AccelPhase.RUNNING ->
+                "TIMING \u2026 keep accelerating through the milestones." to Accent
+        }
         Text(
-            text = "Come to a stop, then accelerate \u2014 timing arms and starts automatically.",
+            text = status,
+            color = statusColor,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.padding(bottom = 10.dp),
+        )
+        Text(
+            text = "Reset does not start a run. Casual driving after Reset is ignored until you stop, then launch.",
             color = TextMuted,
             fontSize = 12.sp,
             modifier = Modifier.padding(bottom = 12.dp),
