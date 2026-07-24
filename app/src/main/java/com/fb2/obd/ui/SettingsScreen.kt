@@ -89,7 +89,7 @@ fun SettingsScreen(
         ScreenHeader(title = "Settings", onBack = onBack)
 
         Text(
-            text = "Live sensor pages (Custom, Idle, Fuel, Trip, Trans, Perf, G-force, Health) are on the dashboard swipe tabs. Diagnostics (faults, deep scan, VIN, Honda, maintenance) open from the DIAGNOSTICS button.",
+            text = "Live pages are on Dash swipe tabs. Faults / deep scan / VIN open from DIAGNOSTICS.",
             color = TextMuted,
             fontSize = 12.sp,
             modifier = Modifier.padding(bottom = 8.dp),
@@ -106,11 +106,16 @@ fun SettingsScreen(
         SectionLabel("Alerts")
         ToggleRow(
             title = "Voice alerts",
-            subtitle = "Alarm tone + spoken warning when a metric hits critical (battery also warns on orange/weak). Uses offline TTS plus a loud beep.",
+            subtitle = "Beep + speak on critical (battery also warns when orange/weak).",
             checked = settings.voiceAlerts,
             onCheckedChange = onToggleVoiceAlerts,
         )
-        NavRow("Check sound alert", onCheckSoundAlert)
+        ActionRow(
+            title = "Check sound alert",
+            subtitle = "Play battery-critical beep + voice now — verify you can hear it in the car.",
+            actionLabel = "PLAY",
+            onClick = onCheckSoundAlert,
+        )
 
         SectionLabel("Logging")
         Text(
@@ -181,5 +186,39 @@ private fun NavRow(title: String, onClick: () -> Unit) {
     ) {
         Text(text = title, color = TextPrimary, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
         Text(text = "\u203A", color = TextMuted, fontSize = 20.sp)
+    }
+}
+
+@Composable
+private fun ActionRow(
+    title: String,
+    subtitle: String,
+    actionLabel: String,
+    onClick: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 8.dp, bottom = 8.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(Surface)
+            .clickable { onClick() }
+            .padding(14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(text = title, color = TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+            Text(text = subtitle, color = TextMuted, fontSize = 12.sp)
+        }
+        Text(
+            text = actionLabel,
+            color = Accent,
+            fontSize = 14.sp,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier
+                .clip(RoundedCornerShape(8.dp))
+                .background(Background)
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+        )
     }
 }

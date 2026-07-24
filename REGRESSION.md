@@ -37,8 +37,8 @@ Keep these fixed. If a change might touch one of these areas, re-verify it.
 | I21 | Cannot remap built-in Dash tiles | Fixed | Double-tap tile → same sensor picker as `+`; persisted overrides |
 | I22 | Sensor picker has no text search | Fixed | Search box in `SensorPickerDialog` (label / PID / category) |
 | I23 | MIN toast shows but bubble missing on Home | Fixed | FGS + attach/READY before `moveTaskToBack`; clamp on-screen |
-| I24 | Dash text too small to read while driving on HU | Fixed | `DashType` larger hero/tiles; fewer wider columns |
-| I25 | Floating bubble ring too small on HU | Fixed | Center 96dp / satellites 112dp / ring ~460dp; larger text |
+| I24 | Dash text too small to read while driving on HU | Fixed | `DashType` HU scale (~34/22sp, 88dp tiles); ellipsis; fewer wider columns |
+| I25 | Floating bubble ring too small / overflow on HU | Fixed | `FloatingDashLayout`: 92/100/max400dp; shrinks on short-edge HUs |
 | I26 | Log Share shows “No apps…” / opens Bluetooth search on HU | Fixed | Always save to Downloads/FB2-Diag; ignore BT as share target |
 
 When the user reports a **new** bug, add a new `Ixx` row here (Status: Open → Fixed)

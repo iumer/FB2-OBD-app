@@ -29,8 +29,10 @@ import androidx.core.content.ContextCompat
 import com.fb2.obd.MainActivity
 import com.fb2.obd.R
 import com.fb2.obd.car.CarDashState
+import com.fb2.obd.car.FloatingDashLayout
 import com.fb2.obd.car.FloatingDashMetrics
 import com.fb2.obd.car.VehicleLiveStore
+import kotlin.math.min
 import com.fb2.obd.data.ObdLogger
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -157,9 +159,9 @@ class FloatingDashOverlayService : Service() {
         val density = resources.displayMetrics.density
         fun dp(v: Int) = (v * density).roundToInt()
 
-        val collapsed = dp(COLLAPSED_DP)
-        val satSize = dp(SAT_DP)
-        val centerSize = dp(CENTER_DP)
+        val collapsed = dp(FloatingDashLayout.COLLAPSED_DP)
+        val satSize = dp(FloatingDashLayout.SAT_DP)
+        val centerSize = dp(FloatingDashLayout.CENTER_DP)
 
         val container = FrameLayout(this).apply {
             // Make the hit-target obvious even before first live metric paint.
@@ -172,10 +174,11 @@ class FloatingDashOverlayService : Service() {
             }
             gravity = Gravity.CENTER
             setTextColor(Color.WHITE)
-            textSize = 16f
+            textSize = 15f
             typeface = Typeface.DEFAULT_BOLD
             textAlignment = View.TEXT_ALIGNMENT_CENTER
-            setPadding(dp(6), dp(10), dp(6), dp(10))
+            setPadding(dp(6), dp(8), dp(6), dp(8))
+            maxLines = 2
             background = circleDrawable(COLOR_ACCENT, fillAlpha = 230)
             elevation = dp(8).toFloat()
             text = "FB2\n…"
@@ -187,10 +190,11 @@ class FloatingDashOverlayService : Service() {
                 layoutParams = FrameLayout.LayoutParams(satSize, satSize)
                 visibility = View.GONE
                 setTextColor(Color.WHITE)
-                textSize = 15f
+                textSize = 14f
                 typeface = Typeface.DEFAULT_BOLD
                 textAlignment = View.TEXT_ALIGNMENT_CENTER
-                setPadding(dp(6), dp(10), dp(6), dp(10))
+                setPadding(dp(6), dp(8), dp(6), dp(8))
+                maxLines = 3
                 background = circleDrawable(COLOR_ACCENT, fillAlpha = 210)
                 elevation = dp(6).toFloat()
             }
@@ -354,17 +358,29 @@ class FloatingDashOverlayService : Service() {
         )
     }
 
+    /** Short screen edge in dp — used so the expanded ring never fills the HU. */
+    private fun shortEdgeDp(): Int {
+        val dm = resources.displayMetrics
+        val shortPx = min(dm.widthPixels, dm.heightPixels)
+        return (shortPx / dm.density).roundToInt().coerceAtLeast(1)
+    }
+
+    private fun expandedDp(): Int = FloatingDashLayout.expandedDp(shortEdgeDp())
+
+    private fun radiusDp(): Int =
+        FloatingDashLayout.radiusDp(expandedDp(), FloatingDashLayout.SAT_DP)
+
     private fun render() {
         val density = resources.displayMetrics.density
         fun dp(v: Int) = (v * density).roundToInt()
         val container = root ?: return
         val lp = params ?: return
 
-        val collapsed = dp(COLLAPSED_DP)
-        val expandedSize = dp(EXPANDED_DP)
-        val satSize = dp(SAT_DP)
-        val centerSize = dp(CENTER_DP)
-        val radius = dp(RADIUS_DP)
+        val collapsed = dp(FloatingDashLayout.COLLAPSED_DP)
+        val expandedSize = dp(expandedDp())
+        val satSize = dp(FloatingDashLayout.SAT_DP)
+        val centerSize = dp(FloatingDashLayout.CENTER_DP)
+        val radius = dp(radiusDp())
 
         if (metrics.isEmpty()) {
             metrics = listOf(FloatingDashMetrics.Metric("Dash", "--", "", null, "WAITING"))
@@ -461,7 +477,7 @@ class FloatingDashOverlayService : Service() {
         }
         val density = resources.displayMetrics.density
         fun dp(v: Int) = (v * density).roundToInt()
-        val delta = (dp(EXPANDED_DP) - dp(COLLAPSED_DP)) / 2
+        val delta = (dp(expandedDp()) - dp(FloatingDashLayout.COLLAPSED_DP)) / 2
         if (value) {
             lp.x -= delta
             lp.y -= delta
@@ -578,11 +594,6 @@ class FloatingDashOverlayService : Service() {
         private const val CHANNEL_ID = "floating_dash"
         private const val NOTIFICATION_ID = 1002
 
-        private const val COLLAPSED_DP = 96
-        private const val CENTER_DP = 96
-        private const val SAT_DP = 112
-        private const val EXPANDED_DP = 460
-        private const val RADIUS_DP = 160
         private const val AUTO_COLLAPSE_MS = 6_000L
         private const val LONG_PRESS_MS = 520L
         private const val STROKE_DP = 4

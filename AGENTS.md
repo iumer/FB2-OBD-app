@@ -128,9 +128,11 @@ non-obvious cloud specifics.
   runs deep search on n/s tiles; long-press edits health thresholds.
 - **Sensor picker search:** Type ≥2 chars in the dialog search box to filter
   by label / request / category (skip category drill-down).
-- **Car HU readability:** Dash uses `DashType` (hero ~36sp, tile values ~24sp,
-  taller 96dp tiles, fewer/wider columns). Re-record HU Paparazzi after type-scale
-  changes. Prefer glanceability over phone-density packing.
+- **Car HU readability:** Dash uses `DashType` (hero ~34sp, tile values ~22sp,
+  88dp tiles, fewer/wider columns). Floating bubble sizes live in
+  `FloatingDashLayout` (collapsed/center 92dp, sat 100dp, expanded max 400dp,
+  auto-shrinks on short-edge HUs). Re-record HU Paparazzi after type-scale or
+  bubble size changes. Prefer glanceability without filling the short edge.
 - MAF/MAP health is context-aware (idle / coast / cruise / heavy); pass RPM,
   speed, and throttle into `HealthEvaluator.maf` / `map`. MAF threshold schema is
   currently **3** (`HealthThresholdStore`) — old harsh idle bands are force-migrated.

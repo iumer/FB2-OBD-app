@@ -1,8 +1,6 @@
 package com.fb2.obd
 
-import app.cash.paparazzi.DeviceConfig
 import app.cash.paparazzi.Paparazzi
-import com.android.resources.ScreenOrientation
 import com.fb2.obd.data.ObdLogger
 import com.fb2.obd.obd.Dtc
 import com.fb2.obd.obd.GearSource
@@ -20,9 +18,7 @@ import org.junit.Test
 class ScreensSnapshotTest {
 
     @get:Rule
-    val paparazzi = Paparazzi(
-        deviceConfig = DeviceConfig.PIXEL_5.copy(orientation = ScreenOrientation.LANDSCAPE),
-    )
+    val paparazzi = Paparazzi(deviceConfig = CarHuDevices.HU_1024x600)
 
     @Test
     fun settings_screen() {
@@ -32,6 +28,7 @@ class ScreensSnapshotTest {
                     settings = SettingsState(showEstimatedGear = true, voiceAlerts = true),
                     onToggleEstimatedGear = {},
                     onToggleVoiceAlerts = {},
+                    onCheckSoundAlert = {},
                     nav = com.fb2.obd.ui.SettingsNav(),
                     onBack = {},
                 )
