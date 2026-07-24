@@ -114,6 +114,13 @@ non-obvious cloud specifics.
   auto-collapses; tap center toggles; long-press opens the app. Live values from
   `VehicleLiveStore` / `CarDashTile.health`. Aimed at Dellson HU + CarPlay
   overlay; may be blocked by some HU firmwares.
+  **Exit & disconnect** (back → confirm) calls `FloatingDashOverlayService.stop`
+  + `finishAndRemoveTask` — do **not** stop the overlay from Activity `onStop`
+  (that would kill MIN). Service uses `START_NOT_STICKY` so swipe-away does not
+  resurrect an empty bubble.
+- **Car HU layout:** Dash / dense grids use `BoxWithConstraints` width
+  (`dashColumnsForWidth` 3–6, `denseColumnsForWidth` 2–4) so Paparazzi and
+  real HUs agree. Re-record HU snapshots after grid changes.
 - MAF/MAP health is context-aware (idle / coast / cruise / heavy); pass RPM,
   speed, and throttle into `HealthEvaluator.maf` / `map`. MAF threshold schema is
   currently **3** (`HealthThresholdStore`) — old harsh idle bands are force-migrated.

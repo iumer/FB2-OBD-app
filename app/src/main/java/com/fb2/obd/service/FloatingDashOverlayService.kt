@@ -99,7 +99,9 @@ class FloatingDashOverlayService : Service() {
             ACTION_COLLAPSE -> setExpanded(false)
             ACTION_EXPAND -> setExpanded(true)
         }
-        return START_STICKY
+        // Do not restart after swipe-away / process kill — MIN is intentional only
+        // while the user wants the bubble; Exit must fully dismiss it.
+        return START_NOT_STICKY
     }
 
     override fun onDestroy() {

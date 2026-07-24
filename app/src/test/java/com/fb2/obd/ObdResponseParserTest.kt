@@ -92,6 +92,14 @@ class ObdResponseParserTest {
     }
 
     @Test
+    fun maf_0110_matchesSaeTorqueScale() {
+        // Torque / SAE: ((A*256)+B)/100 g/s. 0x01 0x7C = 380 → 3.80 g/s (typical R18 idle).
+        assertEquals(3.80, ObdResponseParser.parse(ObdPid.MAF, "41 10 01 7C")!!, 0.001)
+        assertEquals(12.40, ObdResponseParser.parse(ObdPid.MAF, "41 10 04 D8")!!, 0.001)
+        assertEquals("0110", ObdPid.MAF.request)
+    }
+
+    @Test
     fun atVoltage_parses() {
         assertEquals(12.5, ObdResponseParser.parseAtVoltage("12.5V\r>")!!, 0.001)
         assertEquals(14.2, ObdResponseParser.parseAtVoltage("14.2")!!, 0.001)
