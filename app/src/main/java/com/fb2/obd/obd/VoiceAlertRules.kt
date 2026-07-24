@@ -35,34 +35,37 @@ object VoiceAlertRules {
             }
         }
 
-        add(
-            "coolant",
-            "Coolant critical",
-            100,
-            HealthEvaluator.coolant(snapshot.coolantC, thresholds),
-        )
-        // Coolant 2 can also overheat (post-thermostat).
-        val c2 = HealthEvaluator.coolant(snapshot.coolant2C, thresholds)
-        if (c2.health == Health.CRITICAL || c2.health == Health.ELEVATED) {
-            add("coolant2", "Coolant two critical", 95, c2)
+        // Spec: voice alert only above coolantVoiceAbove (default 110°C), not at first red.
+        val c1 = snapshot.coolantC
+        if (c1 != null && c1 > thresholds.coolantVoiceAbove) {
+            out += Alert("coolant", "Coolant critical", 100)
+        }
+        val c2v = snapshot.coolant2C
+        if (c2v != null && c2v > thresholds.coolantVoiceAbove) {
+            out += Alert("coolant2", "Coolant two critical", 95)
         }
 
         add(
             "battery",
-            if (running) "Battery critical" else "Battery critical",
+            "Battery critical",
             90,
             HealthEvaluator.battery(snapshot.batteryVolts, running, thresholds),
         )
 
         add("stft", "Short term fuel trim critical", 70, HealthEvaluator.fuelTrim(snapshot.stftPct, thresholds))
         add("ltft", "Long term fuel trim critical", 70, HealthEvaluator.fuelTrim(snapshot.ltftPct, thresholds))
-        add("load", "Engine load critical", 60, HealthEvaluator.engineLoad(snapshot.engineLoadPct, thresholds))
         add("intake", "Intake temperature critical", 65, HealthEvaluator.intakeAir(snapshot.intakeC, thresholds))
         add(
             "maf",
             "Mass air flow critical",
             55,
-            HealthEvaluator.maf(snapshot.mafGps, snapshot.rpm, snapshot.speedKmh, thresholds),
+            HealthEvaluator.maf(
+                snapshot.mafGps,
+                snapshot.rpm,
+                snapshot.speedKmh,
+                snapshot.throttlePct,
+                thresholds,
+            ),
         )
         add("timing", "Ignition timing critical", 50, HealthEvaluator.timing(snapshot.timingAdvance, thresholds))
         add("rpm", "Engine RPM critical", 80, HealthEvaluator.rpm(snapshot.rpm, thresholds))

@@ -18,6 +18,7 @@ import com.fb2.obd.data.VoiceAlerter
 import com.fb2.obd.obd.ColdStartIdleCatalog
 import com.fb2.obd.obd.DeepSearchReport
 import com.fb2.obd.obd.DeepSensorSearch
+import com.fb2.obd.obd.DiagnosticEventTracker
 import com.fb2.obd.obd.Dtc
 import com.fb2.obd.obd.FreezeFrame
 import com.fb2.obd.obd.HealthScore
@@ -58,6 +59,8 @@ data class DashboardUiState(
     val connection: ConnectionState = ConnectionState.DISCONNECTED,
     val sourceName: String = "",
     val sourceIsLive: Boolean = false,
+    /** MIL / readiness DTC count for the Dash tile (null = not read yet). */
+    val dtcCount: Int? = null,
 )
 
 /** User-adjustable settings. */
@@ -293,6 +296,7 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
     private val tripComputer = TripComputer()
     private var collectJob: Job? = null
     private var loggingJob: Job? = null
+    private var readinessJob: Job? = null
     /** Throttle full multi-tab CSV samples so the buffer lasts a whole drive. */
     private var lastTabLogMs: Long = 0L
     private var currentSource: ObdSource? = null
@@ -301,6 +305,7 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
     private var phoneAx = 0f
     private var phoneAy = 0f
     private var phoneAz = 9.81f
+    private val eventTracker = DiagnosticEventTracker()
 
     init {
         ObdLogger.valueLoggingEnabled = false
@@ -343,6 +348,8 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
                 sourceName = ui.sourceName,
                 logging = _settings.value.valueLogging,
                 showEstimatedGear = _settings.value.showEstimatedGear,
+                dtcCount = ui.dtcCount,
+                healthScore = _health.value,
             ),
         )
     }
@@ -586,15 +593,20 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
         if (_settings.value.valueLogging) {
             stopValueLogging()
         }
+        readinessJob?.cancel()
+        readinessJob = null
         collectJob?.cancel()
         collectJob = null
         currentSource = null
+        eventTracker.onConnection(ConnectionState.DISCONNECTED, false, "")
+        eventTracker.reset()
         _uiState.update {
             it.copy(
                 snapshot = VehicleSnapshot.EMPTY,
                 connection = ConnectionState.DISCONNECTED,
                 sourceName = "",
                 sourceIsLive = false,
+                dtcCount = null,
             )
         }
         ObdLogger.logDebug(ObdLogger.Dir.INFO, "Disconnected")
@@ -602,14 +614,17 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun useSource(source: ObdSource) {
+        readinessJob?.cancel()
         collectJob?.cancel()
         currentSource = source
+        eventTracker.reset()
         _faults.update { FaultsState() }
         _uiState.update {
             it.copy(
                 connection = ConnectionState.CONNECTING,
                 sourceName = source.name,
                 sourceIsLive = source.isLive,
+                dtcCount = null,
             )
         }
         publishCarDash()
@@ -646,12 +661,22 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
                     atfC = lastAtfForVoice,
                     tcSlipRpm = lastSlipForVoice,
                 )
+                val lockText = _transValues.value.entries
+                    .firstOrNull { it.key.contains("lock", true) }
+                    ?.value
+                eventTracker.onSnapshot(snapshot, _healthThresholds.value, lockText)
+                eventTracker.onDtcCount(_uiState.value.dtcCount)
                 _uiState.update {
                     it.copy(
                         snapshot = snapshot,
                         connection = ConnectionState.CONNECTED,
                     )
                 }
+                eventTracker.onConnection(
+                    ConnectionState.CONNECTED,
+                    source.isLive,
+                    source.name,
+                )
                 publishCarDash()
                 // Sample all tabs into the session file (not only the visible swipe page).
                 if (ObdLogger.valueLoggingEnabled) {
@@ -660,9 +685,27 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
             }
             .catch {
                 ObdLogger.logDebug(ObdLogger.Dir.INFO, "Connection ERROR: ${it.message}")
+                eventTracker.onConnection(ConnectionState.ERROR, false, source.name)
                 _uiState.update { st -> st.copy(connection = ConnectionState.ERROR) }
             }
             .launchIn(viewModelScope)
+
+        // Lightweight readiness poll for Dash DTC counter (Mode 01 PID 01).
+        readinessJob = viewModelScope.launch {
+            delay(800L)
+            while (isActive && currentSource === source) {
+                runCatching {
+                    val readiness = source.readReadiness()
+                    _uiState.update { it.copy(dtcCount = readiness.dtcCount) }
+                    eventTracker.onDtcCount(readiness.dtcCount)
+                    _health.update {
+                        scoreHealth(dtcCount = readiness.dtcCount.coerceAtLeast(_faults.value.stored.size))
+                    }
+                    publishCarDash()
+                }
+                delay(12_000L)
+            }
+        }
     }
 
     fun readFaults() {
@@ -680,9 +723,12 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
                     message = if (stored.isEmpty() && pending.isEmpty()) "No fault codes found." else null,
                 )
             }
+            _uiState.update { it.copy(dtcCount = stored.size) }
+            eventTracker.onDtcCount(stored.size)
             _health.update {
                 scoreHealth(dtcCount = stored.size)
             }
+            publishCarDash()
         }
     }
 
@@ -702,6 +748,10 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
                     message = if (ok) "Codes cleared." else "Clear failed or not supported.",
                 )
             }
+            _uiState.update { it.copy(dtcCount = stored.size) }
+            eventTracker.onDtcCount(stored.size)
+            _health.update { scoreHealth(dtcCount = stored.size) }
+            publishCarDash()
         }
     }
 
@@ -811,6 +861,10 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
             val slip = results.find { it.pid.label.contains("slip", true) && it.supported }?.sample
             lastAtfForVoice = atf
             lastSlipForVoice = slip
+            val lockText = results.find { it.pid.label.contains("lock", true) }?.let {
+                LiveSnapshotOverlay.formatDisplay(it)
+            }
+            eventTracker.onSnapshot(_uiState.value.snapshot, _healthThresholds.value, lockText)
             _health.update {
                 scoreHealth(atfC = atf, tcSlipRpm = slip)
             }
@@ -908,6 +962,8 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
         if (_settings.value.valueLogging) {
             stopValueLogging()
         }
+        readinessJob?.cancel()
+        readinessJob = null
         collectJob?.cancel()
         collectJob = null
         currentSource = null

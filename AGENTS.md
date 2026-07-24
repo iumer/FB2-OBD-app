@@ -73,3 +73,17 @@ non-obvious cloud specifics.
   not a live LLM.
 - `sdkmanager`/Gradle may print `SDK XML version 4 ... only understands up to 3`.
   It is harmless with the current command-line tools.
+
+### Diagnostic spec (Dash behaviour)
+
+- Main Dash tiles include **Fuel loop** (PID `0103` → OPEN/CLOSED LOOP text),
+  **DTCs** (from readiness / Mode 01 PID 01, refreshed ~12s), and **Health**
+  (`HealthScore.vehiclePct`). Load & Throttle are display-only (always green).
+- Colour bands / voice thresholds live in `HealthThresholds` (long-press editor).
+  Coolant **voice** alerts only above `coolantVoiceAbove` (default 110°C), even
+  though the red tile starts earlier (`> coolantElevatedMax`, default 103°C).
+- **Event logging** (`DiagnosticEventTracker` → `ObdLogger.logEvent`) always
+  records zone/gear/ELM/DTC/fuel-loop transitions into the `# events` CSV
+  section — independent of the continuous value LOG toggle.
+- MAF/MAP health is context-aware (idle / cruise / heavy or WOT); pass RPM,
+  speed, and throttle into `HealthEvaluator.maf` / `map`.

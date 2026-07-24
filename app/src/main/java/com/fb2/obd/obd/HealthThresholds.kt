@@ -2,32 +2,38 @@ package com.fb2.obd.obd
 
 /**
  * User-editable colour-band thresholds for dashboard / transmission metrics.
- * Defaults match the FB2 Civic R18 diagnostic bands.
+ * Defaults match the FB2 Civic R18 diagnostic bands (Honda-focused diag spec).
  */
 data class HealthThresholds(
     val coolantColdBelow: Double = 70.0,
-    val coolantGoodMax: Double = 97.0,
-    val coolantWarnMax: Double = 103.0,
-    val coolantElevatedMax: Double = 108.0,
+    val coolantGoodMax: Double = 90.0,
+    val coolantWarnMax: Double = 98.0,
+    val coolantElevatedMax: Double = 103.0,
+    /** Voice alert only above this (red tile starts earlier at elevatedMax). */
+    val coolantVoiceAbove: Double = 110.0,
 
     /** Engine running — green charging band. */
     val battRunGoodMin: Double = 13.8,
-    val battRunGoodMax: Double = 14.7,
+    val battRunGoodMax: Double = 14.8,
     val battRunWarnMin: Double = 13.2,
+    /** Orange band floor while running (below warn, above critical). */
+    val battRunElevatedMin: Double = 12.8,
     val battRunCriticalAbove: Double = 15.0,
 
     /** Engine off — resting battery. */
     val battRestGoodAbove: Double = 12.6,
     val battRestWarnAbove: Double = 12.3,
+    val battRestElevatedAbove: Double = 12.0,
 
     val trimGoodMax: Double = 5.0,
     val trimWarnMax: Double = 10.0,
     val trimElevatedMax: Double = 20.0,
 
+    /** Kept for editor compatibility; load/throttle are display-only (no warn colours). */
     val loadGoodMax: Double = 60.0,
     val loadWarnMax: Double = 85.0,
 
-    val intakeColdBelow: Double = 10.0,
+    val intakeColdBelow: Double = 15.0,
     val intakeGoodMax: Double = 45.0,
     val intakeWarnMax: Double = 60.0,
 
@@ -37,13 +43,24 @@ data class HealthThresholds(
     val mafIdleGoodMin: Double = 6.0,
     val mafIdleGoodMax: Double = 10.0,
     val mafIdleWarnMin: Double = 4.0,
+    val mafCruiseGoodMin: Double = 15.0,
+    val mafCruiseGoodMax: Double = 35.0,
+    val mafHeavyGoodMin: Double = 40.0,
+    val mafHeavyGoodMax: Double = 120.0,
 
+    val mapIdleGoodMin: Double = 25.0,
+    val mapIdleGoodMax: Double = 40.0,
+    val mapCruiseGoodMin: Double = 40.0,
+    val mapCruiseGoodMax: Double = 60.0,
+    val mapWotGoodMin: Double = 90.0,
     val mapGoodMax: Double = 60.0,
     val mapWarnMax: Double = 90.0,
     val mapWotThrottleMin: Double = 70.0,
 
-    val timingRetardBelow: Double = 0.0,
-    val timingLowBelow: Double = 5.0,
+    /** Red below this (degrees). Yellow from this up through [timingYellowMax]. */
+    val timingRetardBelow: Double = -5.0,
+    /** Yellow includes 0°; green is strictly positive. */
+    val timingLowBelow: Double = 0.0,
 
     val rpmIdleLow: Double = 650.0,
     val rpmIdleHigh: Double = 750.0,
@@ -74,8 +91,8 @@ enum class EditableMetric(
     ENGINE_LOAD("Engine load", "%"),
     INTAKE("Intake air temperature", "\u00B0C"),
     AMBIENT("Ambient temperature", "\u00B0C"),
-    MAF("MAF (idle band)", "g/s"),
-    MAP("MAP", "kPa"),
+    MAF("MAF (context bands)", "g/s"),
+    MAP("MAP (context bands)", "kPa"),
     TIMING("Ignition timing", "\u00B0"),
     RPM("Engine RPM", "rpm"),
     ATF("ATF temperature", "\u00B0C"),
@@ -118,16 +135,19 @@ fun HealthThresholds.fieldsFor(metric: EditableMetric): List<ThresholdEditField>
     EditableMetric.COOLANT -> listOf(
         ThresholdEditField("coolantColdBelow", "Blue below", "Cold / warming", coolantColdBelow, Health.COLD),
         ThresholdEditField("coolantGoodMax", "Green up to", "Normal", coolantGoodMax, Health.GOOD),
-        ThresholdEditField("coolantWarnMax", "Yellow up to", "Caution", coolantWarnMax, Health.WARN),
+        ThresholdEditField("coolantWarnMax", "Yellow up to", "Warm", coolantWarnMax, Health.WARN),
         ThresholdEditField("coolantElevatedMax", "Orange up to", "Hot (above = red)", coolantElevatedMax, Health.ELEVATED),
+        ThresholdEditField("coolantVoiceAbove", "Voice above", "Spoken alert", coolantVoiceAbove, Health.CRITICAL),
     )
     EditableMetric.BATTERY -> listOf(
         ThresholdEditField("battRunGoodMin", "Running green from", "Charging OK min", battRunGoodMin, Health.GOOD),
         ThresholdEditField("battRunGoodMax", "Running green to", "Charging OK max", battRunGoodMax, Health.GOOD),
-        ThresholdEditField("battRunWarnMin", "Running yellow from", "Below this = red (alt weak)", battRunWarnMin, Health.WARN),
+        ThresholdEditField("battRunWarnMin", "Running yellow from", "Low charge", battRunWarnMin, Health.WARN),
+        ThresholdEditField("battRunElevatedMin", "Running orange from", "Weak alt", battRunElevatedMin, Health.ELEVATED),
         ThresholdEditField("battRunCriticalAbove", "Running red above", "Overcharge", battRunCriticalAbove, Health.CRITICAL),
         ThresholdEditField("battRestGoodAbove", "Resting green above", "Engine off", battRestGoodAbove, Health.GOOD),
-        ThresholdEditField("battRestWarnAbove", "Resting yellow above", "Below = flat (red)", battRestWarnAbove, Health.WARN),
+        ThresholdEditField("battRestWarnAbove", "Resting yellow above", "Weak rest", battRestWarnAbove, Health.WARN),
+        ThresholdEditField("battRestElevatedAbove", "Resting orange above", "Below = flat", battRestElevatedAbove, Health.ELEVATED),
     )
     EditableMetric.FUEL_TRIM -> listOf(
         ThresholdEditField("trimGoodMax", "Green |trim| up to", "Normal", trimGoodMax, Health.GOOD),
@@ -135,8 +155,8 @@ fun HealthThresholds.fieldsFor(metric: EditableMetric): List<ThresholdEditField>
         ThresholdEditField("trimElevatedMax", "Orange |trim| up to", "Above = red", trimElevatedMax, Health.ELEVATED),
     )
     EditableMetric.ENGINE_LOAD -> listOf(
-        ThresholdEditField("loadGoodMax", "Green up to", "Normal", loadGoodMax, Health.GOOD),
-        ThresholdEditField("loadWarnMax", "Yellow up to", "Above = red", loadWarnMax, Health.WARN),
+        ThresholdEditField("loadGoodMax", "Info only — green up to", "Display only (no warn colours)", loadGoodMax, Health.GOOD),
+        ThresholdEditField("loadWarnMax", "Info only — yellow up to", "Not used for tile colour", loadWarnMax, Health.WARN),
     )
     EditableMetric.INTAKE -> listOf(
         ThresholdEditField("intakeColdBelow", "Blue below", "Cold air", intakeColdBelow, Health.COLD),
@@ -150,16 +170,22 @@ fun HealthThresholds.fieldsFor(metric: EditableMetric): List<ThresholdEditField>
     EditableMetric.MAF -> listOf(
         ThresholdEditField("mafIdleGoodMin", "Idle green from", "g/s at idle", mafIdleGoodMin, Health.GOOD),
         ThresholdEditField("mafIdleGoodMax", "Idle green to", "g/s at idle", mafIdleGoodMax, Health.GOOD),
-        ThresholdEditField("mafIdleWarnMin", "Idle yellow from", "Below = red", mafIdleWarnMin, Health.WARN),
+        ThresholdEditField("mafCruiseGoodMin", "Cruise green from", "g/s", mafCruiseGoodMin, Health.GOOD),
+        ThresholdEditField("mafCruiseGoodMax", "Cruise green to", "g/s", mafCruiseGoodMax, Health.GOOD),
+        ThresholdEditField("mafHeavyGoodMin", "Heavy green from", "g/s", mafHeavyGoodMin, Health.GOOD),
+        ThresholdEditField("mafHeavyGoodMax", "Heavy green to", "g/s", mafHeavyGoodMax, Health.GOOD),
     )
     EditableMetric.MAP -> listOf(
-        ThresholdEditField("mapGoodMax", "Green up to", "Normal vacuum/load", mapGoodMax, Health.GOOD),
-        ThresholdEditField("mapWarnMax", "Yellow up to", "Above + low throttle = warn", mapWarnMax, Health.WARN),
-        ThresholdEditField("mapWotThrottleMin", "WOT throttle %", "MAP above yellow = green if throttle ≥ this", mapWotThrottleMin, Health.GOOD),
+        ThresholdEditField("mapIdleGoodMin", "Idle green from", "kPa", mapIdleGoodMin, Health.GOOD),
+        ThresholdEditField("mapIdleGoodMax", "Idle green to", "kPa", mapIdleGoodMax, Health.GOOD),
+        ThresholdEditField("mapCruiseGoodMin", "Cruise green from", "kPa", mapCruiseGoodMin, Health.GOOD),
+        ThresholdEditField("mapCruiseGoodMax", "Cruise green to", "kPa", mapCruiseGoodMax, Health.GOOD),
+        ThresholdEditField("mapWotGoodMin", "WOT green from", "kPa", mapWotGoodMin, Health.GOOD),
+        ThresholdEditField("mapWotThrottleMin", "WOT throttle %", "Throttle ≥ this = WOT", mapWotThrottleMin, Health.GOOD),
     )
     EditableMetric.TIMING -> listOf(
         ThresholdEditField("timingRetardBelow", "Red below", "Retard", timingRetardBelow, Health.CRITICAL),
-        ThresholdEditField("timingLowBelow", "Yellow below", "Low advance", timingLowBelow, Health.WARN),
+        ThresholdEditField("timingLowBelow", "Yellow up to", "0° = yellow; >0 = green", timingLowBelow, Health.WARN),
     )
     EditableMetric.RPM -> listOf(
         ThresholdEditField("rpmIdleLow", "Idle green from", "rpm", rpmIdleLow, Health.GOOD),
@@ -184,12 +210,15 @@ fun HealthThresholds.withField(id: String, value: Double): HealthThresholds = wh
     "coolantGoodMax" -> copy(coolantGoodMax = value)
     "coolantWarnMax" -> copy(coolantWarnMax = value)
     "coolantElevatedMax" -> copy(coolantElevatedMax = value)
+    "coolantVoiceAbove" -> copy(coolantVoiceAbove = value)
     "battRunGoodMin" -> copy(battRunGoodMin = value)
     "battRunGoodMax" -> copy(battRunGoodMax = value)
     "battRunWarnMin" -> copy(battRunWarnMin = value)
+    "battRunElevatedMin" -> copy(battRunElevatedMin = value)
     "battRunCriticalAbove" -> copy(battRunCriticalAbove = value)
     "battRestGoodAbove" -> copy(battRestGoodAbove = value)
     "battRestWarnAbove" -> copy(battRestWarnAbove = value)
+    "battRestElevatedAbove" -> copy(battRestElevatedAbove = value)
     "trimGoodMax" -> copy(trimGoodMax = value)
     "trimWarnMax" -> copy(trimWarnMax = value)
     "trimElevatedMax" -> copy(trimElevatedMax = value)
@@ -203,6 +232,15 @@ fun HealthThresholds.withField(id: String, value: Double): HealthThresholds = wh
     "mafIdleGoodMin" -> copy(mafIdleGoodMin = value)
     "mafIdleGoodMax" -> copy(mafIdleGoodMax = value)
     "mafIdleWarnMin" -> copy(mafIdleWarnMin = value)
+    "mafCruiseGoodMin" -> copy(mafCruiseGoodMin = value)
+    "mafCruiseGoodMax" -> copy(mafCruiseGoodMax = value)
+    "mafHeavyGoodMin" -> copy(mafHeavyGoodMin = value)
+    "mafHeavyGoodMax" -> copy(mafHeavyGoodMax = value)
+    "mapIdleGoodMin" -> copy(mapIdleGoodMin = value)
+    "mapIdleGoodMax" -> copy(mapIdleGoodMax = value)
+    "mapCruiseGoodMin" -> copy(mapCruiseGoodMin = value)
+    "mapCruiseGoodMax" -> copy(mapCruiseGoodMax = value)
+    "mapWotGoodMin" -> copy(mapWotGoodMin = value)
     "mapGoodMax" -> copy(mapGoodMax = value)
     "mapWarnMax" -> copy(mapWarnMax = value)
     "mapWotThrottleMin" -> copy(mapWotThrottleMin = value)

@@ -52,12 +52,15 @@ object HealthEvaluator {
                 MetricStatus(Health.GOOD, "CHARGING OK")
             volts >= t.battRunWarnMin && volts < t.battRunGoodMin ->
                 MetricStatus(Health.WARN, "LOW CHARGE")
-            volts < t.battRunWarnMin -> MetricStatus(Health.CRITICAL, "ALT WEAK")
+            volts >= t.battRunElevatedMin && volts < t.battRunWarnMin ->
+                MetricStatus(Health.ELEVATED, "WEAK CHARGE")
+            volts < t.battRunElevatedMin -> MetricStatus(Health.CRITICAL, "ALT WEAK")
             else -> MetricStatus(Health.WARN, "HIGH CHARGE")
         }
         else -> when {
-            volts > t.battRestGoodAbove -> MetricStatus(Health.GOOD, "RESTING OK")
+            volts >= t.battRestGoodAbove -> MetricStatus(Health.GOOD, "RESTING OK")
             volts >= t.battRestWarnAbove -> MetricStatus(Health.WARN, "WEAK REST")
+            volts >= t.battRestElevatedAbove -> MetricStatus(Health.ELEVATED, "LOW REST")
             else -> MetricStatus(Health.CRITICAL, "FLAT")
         }
     }
@@ -74,11 +77,11 @@ object HealthEvaluator {
         }
     }
 
-    fun engineLoad(pct: Double?, t: HealthThresholds = HealthThresholds.DEFAULT): MetricStatus = when {
-        pct == null -> MetricStatus.NS
-        pct <= t.loadGoodMax -> MetricStatus(Health.GOOD, "NORMAL")
-        pct <= t.loadWarnMax -> MetricStatus(Health.WARN, "HIGH")
-        else -> MetricStatus(Health.CRITICAL, "MAX")
+    /** Display only — no warning colours per diag spec. */
+    @Suppress("UNUSED_PARAMETER")
+    fun engineLoad(pct: Double?, t: HealthThresholds = HealthThresholds.DEFAULT): MetricStatus {
+        if (pct == null) return MetricStatus.NS
+        return MetricStatus(Health.GOOD, "NORMAL")
     }
 
     fun intakeAir(celsius: Double?, t: HealthThresholds = HealthThresholds.DEFAULT): MetricStatus = when {
@@ -100,23 +103,34 @@ object HealthEvaluator {
         gps: Double?,
         rpm: Double?,
         speedKmh: Double?,
+        throttlePct: Double? = null,
         t: HealthThresholds = HealthThresholds.DEFAULT,
     ): MetricStatus {
         if (gps == null) return MetricStatus.NS
-        val idle = (speedKmh ?: 0.0) < 2.0 && (rpm ?: 0.0) in 500.0..1200.0
-        return if (idle) {
-            when {
+        val spd = speedKmh ?: 0.0
+        val thr = throttlePct ?: 0.0
+        val idle = spd < 2.0 && (rpm ?: 0.0) in 500.0..1200.0
+        val heavy = thr >= 60.0 || gps >= t.mafHeavyGoodMin
+        return when {
+            idle -> when {
                 gps in t.mafIdleGoodMin..t.mafIdleGoodMax -> MetricStatus(Health.GOOD, "IDLE OK")
                 gps >= t.mafIdleWarnMin && gps < t.mafIdleGoodMin -> MetricStatus(Health.WARN, "LOW IDLE")
                 gps < t.mafIdleWarnMin -> MetricStatus(Health.CRITICAL, "VERY LOW")
                 gps <= t.mafIdleGoodMax + 4 -> MetricStatus(Health.WARN, "HIGH IDLE")
                 else -> MetricStatus(Health.ELEVATED, "HIGH")
             }
-        } else {
-            when {
+            heavy -> when {
+                gps in t.mafHeavyGoodMin..t.mafHeavyGoodMax -> MetricStatus(Health.GOOD, "HEAVY OK")
+                gps > t.mafHeavyGoodMax -> MetricStatus(Health.WARN, "HIGH")
+                gps < t.mafCruiseGoodMin -> MetricStatus(Health.WARN, "LOW LOAD")
+                else -> MetricStatus(Health.GOOD, "NORMAL")
+            }
+            else -> when {
+                // Cruise / light load
+                gps in t.mafCruiseGoodMin..t.mafCruiseGoodMax -> MetricStatus(Health.GOOD, "CRUISE OK")
                 gps < t.mafIdleWarnMin -> MetricStatus(Health.CRITICAL, "VERY LOW")
-                gps < t.mafIdleGoodMin && (speedKmh ?: 0.0) > 40 -> MetricStatus(Health.WARN, "LOW")
-                gps <= 120 -> MetricStatus(Health.GOOD, "NORMAL")
+                gps < t.mafCruiseGoodMin -> MetricStatus(Health.WARN, "LOW")
+                gps <= t.mafHeavyGoodMax -> MetricStatus(Health.GOOD, "NORMAL")
                 else -> MetricStatus(Health.WARN, "HIGH")
             }
         }
@@ -125,29 +139,52 @@ object HealthEvaluator {
     fun map(
         kpa: Double?,
         throttlePct: Double?,
+        rpm: Double? = null,
+        speedKmh: Double? = null,
         t: HealthThresholds = HealthThresholds.DEFAULT,
     ): MetricStatus {
         if (kpa == null) return MetricStatus.NS
         val thr = throttlePct ?: 0.0
+        val spd = speedKmh ?: 0.0
+        val idle = spd < 2.0 && (rpm ?: 0.0) in 500.0..1200.0
+        val wot = thr >= t.mapWotThrottleMin
         return when {
-            kpa < 20 -> MetricStatus(Health.WARN, "LOW VAC?")
-            kpa <= t.mapGoodMax -> MetricStatus(Health.GOOD, "NORMAL")
-            kpa <= t.mapWarnMax -> MetricStatus(Health.WARN, "RISING")
-            thr >= t.mapWotThrottleMin -> MetricStatus(Health.GOOD, "WOT OK")
-            else -> MetricStatus(Health.WARN, "HIGH MAP")
+            idle -> when {
+                kpa in t.mapIdleGoodMin..t.mapIdleGoodMax -> MetricStatus(Health.GOOD, "IDLE OK")
+                kpa < 20 -> MetricStatus(Health.WARN, "LOW VAC?")
+                kpa > t.mapIdleGoodMax + 10 -> MetricStatus(Health.WARN, "HIGH IDLE")
+                else -> MetricStatus(Health.WARN, "CHECK")
+            }
+            wot -> when {
+                kpa >= t.mapWotGoodMin -> MetricStatus(Health.GOOD, "WOT OK")
+                kpa >= t.mapWarnMax - 10 -> MetricStatus(Health.WARN, "LOW WOT")
+                else -> MetricStatus(Health.WARN, "CHECK WOT")
+            }
+            else -> when {
+                kpa in t.mapCruiseGoodMin..t.mapCruiseGoodMax -> MetricStatus(Health.GOOD, "CRUISE OK")
+                kpa < 20 -> MetricStatus(Health.WARN, "LOW VAC?")
+                kpa <= t.mapGoodMax -> MetricStatus(Health.GOOD, "NORMAL")
+                kpa <= t.mapWarnMax -> MetricStatus(Health.WARN, "RISING")
+                else -> MetricStatus(Health.WARN, "HIGH MAP")
+            }
         }
     }
 
+    /** Display only — no warning colours per diag spec. */
     fun throttle(pct: Double?): MetricStatus = when {
         pct == null -> MetricStatus.NS
         else -> MetricStatus(Health.GOOD, "NORMAL")
     }
 
+    /**
+     * Green: positive advance. Yellow: 0 to [timingRetardBelow] inclusive upper.
+     * Red: below [timingRetardBelow].
+     */
     fun timing(degrees: Double?, t: HealthThresholds = HealthThresholds.DEFAULT): MetricStatus = when {
         degrees == null -> MetricStatus.NS
-        degrees < t.timingRetardBelow -> MetricStatus(Health.CRITICAL, "RETARD")
-        degrees < t.timingLowBelow -> MetricStatus(Health.WARN, "LOW ADV")
-        else -> MetricStatus(Health.GOOD, "NORMAL")
+        degrees > t.timingLowBelow -> MetricStatus(Health.GOOD, "NORMAL")
+        degrees >= t.timingRetardBelow -> MetricStatus(Health.WARN, "LOW ADV")
+        else -> MetricStatus(Health.CRITICAL, "RETARD")
     }
 
     fun rpm(rpm: Double?, t: HealthThresholds = HealthThresholds.DEFAULT): MetricStatus = when {
@@ -212,6 +249,14 @@ object HealthEvaluator {
         }
     }
 
+    fun vehicleHealth(pct: Int?): MetricStatus = when {
+        pct == null -> MetricStatus.NS
+        pct >= 85 -> MetricStatus(Health.GOOD, "HEALTHY")
+        pct >= 70 -> MetricStatus(Health.WARN, "FAIR")
+        pct >= 50 -> MetricStatus(Health.ELEVATED, "POOR")
+        else -> MetricStatus(Health.CRITICAL, "CRITICAL")
+    }
+
     fun forTransmissionLabel(
         label: String,
         valueText: String,
@@ -224,6 +269,7 @@ object HealthEvaluator {
                 (l.contains("fluid") && l.contains("temp")) -> atfTemp(v, t)
             l.contains("slip") -> tcSlip(v, t)
             l.contains("lock") -> lockUp(valueText)
+            l.contains("fuel system") || l.contains("fuel loop") -> fuelSystem(valueText, null)
             else -> null
         }
     }

@@ -53,9 +53,10 @@ object HealthScoreCalculator {
         }
 
         val running = (snapshot.rpm ?: 0.0) > 0
-        when (HealthEvaluator.battery(snapshot.batteryVolts, running, thresholds).health) {
-            Health.WARN -> deductE(6, "Charging voltage low — check belt / battery health")
-            Health.ELEVATED -> deductE(10, "Charging voltage high — check regulator")
+        val battStatus = HealthEvaluator.battery(snapshot.batteryVolts, running, thresholds)
+        when (battStatus.health) {
+            Health.WARN -> deductE(6, "Battery ${battStatus.label} — check charging system")
+            Health.ELEVATED -> deductE(10, "Battery ${battStatus.label} — check alternator / battery")
             Health.CRITICAL -> deductE(22, "Possible alternator issue. Check charging system.")
             else -> {}
         }
@@ -70,6 +71,22 @@ object HealthScoreCalculator {
         }
         trimNote("STFT", HealthEvaluator.fuelTrim(snapshot.stftPct, thresholds))
         trimNote("LTFT", HealthEvaluator.fuelTrim(snapshot.ltftPct, thresholds))
+
+        when (HealthEvaluator.fuelSystem(snapshot.fuelSystemStatus, snapshot.coolantC).health) {
+            Health.WARN -> deductE(5, "Open loop while warm — check O2 sensors / ECT / enrichment")
+            else -> {}
+        }
+
+        when (HealthEvaluator.intakeAir(snapshot.intakeC, thresholds).health) {
+            Health.CRITICAL -> deductE(8, "Intake air very hot — heat soak or IAT sensor")
+            Health.WARN -> deductE(3, "Intake air warm")
+            else -> {}
+        }
+        when (HealthEvaluator.timing(snapshot.timingAdvance, thresholds).health) {
+            Health.CRITICAL -> deductE(10, "Ignition retarded — knock / timing issue possible")
+            Health.WARN -> deductE(3, "Ignition advance low")
+            else -> {}
+        }
 
         if (storedDtcCount > 0) {
             deductE((storedDtcCount * 8).coerceAtMost(30), "$storedDtcCount stored DTC(s) — open DIAG → Faults")

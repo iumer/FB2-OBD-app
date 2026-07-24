@@ -20,6 +20,8 @@ data class VehicleSnapshot(
     val stftPct: Double? = null,
     val ltftPct: Double? = null,
     val batteryVolts: Double? = null,
+    /** Decoded PID 0103 text, e.g. CLOSED LOOP / OPEN LOOP. */
+    val fuelSystemStatus: String? = null,
     val gear: Int? = null,
     val gearSource: GearSource = GearSource.NONE,
     /** 0–99 confidence when [gearSource] is ESTIMATED; null for ECU / none. */
