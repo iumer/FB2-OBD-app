@@ -12,6 +12,7 @@ import com.fb2.obd.data.ObdLogger
 import com.fb2.obd.data.ObdSource
 import com.fb2.obd.data.SavedLogFile
 import com.fb2.obd.data.SessionLogStore
+import com.fb2.obd.data.VoiceAlerter
 import com.fb2.obd.obd.ColdStartIdleCatalog
 import com.fb2.obd.obd.DeepSearchReport
 import com.fb2.obd.obd.DeepSensorSearch
@@ -62,6 +63,7 @@ data class SettingsState(
     val valueLogging: Boolean = false,
     val showEstimatedGear: Boolean = true,
     val fuelPricePerLiter: Double = 280.0,
+    val voiceAlerts: Boolean = true,
 )
 
 /** Diagnostic trouble code state for the Faults screen. */
@@ -170,6 +172,10 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
     private val thresholdStore = HealthThresholdStore(File(filesDir, "health_thresholds.json"))
     private val _healthThresholds = MutableStateFlow(HealthThresholds.DEFAULT)
     val healthThresholds: StateFlow<HealthThresholds> = _healthThresholds.asStateFlow()
+
+    private val voiceAlerter = VoiceAlerter(app)
+    private var lastAtfForVoice: Double? = null
+    private var lastSlipForVoice: Double? = null
 
     private val _hondaScan = MutableStateFlow<List<ModuleScanResult>>(emptyList())
     val hondaScan: StateFlow<List<ModuleScanResult>> = _hondaScan.asStateFlow()
@@ -297,6 +303,8 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
         tripComputer.fuelPricePerLiter = _settings.value.fuelPricePerLiter
         _maintenance.value = MaintenanceStore(File(filesDir, "maintenance.json")).load()
         _healthThresholds.value = thresholdStore.load()
+        voiceAlerter.enabled = _settings.value.voiceAlerts
+        voiceAlerter.start()
         _custom.update {
             it.copy(selectedIds = StandardPidCatalog.fuelPageDefaults().map { p -> p.id }.toSet())
         }
@@ -528,6 +536,15 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
         _settings.update { it.copy(showEstimatedGear = enabled) }
     }
 
+    fun setVoiceAlerts(enabled: Boolean) {
+        _settings.update { it.copy(voiceAlerts = enabled) }
+        voiceAlerter.enabled = enabled
+        if (enabled) {
+            voiceAlerter.start()
+            voiceAlerter.speakTest("Voice alerts on")
+        }
+    }
+
     /** Cancel the active OBD source (closes ELM socket) and mark offline. */
     fun disconnect() {
         if (_settings.value.valueLogging) {
@@ -585,6 +602,12 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
                 _health.update {
                     scoreHealth(snapshot = snapshot)
                 }
+                voiceAlerter.onSnapshot(
+                    snapshot = snapshot,
+                    thresholds = _healthThresholds.value,
+                    atfC = lastAtfForVoice,
+                    tcSlipRpm = lastSlipForVoice,
+                )
                 _uiState.update {
                     it.copy(
                         snapshot = snapshot,
@@ -747,6 +770,8 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
             }
             val atf = results.find { it.pid.label.startsWith("ATF") && it.supported }?.sample
             val slip = results.find { it.pid.label.contains("slip", true) && it.supported }?.sample
+            lastAtfForVoice = atf
+            lastSlipForVoice = slip
             _health.update {
                 scoreHealth(atfC = atf, tcSlipRpm = slip)
             }
@@ -848,6 +873,7 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
         collectJob = null
         currentSource = null
         MaintenanceStore(File(filesDir, "maintenance.json")).save(_maintenance.value)
+        voiceAlerter.shutdown()
         super.onCleared()
     }
 }

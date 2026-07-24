@@ -273,6 +273,7 @@ class MainActivity : ComponentActivity() {
                     Screen.SETTINGS -> SettingsScreen(
                         settings = settings,
                         onToggleEstimatedGear = viewModel::setShowEstimatedGear,
+                        onToggleVoiceAlerts = viewModel::setVoiceAlerts,
                         nav = settingsNav,
                         onBack = { screen = Screen.DASHBOARD },
                         modifier = Modifier.fillMaxSize(),
