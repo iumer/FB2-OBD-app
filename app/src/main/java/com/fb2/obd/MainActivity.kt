@@ -51,6 +51,7 @@ import com.fb2.obd.ui.theme.Background
 import com.fb2.obd.ui.theme.TextPrimary
 import com.fb2.obd.data.DemoObdSource
 import com.fb2.obd.data.Elm327BluetoothSource
+import com.fb2.obd.data.LogExportHelper
 import com.fb2.obd.data.ObdLogger
 import com.fb2.obd.data.SavedLogFile
 import com.fb2.obd.obd.LiveSnapshotOverlay
@@ -476,35 +477,9 @@ class MainActivity : ComponentActivity() {
             val out = File(dir, "${safeName}.txt")
             val body = text.ifBlank { "(empty log)" }
             out.writeText(body)
-            val uri = FileProvider.getUriForFile(
-                this,
-                "${packageName}.fileprovider",
-                out,
-            )
-            val intent = Intent(Intent.ACTION_SEND).apply {
-                type = "text/plain"
-                putExtra(Intent.EXTRA_STREAM, uri)
-                putExtra(Intent.EXTRA_SUBJECT, subject)
-                // Some targets only read EXTRA_TEXT — keep a short preview + file stream.
-                putExtra(Intent.EXTRA_TEXT, body.take(4000))
-                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                clipData = android.content.ClipData.newUri(contentResolver, subject, uri)
-            }
-            // Grant every resolver so WhatsApp / Drive / Files don't get SecurityException.
-            packageManager.queryIntentActivities(intent, 0).forEach { ri ->
-                grantUriPermission(
-                    ri.activityInfo.packageName,
-                    uri,
-                    Intent.FLAG_GRANT_READ_URI_PERMISSION,
-                )
-            }
-            val chooser = Intent.createChooser(intent, subject).apply {
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            }
-            startActivity(chooser)
-            toast("Opening share sheet…")
+            shareOrExportFile(out, "${safeName}.txt", "text/plain", subject)
         } catch (e: Exception) {
-            toast("Share failed: ${e.message ?: "no app"}")
+            toast("Export failed: ${e.message ?: "error"}")
         }
     }
 
@@ -515,7 +490,7 @@ class MainActivity : ComponentActivity() {
             toast("Could not find ${file.fileName}")
             return
         }
-        shareFileUri(disk, file.fileName)
+        shareOrExportFile(disk, file.fileName, "text/csv", file.fileName)
     }
 
     /**
@@ -527,13 +502,23 @@ class MainActivity : ComponentActivity() {
             val dir = File(cacheDir, "share").also { it.mkdirs() }
             val out = File(dir, fileName)
             out.writeText(csv)
-            shareFileUri(out, fileName)
+            shareOrExportFile(out, fileName, "text/csv", fileName)
         } catch (e: Exception) {
-            toast("Share failed: ${e.message ?: "write error"}")
+            toast("Export failed: ${e.message ?: "write error"}")
         }
     }
 
-    private fun shareFileUri(file: File, displayName: String) {
+    /**
+     * Prefer the system share sheet when a target exists; on bare car HUs
+     * ("No apps can perform this action") save into Downloads/FB2-Diag +
+     * app Documents/exports and show the path.
+     */
+    private fun shareOrExportFile(
+        file: File,
+        displayName: String,
+        mime: String,
+        subject: String = displayName,
+    ) {
         try {
             val uri = FileProvider.getUriForFile(
                 this,
@@ -541,9 +526,9 @@ class MainActivity : ComponentActivity() {
                 file,
             )
             val intent = Intent(Intent.ACTION_SEND).apply {
-                type = "text/csv"
+                type = mime
                 putExtra(Intent.EXTRA_STREAM, uri)
-                putExtra(Intent.EXTRA_SUBJECT, displayName)
+                putExtra(Intent.EXTRA_SUBJECT, subject)
                 putExtra(Intent.EXTRA_TEXT, "FB2 Diag log: $displayName")
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                 clipData = android.content.ClipData.newUri(contentResolver, displayName, uri)
@@ -555,13 +540,41 @@ class MainActivity : ComponentActivity() {
                     Intent.FLAG_GRANT_READ_URI_PERMISSION,
                 )
             }
-            val chooser = Intent.createChooser(intent, "Share $displayName").apply {
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            if (LogExportHelper.hasShareTargets(this, intent)) {
+                val chooser = Intent.createChooser(intent, "Share $displayName").apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                startActivity(chooser)
+                toast("Opening share sheet…")
+                return
             }
-            startActivity(chooser)
-            toast("Opening share sheet…")
+        } catch (_: android.content.ActivityNotFoundException) {
+            // Fall through to file export.
         } catch (e: Exception) {
-            toast("Share failed: ${e.message ?: "no app"}")
+            ObdLogger.logDebug(ObdLogger.Dir.INFO, "Share intent failed: ${e.message}")
+        }
+        exportFileFallback(file, displayName, mime)
+    }
+
+    private fun exportFileFallback(file: File, displayName: String, mime: String) {
+        try {
+            val result = LogExportHelper.exportFile(this, file, displayName, mime)
+            val clip = result.absolutePath ?: result.displayPath
+            LogExportHelper.copyToClipboard(this, "FB2 log path", clip)
+            android.app.AlertDialog.Builder(this)
+                .setTitle("Log saved (no share apps)")
+                .setMessage(
+                    "This head unit has no WhatsApp / Files / email to share to.\n\n" +
+                        "Saved here:\n${result.displayPath}\n\n" +
+                        "Path copied to clipboard. Pull the file via USB " +
+                        "(Android/data/…/files/Documents/exports) or check Downloads/FB2-Diag.",
+                )
+                .setPositiveButton("OK", null)
+                .show()
+            toast("Saved to Downloads/FB2-Diag (path copied)")
+            ObdLogger.logDebug(ObdLogger.Dir.INFO, "Log exported: ${result.displayPath}")
+        } catch (e: Exception) {
+            toast("Save failed: ${e.message ?: "error"}")
         }
     }
 

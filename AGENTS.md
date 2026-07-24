@@ -95,8 +95,10 @@ non-obvious cloud specifics.
   section — independent of the continuous value LOG toggle.
 - **Value LOG** captures **main Dash only** (hero RPM/Speed/Gear + Dash tiles
   including any `+` extras). It does **not** dump Fuel/Trip/Trans/Perf/etc.
-  Saved CSVs are lean (`events` + `dashboard_snapshots` + `dash_tiles`) so Share
-  works via FileProvider. Share opens the system chooser (WhatsApp / Drive / email).
+  Saved CSVs are lean (`events` + `dashboard_snapshots` + `dash_tiles`).
+  **Share/Save:** if the unit has share targets, open the chooser; otherwise
+  `LogExportHelper` writes `Downloads/FB2-Diag/` + `Documents/exports/` and
+  shows a path dialog (clipboard copy) — bare HUs have no WhatsApp/Files.
 - **ELM idle drop:** cheap clones often hang mid-poll. The app uses short PID
   timeouts (~650 ms poll / ~450 ms probe), skips repeatedly-failing PIDs, keeps
   last-good Dash values, and retries RFCOMM forever with backoff (UI shows

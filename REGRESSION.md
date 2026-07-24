@@ -21,8 +21,8 @@ Keep these fixed. If a change might touch one of these areas, re-verify it.
 | I06 | Suspicion wrong PID/protocol for other sensors | Partially | Compare vs Torque trackLog; LTFT missing in **both** apps (ECU). Re-check if new mismatches appear |
 | I07 | Rough Idle page stuck on “Probing…” | Fixed | Live Dash prefill; Mode 01 first; skip Mode 22 if bus unhealthy; shorter probe timeout |
 | I08 | App very laggy / slow | Fixed | Timeouts ~650/450 ms; core-PID-only while recovering; less ATSP thrash |
-| I09 | Debug log Share does nothing | Fixed | FileProvider + URI grants to resolvers + toast |
-| I10 | Value LOG Share broken / truncated (large CSV as EXTRA_TEXT) | Fixed | FileProvider CSV share for session logs |
+| I09 | Debug log Share does nothing | Fixed | FileProvider share; HU fallback → Downloads/FB2-Diag + path dialog |
+| I10 | Value LOG Share broken / truncated (large CSV as EXTRA_TEXT) | Fixed | FileProvider CSV share; same HU save fallback |
 | I11 | Voice alerts must keep working with screen off (real ELM) | Fixed | `ObdMonitorForegroundService` + wake lock + AudioFocus |
 | I12 | Android Auto sideload not showing on real HU | Documented | Needs Play Internal testing/sharing; DHU for desk — see `AGENTS.md` |
 | I13 | LOG should be main Dash only (not Fuel/Trip/Trans dumps) | Fixed | Lean CSV: events + dashboard_snapshots + dash_tiles |
@@ -38,6 +38,7 @@ Keep these fixed. If a change might touch one of these areas, re-verify it.
 | I23 | MIN toast shows but bubble missing on Home | Fixed | FGS + attach/READY before `moveTaskToBack`; clamp on-screen |
 | I24 | Dash text too small to read while driving on HU | Fixed | `DashType` larger hero/tiles; fewer wider columns |
 | I25 | Floating bubble ring too small on HU | Fixed | Center 96dp / satellites 112dp / ring ~460dp; larger text |
+| I26 | Log Share shows “No apps can perform this action” on HU | Fixed | Detect no SEND targets → save Downloads/FB2-Diag + Documents/exports |
 
 When the user reports a **new** bug, add a new `Ixx` row here (Status: Open → Fixed)
 and add a matching automated or manual check in sections 2–3.
@@ -89,8 +90,8 @@ touches ELM, Dash health, deep search, logging, or share:
 3. **Idle stability** — leave idling several minutes; Dash stays populated; on drop chip shows `RETRY` and auto-recovers without tapping.
 4. **Deep analysis (Battery)** — triple-tap Battery when n/s (or after a glitch) → should recover via ATRV when adapter is powered.
 5. **Rough Idle page** — opens with live values quickly; does not hang on Probing if bus is unhealthy.
-6. **Debug log Share** — Settings → Debug log → Share → system chooser appears (toast “Opening share sheet…”).
-7. **Value LOG Share** — stop a LOG session → share CSV via chooser.
+6. **Debug log Share/Save** — Settings → Debug log → Share/Save. On phone: chooser. On bare HU: dialog with saved path under `Downloads/FB2-Diag` (path copied).
+7. **Value LOG Share/Save** — stop a LOG session → Share/Save current or Save a listed file (same HU fallback).
 8. **Screen off alerts** — real ELM connected → sticky notification present; with voice alerts on, a critical condition still speaks after screen off.
 9. **Floating bubble (MIN)** — grant overlay permission → MIN → collapsed circle appears; drag works; tap expands **radial ring** (up to 5 live values around center); vertical swipe pages next/previous groups; idle ~6s auto-collapses to circle; tap center collapses; hold opens app. **Back → Exit & disconnect** must remove the bubble entirely. (On Dellson: verify over CarPlay if used.)
 10. **Car HU layout (automated)** — Paparazzi at 1024×600, 1280×720, 1920×720 in `CarHuSnapshotTest` / `CarHuBubbleSnapshotTest` (collapsed + radial expanded). Adaptive column counts for Dash/dense pages.
