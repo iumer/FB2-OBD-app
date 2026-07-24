@@ -20,7 +20,7 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import com.fb2.obd.MainActivity
 import com.fb2.obd.car.CarDashState
-import com.fb2.obd.car.CarDashTile
+import com.fb2.obd.car.FloatingDashMetrics
 import com.fb2.obd.car.VehicleLiveStore
 import com.fb2.obd.data.ObdLogger
 import kotlinx.coroutines.CoroutineScope
@@ -53,7 +53,7 @@ class FloatingDashOverlayService : Service() {
     private var expanded = false
     private var metricIndex = 0
     private var latest: CarDashState = CarDashState()
-    private var metrics: List<OverlayMetric> = emptyList()
+    private var metrics: List<FloatingDashMetrics.Metric> = emptyList()
 
     // Collapsed views
     private lateinit var bubble: TextView
@@ -75,7 +75,7 @@ class FloatingDashOverlayService : Service() {
         collectJob = scope.launch {
             VehicleLiveStore.dash.collectLatest { state ->
                 latest = state
-                metrics = buildMetrics(state)
+                metrics = FloatingDashMetrics.from(state)
                 if (metricIndex >= metrics.size) metricIndex = 0
                 render()
             }
@@ -297,14 +297,14 @@ class FloatingDashOverlayService : Service() {
         root = container
         params = lp
         windowManager.addView(container, lp)
-        metrics = buildMetrics(VehicleLiveStore.dash.value)
+        metrics = FloatingDashMetrics.from(VehicleLiveStore.dash.value)
         latest = VehicleLiveStore.dash.value
         render()
     }
 
     private fun render() {
         if (metrics.isEmpty()) {
-            metrics = listOf(OverlayMetric("Dash", "--", "", null, "WAITING"))
+            metrics = listOf(FloatingDashMetrics.Metric("Dash", "--", "", null, "WAITING"))
         }
         val m = metrics[metricIndex.coerceIn(0, metrics.lastIndex)]
         val color = healthColor(m.health)
@@ -324,8 +324,9 @@ class FloatingDashOverlayService : Service() {
             statusView.text = m.status ?: m.health ?: "—"
             statusView.setTextColor(color)
             indexView.text = "${metricIndex + 1} / ${metrics.size}  ·  ${latest.statusLine}"
-            panel.background = roundRectDrawable(COLOR_SURFACE, (16 * resources.displayMetrics.density).roundToInt())
-                .also { (it as GradientDrawable).setStroke((2 * resources.displayMetrics.density).roundToInt(), color) }
+            panel.background = roundRectDrawable(COLOR_SURFACE, (16 * resources.displayMetrics.density).roundToInt()).apply {
+                setStroke((2 * resources.displayMetrics.density).roundToInt(), color)
+            }
         } else {
             panel.visibility = View.GONE
             bubble.visibility = View.VISIBLE
@@ -342,24 +343,6 @@ class FloatingDashOverlayService : Service() {
         startActivity(launch)
         expanded = false
         render()
-    }
-
-    private fun buildMetrics(state: CarDashState): List<OverlayMetric> {
-        val hero = listOf(
-            OverlayMetric("RPM", state.rpm, "", heroHealth(state), null),
-            OverlayMetric("Speed", state.speedKmh, "km/h", heroHealth(state), null),
-            OverlayMetric("Gear", state.gear, state.gearBadge, heroHealth(state), null),
-        )
-        val tiles = state.tiles.map { it.toMetric() }
-        return hero + tiles
-    }
-
-    private fun CarDashTile.toMetric() = OverlayMetric(label, value, unit, health, status)
-
-    private fun heroHealth(state: CarDashState): String? {
-        // Bubble rim uses worst tile health so criticals stand out even on RPM view.
-        val order = listOf("CRITICAL", "ELEVATED", "WARN", "COLD", "GOOD", "UNKNOWN")
-        return state.tiles.mapNotNull { it.health }.minByOrNull { order.indexOf(it).let { i -> if (i < 0) 99 else i } }
     }
 
     private fun healthColor(health: String?): Int = when (health) {
@@ -384,14 +367,6 @@ class FloatingDashOverlayService : Service() {
             cornerRadius = radius.toFloat()
             setColor(fill)
         }
-
-    private data class OverlayMetric(
-        val label: String,
-        val value: String,
-        val unit: String,
-        val health: String?,
-        val status: String?,
-    )
 
     companion object {
         private const val PREFS = "floating_dash"
