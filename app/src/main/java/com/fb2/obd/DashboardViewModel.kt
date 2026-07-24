@@ -41,6 +41,7 @@ import com.fb2.obd.obd.isEffectivelyBlank
 import com.fb2.obd.obd.withField
 import com.fb2.obd.perf.AccelResult
 import com.fb2.obd.perf.AccelerationTimer
+import com.fb2.obd.service.ObdMonitorForegroundService
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -188,6 +189,9 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
     private var lastSlipForVoice: Double? = null
     private var lastLiveSnapshotMs: Long = 0L
     private var staleWatchJob: Job? = null
+    /** True while [ObdMonitorForegroundService] is expected to be running for a live ELM session. */
+    private var elmMonitorActive: Boolean = false
+    private var elmMonitorStatus: String? = null
 
     private val _hondaScan = MutableStateFlow<List<ModuleScanResult>>(emptyList())
     val hondaScan: StateFlow<List<ModuleScanResult>> = _hondaScan.asStateFlow()
@@ -538,6 +542,7 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
         collectJob?.cancel()
         collectJob = null
         currentSource = null
+        stopElmMonitor()
         eventTracker.onConnection(ConnectionState.DISCONNECTED, false, "")
         eventTracker.reset()
         _uiState.update {
@@ -560,6 +565,10 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
         staleWatchJob?.cancel()
         collectJob?.cancel()
         currentSource = source
+        // Demo / non-live: drop the connected-device FGS. Live ELM starts it on first frame.
+        if (!source.isLive) {
+            stopElmMonitor()
+        }
         eventTracker.reset()
         _faults.update { FaultsState() }
         _uiState.update {
@@ -635,6 +644,9 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
                     source.isLive,
                     source.name,
                 )
+                if (source.isLive) {
+                    ensureElmMonitor(ObdMonitorForegroundService.STATUS_LIVE)
+                }
                 publishCarDash()
                 // Sample main Dash only into the session CSV.
                 if (ObdLogger.valueLoggingEnabled) {
@@ -653,6 +665,10 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
                         reconnecting = false,
                         lastError = msg,
                     )
+                }
+                // Permanent failure of the live session (retryWhen aborted) — drop FGS.
+                if (source.isLive) {
+                    stopElmMonitor()
                 }
                 publishCarDash()
             }
@@ -677,6 +693,7 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
                                 connection = ConnectionState.CONNECTING,
                             )
                         }
+                        ensureElmMonitor(ObdMonitorForegroundService.STATUS_RETRY)
                         publishCarDash()
                     }
                 }
@@ -705,6 +722,33 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
                 delay(12_000L)
             }
         }
+    }
+
+    private fun ensureElmMonitor(status: String) {
+        val app = getApplication<Application>()
+        if (!elmMonitorActive) {
+            // First successful live connect — sticky "ELM connected".
+            ObdMonitorForegroundService.start(app, ObdMonitorForegroundService.STATUS_CONNECTED)
+            elmMonitorActive = true
+            elmMonitorStatus = ObdMonitorForegroundService.STATUS_CONNECTED
+            return
+        }
+        // Keep "ELM connected" until a RETRY cycle; then flip LIVE ↔ RETRY.
+        if (status == ObdMonitorForegroundService.STATUS_LIVE &&
+            elmMonitorStatus == ObdMonitorForegroundService.STATUS_CONNECTED
+        ) {
+            return
+        }
+        if (elmMonitorStatus == status) return
+        ObdMonitorForegroundService.updateStatus(app, status)
+        elmMonitorStatus = status
+    }
+
+    private fun stopElmMonitor() {
+        if (!elmMonitorActive && elmMonitorStatus == null) return
+        ObdMonitorForegroundService.stop(getApplication())
+        elmMonitorActive = false
+        elmMonitorStatus = null
     }
 
     fun readFaults() {
@@ -1021,6 +1065,7 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
         collectJob?.cancel()
         collectJob = null
         currentSource = null
+        stopElmMonitor()
         MaintenanceStore(File(filesDir, "maintenance.json")).save(_maintenance.value)
         VehicleLiveStore.onToggleLogging = null
         VehicleLiveStore.onConnectRequest = null

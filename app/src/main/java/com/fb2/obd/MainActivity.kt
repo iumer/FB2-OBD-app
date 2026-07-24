@@ -163,7 +163,7 @@ class MainActivity : ComponentActivity() {
                             onReady = { devices = it; showConnect = true },
                         )
                     } else {
-                        toast("Bluetooth permission is required to connect to the ELM327")
+                        toast("Bluetooth and notification permissions are required for ELM327 monitoring")
                     }
                 }
 
@@ -519,12 +519,18 @@ class MainActivity : ComponentActivity() {
         Toast.makeText(this, message, Toast.LENGTH_LONG).show()
     }
 
-    private fun requiredBtPermissions(): List<String> =
+    private fun requiredBtPermissions(): List<String> {
+        val perms = mutableListOf<String>()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            listOf(Manifest.permission.BLUETOOTH_CONNECT, Manifest.permission.BLUETOOTH_SCAN)
-        } else {
-            emptyList()
+            perms += Manifest.permission.BLUETOOTH_CONNECT
+            perms += Manifest.permission.BLUETOOTH_SCAN
         }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            // Needed for the ELM connected-device foreground notification.
+            perms += Manifest.permission.POST_NOTIFICATIONS
+        }
+        return perms
+    }
 
     private fun bluetoothAdapter(): BluetoothAdapter? =
         (getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager)?.adapter

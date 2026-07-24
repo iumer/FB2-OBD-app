@@ -19,6 +19,13 @@
         android:name="android.permission.ACCESS_COARSE_LOCATION"
         android:maxSdkVersion="30" />
 
+    <!-- Keep voice alerts alive with screen off while ELM is connected -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+
     <uses-feature
         android:name="android.hardware.bluetooth"
         android:required="false" />
@@ -62,6 +69,12 @@
                 <category android:name="androidx.car.app.category.IOT" />
             </intent-filter>
         </service>
+
+        <!-- Holds wake lock + sticky notification while a real ELM327 session is active. -->
+        <service
+            android:name=".service.ObdMonitorForegroundService"
+            android:exported="false"
+            android:foregroundServiceType="connectedDevice" />
 
         <!-- Share saved / current CSV logs via WhatsApp, Drive, email, etc. -->
         <provider

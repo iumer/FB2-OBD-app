@@ -1,6 +1,10 @@
 package com.fb2.obd.data
 
 import android.content.Context
+import android.media.AudioAttributes
+import android.media.AudioDeviceInfo
+import android.media.AudioFocusRequest
+import android.media.AudioManager
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import com.fb2.obd.obd.HealthThresholds
@@ -14,15 +18,29 @@ import java.util.concurrent.atomic.AtomicBoolean
  * engine (works offline — no downloaded voice packs required).
  *
  * Same alert key is not repeated more often than [cooldownMs].
+ *
+ * Audio: requests transient focus and uses
+ * [AudioAttributes.USAGE_ASSISTANCE_NAVIGATION_GUIDANCE] so alerts prefer the
+ * car Bluetooth path (A2DP) when connected; falls back to SCO for voice-capable
+ * kits, otherwise the phone speaker.
  */
 class VoiceAlerter(context: Context) : TextToSpeech.OnInitListener {
 
     private val appContext = context.applicationContext
+    private val audioManager =
+        appContext.getSystemService(Context.AUDIO_SERVICE) as AudioManager
     private var tts: TextToSpeech? = null
     private val ready = AtomicBoolean(false)
     private val speaking = AtomicBoolean(false)
     private val lastSpokenAt = mutableMapOf<String, Long>()
     private val lastHealth = mutableMapOf<String, String>()
+    private var focusRequest: AudioFocusRequest? = null
+    private var scoStartedByUs = false
+
+    private val speechAttrs: AudioAttributes = AudioAttributes.Builder()
+        .setUsage(AudioAttributes.USAGE_ASSISTANCE_NAVIGATION_GUIDANCE)
+        .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+        .build()
 
     @Volatile
     var enabled: Boolean = true
@@ -48,6 +66,7 @@ class VoiceAlerter(context: Context) : TextToSpeech.OnInitListener {
             engine.language = Locale.getDefault()
         }
         engine.setSpeechRate(0.95f)
+        engine.setAudioAttributes(speechAttrs)
         engine.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
             override fun onStart(utteranceId: String?) {
                 speaking.set(true)
@@ -55,11 +74,13 @@ class VoiceAlerter(context: Context) : TextToSpeech.OnInitListener {
 
             override fun onDone(utteranceId: String?) {
                 speaking.set(false)
+                releaseAudioAfterSpeak()
             }
 
             @Deprecated("Deprecated in Java")
             override fun onError(utteranceId: String?) {
                 speaking.set(false)
+                releaseAudioAfterSpeak()
             }
         })
         ready.set(true)
@@ -112,7 +133,74 @@ class VoiceAlerter(context: Context) : TextToSpeech.OnInitListener {
         lastSpokenAt[key] = nowMs
         lastHealth[key] = phrase
         ObdLogger.logDebug(ObdLogger.Dir.INFO, "VOICE ALERT: $phrase")
-        engine.speak(phrase, TextToSpeech.QUEUE_FLUSH, null, key)
+        prepareAudioForSpeak()
+        val spoken = engine.speak(phrase, TextToSpeech.QUEUE_FLUSH, null, key)
+        if (spoken != TextToSpeech.SUCCESS) {
+            speaking.set(false)
+            releaseAudioAfterSpeak()
+        }
+    }
+
+    /** Request focus and prefer BT car audio when available. */
+    private fun prepareAudioForSpeak() {
+        requestAudioFocus()
+        preferBluetoothRoute()
+    }
+
+    private fun requestAudioFocus() {
+        val req = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK)
+            .setAudioAttributes(speechAttrs)
+            .setOnAudioFocusChangeListener { /* keep utterance going */ }
+            .setAcceptsDelayedFocusGain(false)
+            .build()
+        focusRequest = req
+        val result = audioManager.requestAudioFocus(req)
+        if (result != AudioManager.AUDIOFOCUS_REQUEST_GRANTED) {
+            ObdLogger.logDebug(ObdLogger.Dir.INFO, "Voice alerts: audio focus not granted ($result)")
+        }
+    }
+
+    /**
+     * Prefer car Bluetooth when A2DP or SCO is connected.
+     * A2DP: navigation usage usually routes via the media/BT path automatically.
+     * SCO-only kits: start SCO so TTS leaves the phone speaker.
+     */
+    private fun preferBluetoothRoute() {
+        val devices = audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
+        val hasA2dp = devices.any { it.type == AudioDeviceInfo.TYPE_BLUETOOTH_A2DP }
+        val hasScoDevice = devices.any { it.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO }
+        if (hasA2dp) {
+            // System routes USAGE_ASSISTANCE_NAVIGATION_GUIDANCE over A2DP when present.
+            ObdLogger.logDebug(ObdLogger.Dir.INFO, "Voice alerts: BT A2DP available")
+            return
+        }
+        if (!hasScoDevice && !audioManager.isBluetoothScoAvailableOffCall) return
+        if (scoStartedByUs || audioManager.isBluetoothScoOn) return
+        runCatching {
+            audioManager.startBluetoothSco()
+            @Suppress("DEPRECATION")
+            audioManager.isBluetoothScoOn = true
+            scoStartedByUs = true
+            ObdLogger.logDebug(ObdLogger.Dir.INFO, "Voice alerts: BT SCO started")
+        }.onFailure {
+            ObdLogger.logDebug(ObdLogger.Dir.INFO, "Voice alerts: BT SCO failed (${it.message})")
+            scoStartedByUs = false
+        }
+    }
+
+    private fun releaseAudioAfterSpeak() {
+        focusRequest?.let { req ->
+            audioManager.abandonAudioFocusRequest(req)
+        }
+        focusRequest = null
+        if (scoStartedByUs) {
+            runCatching {
+                @Suppress("DEPRECATION")
+                audioManager.isBluetoothScoOn = false
+                audioManager.stopBluetoothSco()
+            }
+            scoStartedByUs = false
+        }
     }
 
     fun shutdown() {
@@ -120,5 +208,6 @@ class VoiceAlerter(context: Context) : TextToSpeech.OnInitListener {
         tts?.stop()
         tts?.shutdown()
         tts = null
+        releaseAudioAfterSpeak()
     }
 }
