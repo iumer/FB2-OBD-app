@@ -18,7 +18,7 @@ class CarDashBuilderTest {
             snapshot = VehicleSnapshot(
                 rpm = 2100.0,
                 speedKmh = 72.0,
-                coolantC = 92.0,
+                coolantC = 85.0,
                 batteryVolts = 14.2,
                 gear = 3,
                 gearSource = GearSource.ESTIMATED,
@@ -38,7 +38,12 @@ class CarDashBuilderTest {
         assertEquals("2100", state.rpm)
         assertEquals("72", state.speedKmh)
         assertEquals("3", state.gear)
-        assertTrue(state.tiles.any { it.label == "Coolant 1" && it.value == "92" })
+        assertTrue(state.tiles.any { it.label == "Coolant 1" && it.value == "85" })
+        val coolant = state.tiles.first { it.label == "Coolant 1" }
+        assertEquals("NORMAL", coolant.status)
+        assertEquals("GOOD", coolant.health)
+        val battery = state.tiles.first { it.label == "Battery" }
+        assertEquals("GOOD", battery.health)
         assertEquals("CONNECT", state.connectLabel) // demo is not live ELM
         assertTrue(state.statusLine.contains("DEMO"))
     }

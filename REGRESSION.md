@@ -30,6 +30,7 @@ Keep these fixed. If a change might touch one of these areas, re-verify it.
 | I15 | Health colours / long-press threshold editor | Fixed | `HealthThresholds` + store |
 | I16 | Fuel Open/Closed Loop on Dash | Fixed | PID `0103` |
 | I17 | Always-on event logging (`# events`) | Fixed | `DiagnosticEventTracker` |
+| I18 | Floating minimize bubble over CarPlay / other apps | Fixed | `FloatingDashOverlayService` + Dash **MIN** chip; needs overlay permission |
 
 When the user reports a **new** bug, add a new `Ixx` row here (Status: Open → Fixed)
 and add a matching automated or manual check in sections 2–3.
@@ -84,7 +85,8 @@ touches ELM, Dash health, deep search, logging, or share:
 6. **Debug log Share** — Settings → Debug log → Share → system chooser appears (toast “Opening share sheet…”).
 7. **Value LOG Share** — stop a LOG session → share CSV via chooser.
 8. **Screen off alerts** — real ELM connected → sticky notification present; with voice alerts on, a critical condition still speaks after screen off.
-9. **Android Auto** — phone UI / DHU only unless installed via Play Internal testing.
+9. **Floating bubble (MIN)** — grant overlay permission → MIN → bubble appears; drag works; tap expands swipeable metrics with health colors; OPEN APP returns; CLOSE BUBBLE removes overlay. (On Dellson: verify over CarPlay if used.)
+10. **Android Auto** — phone UI / DHU only unless installed via Play Internal testing.
 
 ---
 

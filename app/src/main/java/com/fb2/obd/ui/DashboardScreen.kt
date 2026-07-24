@@ -101,6 +101,7 @@ fun DashboardScreen(
     onSettingsClick: () -> Unit = {},
     onDiagnosticsClick: () -> Unit = {},
     onToggleLogging: () -> Unit = {},
+    onMinimizeClick: () -> Unit = {},
     catalog: List<PidDefinition> = StandardPidCatalog.all,
     extraPidIds: List<String> = emptyList(),
     extraValues: Map<String, String> = emptyMap(),
@@ -161,6 +162,7 @@ fun DashboardScreen(
             onSettingsClick = onSettingsClick,
             onDiagnosticsClick = onDiagnosticsClick,
             onToggleLogging = onToggleLogging,
+            onMinimizeClick = onMinimizeClick,
         )
 
         CompactHeroStrip(
@@ -1152,6 +1154,7 @@ private fun TopBar(
     onSettingsClick: () -> Unit,
     onDiagnosticsClick: () -> Unit,
     onToggleLogging: () -> Unit,
+    onMinimizeClick: () -> Unit,
 ) {
     Row(
         modifier = Modifier
@@ -1191,6 +1194,7 @@ private fun TopBar(
             Text(text = " $text", color = TextMuted, fontSize = 11.sp)
 
             TopBarChip(if (loggingActive) "STOP LOG" else "LOG", if (loggingActive) CritRed else Accent, onToggleLogging)
+            TopBarChip("MIN", Accent, onMinimizeClick)
             TopBarChip("DIAG", Accent, onDiagnosticsClick)
             TopBarChip("SETTINGS", TextMuted, onSettingsClick)
             // CONNECTED only for a real ELM adapter — Demo keeps CONNECT (+ yellow DEMO badge).

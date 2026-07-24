@@ -107,6 +107,10 @@ non-obvious cloud specifics.
   `ObdMonitorForegroundService` (`connectedDevice` FGS + sticky notification +
   `PARTIAL_WAKE_LOCK`). Demo mode must not start it. Voice alerts use AudioFocus +
   `USAGE_ASSISTANCE_NAVIGATION_GUIDANCE` and prefer car BT audio when available.
+- **Floating Dash bubble:** Dash **MIN** chip starts `FloatingDashOverlayService`
+  (needs `SYSTEM_ALERT_WINDOW`). Collapsed draggable dot; tap expands swipeable
+  main-Dash metrics with health colors from `VehicleLiveStore` / `CarDashTile.health`.
+  Aimed at Dellson HU + CarPlay overlay use; may be blocked by some HU firmwares.
 - MAF/MAP health is context-aware (idle / coast / cruise / heavy); pass RPM,
   speed, and throttle into `HealthEvaluator.maf` / `map`. MAF threshold schema is
   currently **3** (`HealthThresholdStore`) — old harsh idle bands are force-migrated.

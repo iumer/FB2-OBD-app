@@ -25,6 +25,8 @@
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+    <!-- Floating dash bubble over CarPlay / other apps (Dellson HU) -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
 
     <uses-feature
         android:name="android.hardware.bluetooth"
@@ -75,6 +77,11 @@
             android:name=".service.ObdMonitorForegroundService"
             android:exported="false"
             android:foregroundServiceType="connectedDevice" />
+
+        <!-- Draggable floating Dash bubble (draw-over-apps). -->
+        <service
+            android:name=".service.FloatingDashOverlayService"
+            android:exported="false" />
 
         <!-- Share saved / current CSV logs via WhatsApp, Drive, email, etc. -->
         <provider
