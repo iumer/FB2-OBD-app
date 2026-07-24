@@ -32,6 +32,9 @@ Keep these fixed. If a change might touch one of these areas, re-verify it.
 | I17 | Always-on event logging (`# events`) | Fixed | `DiagnosticEventTracker` |
 | I18 | Floating minimize bubble over CarPlay / other apps | Fixed | Radial ring + swipe pages + 6s auto-collapse; Exit stops overlay (`START_NOT_STICKY`) |
 | I19 | Exit left floating bubble on screen | Fixed | Exit confirm → `FloatingDashOverlayService.stop` + `finishAndRemoveTask` |
+| I20 | Long-press bubble reopened app but left overlay | Fixed | Long-press → open app + `stopSelf()` |
+| I21 | Cannot remap built-in Dash tiles | Fixed | Double-tap tile → same sensor picker as `+`; persisted overrides |
+| I22 | Sensor picker has no text search | Fixed | Search box in `SensorPickerDialog` (label / PID / category) |
 
 When the user reports a **new** bug, add a new `Ixx` row here (Status: Open → Fixed)
 and add a matching automated or manual check in sections 2–3.

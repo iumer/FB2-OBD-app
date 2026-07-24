@@ -29,6 +29,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -77,6 +78,8 @@ import com.fb2.obd.ui.theme.Surface
 import com.fb2.obd.ui.theme.TextMuted
 import com.fb2.obd.ui.theme.TextPrimary
 import com.fb2.obd.ui.theme.WarnAmber
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
@@ -120,7 +123,10 @@ fun DashboardScreen(
     catalog: List<PidDefinition> = StandardPidCatalog.all,
     extraPidIds: List<String> = emptyList(),
     extraValues: Map<String, String> = emptyMap(),
+    tileOverrides: Map<String, String> = emptyMap(),
     onSetExtraPid: (slot: Int, pid: PidDefinition) -> Unit = { _, _ -> },
+    onSetTileOverride: (baseLabel: String, pid: PidDefinition) -> Unit = { _, _ -> },
+    onClearTileOverride: (baseLabel: String) -> Unit = {},
     customValues: Map<String, String> = emptyMap(),
     fuelValues: Map<String, String> = emptyMap(),
     idleValues: Map<String, String> = emptyMap(),
@@ -151,7 +157,7 @@ fun DashboardScreen(
     val s = state.snapshot
     val pagerState = rememberPagerState(pageCount = { DashPageTitles.size })
     val scope = rememberCoroutineScope()
-    var pickerSlot by remember { mutableStateOf<Int?>(null) }
+    var pickerTarget by remember { mutableStateOf<PickerTarget?>(null) }
     var editMetric by remember { mutableStateOf<EditableMetric?>(null) }
 
     LaunchedEffect(pagerState.currentPage) {
@@ -214,12 +220,15 @@ fun DashboardScreen(
                         snapshot = s,
                         extraPidIds = extraPidIds,
                         extraValues = extraValues,
+                        tileOverrides = tileOverrides,
                         deepFoundValues = deepFoundValues,
                         catalog = catalog,
                         thresholds = healthThresholds,
                         dtcCount = dtcCount,
                         healthScore = health,
-                        onEmptySlotClick = { pickerSlot = it },
+                        onEmptySlotClick = { pickerTarget = PickerTarget.ExtraSlot(it) },
+                        onRemapBaseTile = { label -> pickerTarget = PickerTarget.RemapBase(label) },
+                        onRemapExtra = { index -> pickerTarget = PickerTarget.ExtraSlot(index) },
                         onDeepSearch = onDeepSearch,
                         onEditThresholds = { editMetric = it },
                     )
@@ -309,15 +318,24 @@ fun DashboardScreen(
         }
     }
 
-    val slot = pickerSlot
-    if (slot != null) {
+    val target = pickerTarget
+    if (target != null) {
         SensorPickerDialog(
             catalog = catalog,
+            restoreLabel = (target as? PickerTarget.RemapBase)?.label
+                ?.takeIf { tileOverrides.containsKey(it) },
             onPick = { pid ->
-                onSetExtraPid(slot, pid)
-                pickerSlot = null
+                when (target) {
+                    is PickerTarget.ExtraSlot -> onSetExtraPid(target.index, pid)
+                    is PickerTarget.RemapBase -> onSetTileOverride(target.label, pid)
+                }
+                pickerTarget = null
             },
-            onDismiss = { pickerSlot = null },
+            onRestore = {
+                (target as? PickerTarget.RemapBase)?.let { onClearTileOverride(it.label) }
+                pickerTarget = null
+            },
+            onDismiss = { pickerTarget = null },
         )
     }
 
@@ -505,12 +523,15 @@ private fun MetricsPage(
     snapshot: VehicleSnapshot,
     extraPidIds: List<String>,
     extraValues: Map<String, String>,
+    tileOverrides: Map<String, String>,
     deepFoundValues: Map<String, String>,
     catalog: List<PidDefinition>,
     thresholds: HealthThresholds,
     dtcCount: Int?,
     healthScore: HealthScore?,
     onEmptySlotClick: (Int) -> Unit,
+    onRemapBaseTile: (label: String) -> Unit,
+    onRemapExtra: (index: Int) -> Unit,
     onDeepSearch: (label: String, pidId: String?) -> Unit,
     onEditThresholds: (EditableMetric) -> Unit,
 ) {
@@ -604,44 +625,77 @@ private fun MetricsPage(
             contentPadding = PaddingValues(bottom = 4.dp),
         ) {
         items(baseTiles) { t ->
-            val unsupported = t.pid != null && t.pid.number in snapshot.unsupportedPids
-            val recovered = deepFoundValues[t.label]
-            // Prefer a live or recovered value over the support-bitmask "n/s"
-            // (Battery often works via ATRV even when ECU omits 0142).
-            val hasLive = t.value != "--" && t.value.isNotBlank()
-            val showNs = unsupported && recovered == null && !hasLive
-            val value = when {
-                recovered != null -> recovered.substringBefore(" ")
-                hasLive -> t.value
-                unsupported -> "n/s"
-                else -> t.value
+            val overrideId = tileOverrides[t.label]
+            val overridePid = overrideId?.let { id -> catalog.find { it.id.equals(id, true) } }
+            if (overridePid != null) {
+                val recovered = deepFoundValues[overridePid.label] ?: deepFoundValues[overridePid.id]
+                val text = recovered ?: LiveSnapshotOverlay.formatLiveOrNs(
+                    overridePid,
+                    snapshot,
+                    fallback = extraValues[overridePid.id],
+                )
+                val unsupported = recovered == null && (text.startsWith("n/s") || text == "—")
+                DenseTile(
+                    label = overridePid.label.take(14),
+                    value = text.substringBefore(" "),
+                    unit = if (unsupported) "" else text.substringAfter(" ", overridePid.unit).ifBlank { overridePid.unit },
+                    health = null,
+                    muted = unsupported,
+                    deepSearchHint = unsupported,
+                    remappedHint = true,
+                    onDeepSearch = if (unsupported) {
+                        { onDeepSearch(overridePid.label, overridePid.id) }
+                    } else {
+                        null
+                    },
+                    onRemap = { onRemapBaseTile(t.label) },
+                    onEditThresholds = EditableMetric.fromTileLabel(overridePid.label)?.let { m ->
+                        { onEditThresholds(m) }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            } else {
+                val unsupported = t.pid != null && t.pid.number in snapshot.unsupportedPids
+                val recovered = deepFoundValues[t.label]
+                // Prefer a live or recovered value over the support-bitmask "n/s"
+                // (Battery often works via ATRV even when ECU omits 0142).
+                val hasLive = t.value != "--" && t.value.isNotBlank()
+                val showNs = unsupported && recovered == null && !hasLive
+                val value = when {
+                    recovered != null -> recovered.substringBefore(" ")
+                    hasLive -> t.value
+                    unsupported -> "n/s"
+                    else -> t.value
+                }
+                val unit = when {
+                    recovered != null -> recovered.substringAfter(" ", "")
+                    hasLive -> t.unit
+                    unsupported -> ""
+                    else -> t.unit
+                }
+                DenseTile(
+                    label = t.label,
+                    value = value,
+                    unit = unit,
+                    health = if (showNs) null else t.status?.health,
+                    statusLabel = if (showNs) null else t.status?.label,
+                    muted = showNs,
+                    deepSearchHint = showNs,
+                    onDeepSearch = if (showNs) {
+                        { onDeepSearch(t.label, t.pid?.request) }
+                    } else {
+                        null
+                    },
+                    onRemap = { onRemapBaseTile(t.label) },
+                    onEditThresholds = EditableMetric.fromTileLabel(t.label)?.let { m ->
+                        { onEditThresholds(m) }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                )
             }
-            val unit = when {
-                recovered != null -> recovered.substringAfter(" ", "")
-                hasLive -> t.unit
-                unsupported -> ""
-                else -> t.unit
-            }
-            DenseTile(
-                label = t.label,
-                value = value,
-                unit = unit,
-                health = if (showNs) null else t.status?.health,
-                statusLabel = if (showNs) null else t.status?.label,
-                muted = showNs,
-                deepSearchHint = showNs,
-                onDeepSearch = if (showNs) {
-                    { onDeepSearch(t.label, t.pid?.request) }
-                } else {
-                    null
-                },
-                onEditThresholds = EditableMetric.fromTileLabel(t.label)?.let { m ->
-                    { onEditThresholds(m) }
-                },
-                modifier = Modifier.fillMaxWidth(),
-            )
         }
-        items(extras) { pid ->
+        items(extras.size) { extraIndex ->
+            val pid = extras[extraIndex]
             val recovered = deepFoundValues[pid.label] ?: deepFoundValues[pid.id]
             val text = recovered ?: LiveSnapshotOverlay.formatLiveOrNs(
                 pid,
@@ -661,6 +715,7 @@ private fun MetricsPage(
                 } else {
                     null
                 },
+                onRemap = { onRemapExtra(extraIndex) },
                 modifier = Modifier.fillMaxWidth(),
             )
         }
@@ -857,7 +912,9 @@ private fun DenseTile(
     statusLabel: String? = null,
     muted: Boolean = false,
     deepSearchHint: Boolean = false,
+    remappedHint: Boolean = false,
     onDeepSearch: (() -> Unit)? = null,
+    onRemap: (() -> Unit)? = null,
     onEditThresholds: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
@@ -868,6 +925,8 @@ private fun DenseTile(
     }
     var taps by remember { mutableIntStateOf(0) }
     var lastTapMs by remember { mutableLongStateOf(0L) }
+    val scope = rememberCoroutineScope()
+    var pendingRemap by remember { mutableStateOf<Job?>(null) }
 
     Column(
         modifier = modifier
@@ -876,13 +935,24 @@ private fun DenseTile(
             .background(Surface)
             .combinedClickable(
                 onClick = {
-                    if (onDeepSearch == null) return@combinedClickable
                     val now = System.currentTimeMillis()
-                    taps = if (now - lastTapMs < 700L) taps + 1 else 1
+                    taps = if (now - lastTapMs < 520L) taps + 1 else 1
                     lastTapMs = now
-                    if (taps >= 3) {
-                        taps = 0
-                        onDeepSearch()
+                    pendingRemap?.cancel()
+                    when {
+                        taps >= 3 -> {
+                            taps = 0
+                            onDeepSearch?.invoke()
+                        }
+                        taps == 2 && onRemap != null -> {
+                            pendingRemap = scope.launch {
+                                delay(280)
+                                if (taps == 2) {
+                                    taps = 0
+                                    onRemap()
+                                }
+                            }
+                        }
                     }
                 },
                 onLongClick = {
@@ -942,7 +1012,8 @@ private fun DenseTile(
             }
         }
         when {
-            deepSearchHint -> Text("tap×3 deep", color = Accent, fontSize = 8.sp, maxLines = 1, style = tightTextStyle(8.sp))
+            deepSearchHint -> Text("tap×3 deep · 2× change", color = Accent, fontSize = 8.sp, maxLines = 1, style = tightTextStyle(8.sp))
+            remappedHint -> Text("2× change", color = Accent, fontSize = 8.sp, maxLines = 1, style = tightTextStyle(8.sp))
             !statusLabel.isNullOrBlank() && !muted -> Text(
                 text = statusLabel,
                 color = health?.color() ?: TextMuted,
@@ -952,6 +1023,7 @@ private fun DenseTile(
                 overflow = TextOverflow.Ellipsis,
                 style = tightTextStyle(8.sp),
             )
+            onRemap != null -> Text("2× change", color = TextMuted, fontSize = 8.sp, maxLines = 1, style = tightTextStyle(8.sp))
             else -> Text(" ", fontSize = 8.sp, style = tightTextStyle(8.sp)) // reserve line
         }
     }
@@ -1010,18 +1082,24 @@ private fun profileDisplayName(profile: String): String = when {
 
 /**
  * In-dialog drill-down: Categories → Subcategories (profile packs) → Sensors.
- * Stays in the same AlertDialog list — no separate screen.
+ * Type in the search box to jump straight to matching sensors.
  */
 @Composable
 private fun SensorPickerDialog(
     catalog: List<PidDefinition>,
     onPick: (PidDefinition) -> Unit,
     onDismiss: () -> Unit,
+    restoreLabel: String? = null,
+    onRestore: (() -> Unit)? = null,
 ) {
     var category by remember { mutableStateOf<PidCategory?>(null) }
     var subProfile by remember { mutableStateOf<String?>(null) }
+    var query by remember { mutableStateOf("") }
+    val q = query.trim()
+    val searching = q.length >= 2
 
     val title = when {
+        searching -> "Search sensors"
         category == null -> "Add sensor — pick category"
         subProfile == null -> category!!.displayName()
         else -> "${category!!.displayName()} › ${profileDisplayName(subProfile!!)}"
@@ -1031,89 +1109,141 @@ private fun SensorPickerDialog(
         onDismissRequest = onDismiss,
         title = { Text(title, color = TextPrimary, fontSize = 15.sp, fontWeight = FontWeight.Bold) },
         text = {
-            Column(modifier = Modifier.fillMaxHeight(0.82f).verticalScroll(rememberScrollState())) {
-                Text(
-                    text = "Scroll for all categories (Engine, Fuel, Air, Electrical…)",
-                    color = TextMuted,
-                    fontSize = 11.sp,
-                    modifier = Modifier.padding(bottom = 6.dp),
+            Column(modifier = Modifier.fillMaxHeight(0.82f)) {
+                OutlinedTextField(
+                    value = query,
+                    onValueChange = { query = it },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 8.dp),
+                    singleLine = true,
+                    placeholder = {
+                        Text("Type to search (e.g. gear, MAF, 01A4)", color = TextMuted, fontSize = 12.sp)
+                    },
+                    textStyle = TextStyle(color = TextPrimary, fontSize = 14.sp),
                 )
-                // Back row inside the same list
-                if (category != null) {
-                    Text(
-                        text = if (subProfile != null) "← Subcategories" else "← Categories",
-                        color = Accent,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable {
-                                if (subProfile != null) {
-                                    subProfile = null
-                                } else {
-                                    category = null
-                                }
+                Column(modifier = Modifier.weight(1f).verticalScroll(rememberScrollState())) {
+                    if (restoreLabel != null && onRestore != null && !searching) {
+                        PickerRow(
+                            title = "Restore default",
+                            subtitle = restoreLabel,
+                            trailing = "↺",
+                            onClick = onRestore,
+                        )
+                    }
+                    if (searching) {
+                        val hits = catalog.filter { pid ->
+                            pid.label.contains(q, true) ||
+                                pid.request.contains(q, true) ||
+                                pid.id.contains(q, true) ||
+                                pid.unit.contains(q, true) ||
+                                pid.category.displayName().contains(q, true) ||
+                                profileDisplayName(pid.profile).contains(q, true)
+                        }.sortedBy { it.label }.take(60)
+                        if (hits.isEmpty()) {
+                            Text(
+                                text = "No sensors match \"$q\"",
+                                color = TextMuted,
+                                fontSize = 12.sp,
+                                modifier = Modifier.padding(vertical = 8.dp),
+                            )
+                        } else {
+                            hits.forEach { pid ->
+                                PickerRow(
+                                    title = pid.label,
+                                    subtitle = listOfNotNull(
+                                        pid.request,
+                                        pid.unit.takeIf { it.isNotBlank() },
+                                        pid.category.displayName(),
+                                    ).joinToString(" · "),
+                                    trailing = "+",
+                                    onClick = { onPick(pid) },
+                                )
                             }
-                            .padding(vertical = 6.dp),
-                    )
-                }
-
-                when {
-                    category == null -> {
-                        val cats = catalog
-                            .groupBy { it.category }
-                            .entries
-                            .sortedBy { it.key.displayName() }
-                        cats.forEach { (cat, pids) ->
-                            PickerRow(
-                                title = cat.displayName(),
-                                subtitle = "${pids.size} sensors",
-                                trailing = "›",
-                                onClick = {
-                                    category = cat
-                                    subProfile = null
-                                },
+                        }
+                    } else {
+                        Text(
+                            text = "Scroll categories, or type above to search",
+                            color = TextMuted,
+                            fontSize = 11.sp,
+                            modifier = Modifier.padding(bottom = 6.dp),
+                        )
+                        if (category != null) {
+                            Text(
+                                text = if (subProfile != null) "← Subcategories" else "← Categories",
+                                color = Accent,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        if (subProfile != null) {
+                                            subProfile = null
+                                        } else {
+                                            category = null
+                                        }
+                                    }
+                                    .padding(vertical = 6.dp),
                             )
                         }
-                    }
 
-                    subProfile == null -> {
-                        val inCat = catalog.filter { it.category == category }
-                        val groups = inCat.groupBy { it.profile }.entries.sortedBy { profileDisplayName(it.key) }
-                        if (groups.size <= 1) {
-                            // Only one pack — skip subcategory and list sensors directly.
-                            inCat.sortedBy { it.label }.forEach { pid ->
-                                PickerRow(
-                                    title = pid.label,
-                                    subtitle = pid.request + if (pid.unit.isNotBlank()) " · ${pid.unit}" else "",
-                                    trailing = "+",
-                                    onClick = { onPick(pid) },
-                                )
+                        when {
+                            category == null -> {
+                                val cats = catalog
+                                    .groupBy { it.category }
+                                    .entries
+                                    .sortedBy { it.key.displayName() }
+                                cats.forEach { (cat, pids) ->
+                                    PickerRow(
+                                        title = cat.displayName(),
+                                        subtitle = "${pids.size} sensors",
+                                        trailing = "›",
+                                        onClick = {
+                                            category = cat
+                                            subProfile = null
+                                        },
+                                    )
+                                }
                             }
-                        } else {
-                            groups.forEach { (profile, pids) ->
-                                PickerRow(
-                                    title = profileDisplayName(profile),
-                                    subtitle = "${pids.size} sensors",
-                                    trailing = "›",
-                                    onClick = { subProfile = profile },
-                                )
+
+                            subProfile == null -> {
+                                val inCat = catalog.filter { it.category == category }
+                                val groups = inCat.groupBy { it.profile }.entries.sortedBy { profileDisplayName(it.key) }
+                                if (groups.size <= 1) {
+                                    inCat.sortedBy { it.label }.forEach { pid ->
+                                        PickerRow(
+                                            title = pid.label,
+                                            subtitle = pid.request + if (pid.unit.isNotBlank()) " · ${pid.unit}" else "",
+                                            trailing = "+",
+                                            onClick = { onPick(pid) },
+                                        )
+                                    }
+                                } else {
+                                    groups.forEach { (profile, pids) ->
+                                        PickerRow(
+                                            title = profileDisplayName(profile),
+                                            subtitle = "${pids.size} sensors",
+                                            trailing = "›",
+                                            onClick = { subProfile = profile },
+                                        )
+                                    }
+                                }
+                            }
+
+                            else -> {
+                                catalog
+                                    .filter { it.category == category && it.profile == subProfile }
+                                    .sortedBy { it.label }
+                                    .forEach { pid ->
+                                        PickerRow(
+                                            title = pid.label,
+                                            subtitle = pid.request + if (pid.unit.isNotBlank()) " · ${pid.unit}" else "",
+                                            trailing = "+",
+                                            onClick = { onPick(pid) },
+                                        )
+                                    }
                             }
                         }
-                    }
-
-                    else -> {
-                        catalog
-                            .filter { it.category == category && it.profile == subProfile }
-                            .sortedBy { it.label }
-                            .forEach { pid ->
-                                PickerRow(
-                                    title = pid.label,
-                                    subtitle = pid.request + if (pid.unit.isNotBlank()) " · ${pid.unit}" else "",
-                                    trailing = "+",
-                                    onClick = { onPick(pid) },
-                                )
-                            }
                     }
                 }
             }
@@ -1123,6 +1253,11 @@ private fun SensorPickerDialog(
         },
         containerColor = Background,
     )
+}
+
+private sealed class PickerTarget {
+    data class ExtraSlot(val index: Int) : PickerTarget()
+    data class RemapBase(val label: String) : PickerTarget()
 }
 
 @Composable

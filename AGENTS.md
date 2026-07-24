@@ -111,13 +111,20 @@ non-obvious cloud specifics.
   (needs `SYSTEM_ALERT_WINDOW`). Collapsed = one draggable circle. Expanded =
   same center + up to **5 satellite circles** around it (`FloatingDashMetrics`
   pages of 5). Vertical swipe pages metrics; center stays fixed. Idle ~6s
-  auto-collapses; tap center toggles; long-press opens the app. Live values from
-  `VehicleLiveStore` / `CarDashTile.health`. Aimed at Dellson HU + CarPlay
-  overlay; may be blocked by some HU firmwares.
+  auto-collapses; tap center toggles; **long-press opens the app and dismisses
+  the bubble** (`stopSelf`). Live values from `VehicleLiveStore` /
+  `CarDashTile.health`. Aimed at Dellson HU + CarPlay overlay; may be blocked by
+  some HU firmwares.
   **Exit & disconnect** (back → confirm) calls `FloatingDashOverlayService.stop`
   + `finishAndRemoveTask` — do **not** stop the overlay from Activity `onStop`
   (that would kill MIN). Service uses `START_NOT_STICKY` so swipe-away does not
   resurrect an empty bubble.
+- **Dash tile remap:** Double-tap any main-Dash tile to open the same sensor
+  picker as `+`. Remaps persist in `dash_tile_overrides.json`. Remapped tiles
+  show a `2× change` hint; picker can **Restore default**. Triple-tap still
+  runs deep search on n/s tiles; long-press edits health thresholds.
+- **Sensor picker search:** Type ≥2 chars in the dialog search box to filter
+  by label / request / category (skip category drill-down).
 - **Car HU layout:** Dash / dense grids use `BoxWithConstraints` width
   (`dashColumnsForWidth` 3–6, `denseColumnsForWidth` 2–4) so Paparazzi and
   real HUs agree. Re-record HU snapshots after grid changes.
