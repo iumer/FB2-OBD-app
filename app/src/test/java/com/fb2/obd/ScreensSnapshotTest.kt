@@ -29,8 +29,9 @@ class ScreensSnapshotTest {
         paparazzi.snapshot {
             FB2Theme {
                 SettingsScreen(
-                    settings = SettingsState(showEstimatedGear = true),
+                    settings = SettingsState(showEstimatedGear = true, voiceAlerts = true),
                     onToggleEstimatedGear = {},
+                    onToggleVoiceAlerts = {},
                     nav = com.fb2.obd.ui.SettingsNav(),
                     onBack = {},
                 )

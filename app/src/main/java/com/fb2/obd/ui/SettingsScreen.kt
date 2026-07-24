@@ -72,6 +72,7 @@ data class SettingsNav(
 fun SettingsScreen(
     settings: SettingsState,
     onToggleEstimatedGear: (Boolean) -> Unit,
+    onToggleVoiceAlerts: (Boolean) -> Unit = {},
     nav: SettingsNav,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
@@ -99,6 +100,14 @@ fun SettingsScreen(
             subtitle = "When the ECU can't report the actual gear, estimate from speed & RPM (EST).",
             checked = settings.showEstimatedGear,
             onCheckedChange = onToggleEstimatedGear,
+        )
+
+        SectionLabel("Alerts")
+        ToggleRow(
+            title = "Voice alerts",
+            subtitle = "Speak when a coloured metric hits critical (or coolant/ATF hot). Uses the phone’s offline text-to-speech.",
+            checked = settings.voiceAlerts,
+            onCheckedChange = onToggleVoiceAlerts,
         )
 
         SectionLabel("Logging")
