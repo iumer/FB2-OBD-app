@@ -37,9 +37,11 @@ non-obvious cloud specifics.
 
 - **Android Auto:** Car App Library IOT template (`Fb2CarAppService`). Phone must
   keep FB2 Diag running (or recent) so `VehicleLiveStore` has live Dash data.
-  Sideload testing needs Android Auto **Developer mode → Unknown sources**.
-  Connect on AA starts Demo if not live; pick real ELM on the phone. LOG toggles
-  from the car Action strip.
+  **Important:** Android Auto “Unknown sources” does **not** apply to Car App
+  Library apps. Sideloaded APKs usually **will not** appear in Customize launcher
+  on a real car. For a real head unit, install via Play **Internal testing** /
+  **Internal app sharing**. For desk testing use Google’s Desktop Head Unit (DHU).
+  CONNECT from AA starts Demo if not live; pick real ELM on the phone.
 
 ### Notes / gotchas
 
