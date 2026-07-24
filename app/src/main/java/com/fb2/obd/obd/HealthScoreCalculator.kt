@@ -17,6 +17,7 @@ object HealthScoreCalculator {
         tcSlipRpm: Double? = null,
         /** How many TCM / Mode 22 transmission PIDs answered on the last probe. */
         tcmSupportedCount: Int? = null,
+        thresholds: HealthThresholds = HealthThresholds.DEFAULT,
     ): HealthScore {
         var engine = 100
         val eNotes = mutableListOf<String>()
@@ -43,7 +44,7 @@ object HealthScoreCalculator {
         if (!hasBattery) eNotes += "Battery voltage not available"
         if (snapshot.ltftPct == null) eNotes += "LTFT n/s on this ECU (common on FB2)"
 
-        when (HealthEvaluator.coolant(snapshot.coolantC).health) {
+        when (HealthEvaluator.coolant(snapshot.coolantC, thresholds).health) {
             Health.WARN -> deductE(6, "Coolant warm — watch temperature")
             Health.ELEVATED -> deductE(14, "Engine running hot. Reduce load.")
             Health.CRITICAL -> deductE(28, "Engine overheating. Reduce load / pull over safely.")
@@ -52,7 +53,7 @@ object HealthScoreCalculator {
         }
 
         val running = (snapshot.rpm ?: 0.0) > 0
-        when (HealthEvaluator.battery(snapshot.batteryVolts, running).health) {
+        when (HealthEvaluator.battery(snapshot.batteryVolts, running, thresholds).health) {
             Health.WARN -> deductE(6, "Charging voltage low — check belt / battery health")
             Health.ELEVATED -> deductE(10, "Charging voltage high — check regulator")
             Health.CRITICAL -> deductE(22, "Possible alternator issue. Check charging system.")
@@ -67,8 +68,8 @@ object HealthScoreCalculator {
                 else -> {}
             }
         }
-        trimNote("STFT", HealthEvaluator.fuelTrim(snapshot.stftPct))
-        trimNote("LTFT", HealthEvaluator.fuelTrim(snapshot.ltftPct))
+        trimNote("STFT", HealthEvaluator.fuelTrim(snapshot.stftPct, thresholds))
+        trimNote("LTFT", HealthEvaluator.fuelTrim(snapshot.ltftPct, thresholds))
 
         if (storedDtcCount > 0) {
             deductE((storedDtcCount * 8).coerceAtMost(30), "$storedDtcCount stored DTC(s) — open DIAG → Faults")
@@ -80,14 +81,14 @@ object HealthScoreCalculator {
         val tcmAnswered = (tcmSupportedCount ?: 0) > 0 || hasAtf || hasSlip
         val transmissionDataOk = tcmAnswered
 
-        when (HealthEvaluator.atfTemp(atfC).health) {
+        when (HealthEvaluator.atfTemp(atfC, thresholds).health) {
             Health.COLD -> tNotes += "ATF still cold / warming"
             Health.WARN -> deductT(8, "ATF warm — avoid heavy towing until cooler")
             Health.ELEVATED -> deductT(16, "ATF hot. Ease load; check cooler / fluid level.")
             Health.CRITICAL -> deductT(30, "ATF overheating — risk of transmission damage.")
             else -> {}
         }
-        when (HealthEvaluator.tcSlip(tcSlipRpm).health) {
+        when (HealthEvaluator.tcSlip(tcSlipRpm, thresholds).health) {
             Health.WARN -> deductT(6, "Torque converter slipping more than usual")
             Health.CRITICAL -> deductT(14, "High torque-converter slip")
             else -> {}

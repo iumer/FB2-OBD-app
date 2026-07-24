@@ -5,6 +5,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.fb2.obd.data.ConnectionState
 import com.fb2.obd.data.DemoObdSource
+import com.fb2.obd.data.HealthThresholdStore
 import com.fb2.obd.data.MaintenanceEntry
 import com.fb2.obd.data.MaintenanceStore
 import com.fb2.obd.data.ObdLogger
@@ -18,6 +19,7 @@ import com.fb2.obd.obd.Dtc
 import com.fb2.obd.obd.FreezeFrame
 import com.fb2.obd.obd.HealthScore
 import com.fb2.obd.obd.HealthScoreCalculator
+import com.fb2.obd.obd.HealthThresholds
 import com.fb2.obd.obd.HondaPidCatalog
 import com.fb2.obd.obd.LiveSnapshotOverlay
 import com.fb2.obd.obd.Mode06Result
@@ -30,6 +32,7 @@ import com.fb2.obd.obd.StandardPidCatalog
 import com.fb2.obd.obd.TripComputer
 import com.fb2.obd.obd.VehicleInfo
 import com.fb2.obd.obd.VehicleSnapshot
+import com.fb2.obd.obd.withField
 import com.fb2.obd.perf.AccelResult
 import com.fb2.obd.perf.AccelerationTimer
 import kotlinx.coroutines.Job
@@ -164,6 +167,10 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
     private val _health = MutableStateFlow<HealthScore?>(null)
     val health: StateFlow<HealthScore?> = _health.asStateFlow()
 
+    private val thresholdStore = HealthThresholdStore(File(filesDir, "health_thresholds.json"))
+    private val _healthThresholds = MutableStateFlow(HealthThresholds.DEFAULT)
+    val healthThresholds: StateFlow<HealthThresholds> = _healthThresholds.asStateFlow()
+
     private val _hondaScan = MutableStateFlow<List<ModuleScanResult>>(emptyList())
     val hondaScan: StateFlow<List<ModuleScanResult>> = _hondaScan.asStateFlow()
 
@@ -289,10 +296,24 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
         ObdLogger.valueLoggingEnabled = false
         tripComputer.fuelPricePerLiter = _settings.value.fuelPricePerLiter
         _maintenance.value = MaintenanceStore(File(filesDir, "maintenance.json")).load()
+        _healthThresholds.value = thresholdStore.load()
         _custom.update {
             it.copy(selectedIds = StandardPidCatalog.fuelPageDefaults().map { p -> p.id }.toSet())
         }
         useSource(DemoObdSource())
+    }
+
+    fun updateHealthThresholdField(id: String, value: Double) {
+        val next = _healthThresholds.value.withField(id, value)
+        _healthThresholds.value = next
+        thresholdStore.save(next)
+        recalcHealth()
+    }
+
+    fun resetHealthThresholds() {
+        _healthThresholds.value = HealthThresholds.DEFAULT
+        thresholdStore.save(HealthThresholds.DEFAULT)
+        recalcHealth()
     }
 
     fun updatePhoneSensors(ax: Float, ay: Float, az: Float) {
@@ -562,11 +583,7 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
                     )
                 }
                 _health.update {
-                    HealthScoreCalculator.compute(
-                        snapshot,
-                        _faults.value.stored.size,
-                        tcmSupportedCount = lastTcmSupportedCount,
-                    )
+                    scoreHealth(snapshot = snapshot)
                 }
                 _uiState.update {
                     it.copy(
@@ -602,11 +619,7 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
                 )
             }
             _health.update {
-                HealthScoreCalculator.compute(
-                    _uiState.value.snapshot,
-                    stored.size,
-                    tcmSupportedCount = lastTcmSupportedCount,
-                )
+                scoreHealth(dtcCount = stored.size)
             }
         }
     }
@@ -735,13 +748,7 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
             val atf = results.find { it.pid.label.startsWith("ATF") && it.supported }?.sample
             val slip = results.find { it.pid.label.contains("slip", true) && it.supported }?.sample
             _health.update {
-                HealthScoreCalculator.compute(
-                    _uiState.value.snapshot,
-                    _faults.value.stored.size,
-                    atf,
-                    slip,
-                    tcmSupportedCount = lastTcmSupportedCount,
-                )
+                scoreHealth(atfC = atf, tcSlipRpm = slip)
             }
         }
     }
@@ -801,11 +808,7 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
             if (tcm != null) {
                 lastTcmSupportedCount = tcm.supportedCount
                 _health.update {
-                    HealthScoreCalculator.compute(
-                        _uiState.value.snapshot,
-                        _faults.value.stored.size,
-                        tcmSupportedCount = lastTcmSupportedCount,
-                    )
+                    scoreHealth()
                 }
             }
             _hondaScanning.value = false
@@ -818,9 +821,24 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
                 _uiState.value.snapshot,
                 _faults.value.stored.size,
                 tcmSupportedCount = lastTcmSupportedCount,
+                thresholds = _healthThresholds.value,
             )
         }
     }
+
+    private fun scoreHealth(
+        snapshot: VehicleSnapshot = _uiState.value.snapshot,
+        dtcCount: Int = _faults.value.stored.size,
+        atfC: Double? = null,
+        tcSlipRpm: Double? = null,
+    ): HealthScore = HealthScoreCalculator.compute(
+        snapshot = snapshot,
+        storedDtcCount = dtcCount,
+        atfC = atfC,
+        tcSlipRpm = tcSlipRpm,
+        tcmSupportedCount = lastTcmSupportedCount,
+        thresholds = _healthThresholds.value,
+    )
 
     override fun onCleared() {
         if (_settings.value.valueLogging) {
