@@ -173,86 +173,89 @@ fun DashboardScreen(
                 .weight(1f),
             userScrollEnabled = true,
         ) { page ->
-            when (page) {
-                0 -> MetricsPage(
-                    snapshot = s,
-                    extraPidIds = extraPidIds,
-                    extraValues = extraValues,
-                    deepFoundValues = deepFoundValues,
-                    catalog = catalog,
-                    onEmptySlotClick = { pickerSlot = it },
-                    onDeepSearch = onDeepSearch,
-                )
-                1 -> DenseSensorGridPage(
-                    title = "Custom sensors",
-                    rows = customValues.entries.map { it.key to it.value }.ifEmpty {
-                        listOf("Tip" to "Tap Manage to pick sensors from the catalog")
-                    },
-                    action = "Probe" to onRefreshCustom,
-                    secondaryAction = "Manage" to onManageCustom,
-                    deepFoundValues = deepFoundValues,
-                    onDeepSearch = onDeepSearch,
-                )
-                2 -> DenseSensorGridPage(
-                    title = "Cold start / rough idle",
-                    rows = buildList {
-                        idleTips.take(1).forEach { add("Tip" to it.take(48)) }
-                        idleValues.entries
-                            .filter { !it.key.matches(Regex("^[0-9A-Fa-f]{4,}$")) }
-                            .take(24)
-                            .forEach { add(it.key to it.value) }
-                    }.ifEmpty { listOf("Status" to "Probing…") },
-                    action = "Probe" to onRefreshIdle,
-                    deepFoundValues = deepFoundValues,
-                    onDeepSearch = onDeepSearch,
-                )
-                3 -> DenseSensorGridPage(
-                    title = "Fuel system",
-                    rows = fuelValues.entries.map { it.key to it.value }
-                        .ifEmpty { listOf("Status" to "Probing…") },
-                    action = "Refresh" to onRefreshFuel,
-                    deepFoundValues = deepFoundValues,
-                    onDeepSearch = onDeepSearch,
-                )
-                4 -> TripScreen(
-                    distanceKm = trip.distanceKm,
-                    kmPerL = trip.kmPerLiter,
-                    lPer100 = trip.litersPer100,
-                    cost = trip.cost,
-                    idleSec = trip.idleSeconds,
-                    fuelPrice = trip.fuelPrice,
-                    onReset = onResetTrip,
-                    embedded = true,
-                    modifier = Modifier.fillMaxSize(),
-                )
-                5 -> DenseSensorGridPage(
-                    title = "Transmission",
-                    rows = transValues.entries.map { it.key to it.value }
-                        .ifEmpty { listOf("Status" to "Probing…") },
-                    action = "Probe" to onRefreshTrans,
-                    deepFoundValues = deepFoundValues,
-                    onDeepSearch = onDeepSearch,
-                )
-                6 -> PerformanceScreen(
-                    state = performance,
-                    onReset = onResetPerformance,
-                    phase = performance.phase,
-                    embedded = true,
-                    modifier = Modifier.fillMaxSize(),
-                )
-                7 -> GForceScreen(
-                    ax = gForceAx,
-                    ay = gForceAy,
-                    az = gForceAz,
-                    embedded = true,
-                    modifier = Modifier.fillMaxSize(),
-                )
-                else -> HealthScoresScreen(
-                    score = health,
-                    onRefresh = onRefreshHealth,
-                    embedded = true,
-                    modifier = Modifier.fillMaxSize(),
-                )
+            // Fixed page slot so swipe does not resize the hero strip above.
+            Box(modifier = Modifier.fillMaxSize()) {
+                when (page) {
+                    0 -> MetricsPage(
+                        snapshot = s,
+                        extraPidIds = extraPidIds,
+                        extraValues = extraValues,
+                        deepFoundValues = deepFoundValues,
+                        catalog = catalog,
+                        onEmptySlotClick = { pickerSlot = it },
+                        onDeepSearch = onDeepSearch,
+                    )
+                    1 -> DenseSensorGridPage(
+                        title = "Custom sensors",
+                        rows = customValues.entries.map { it.key to it.value }.ifEmpty {
+                            listOf("Tip" to "Tap Manage to pick sensors from the catalog")
+                        },
+                        action = "Probe" to onRefreshCustom,
+                        secondaryAction = "Manage" to onManageCustom,
+                        deepFoundValues = deepFoundValues,
+                        onDeepSearch = onDeepSearch,
+                    )
+                    2 -> DenseSensorGridPage(
+                        title = "Cold start / rough idle",
+                        rows = buildList {
+                            idleTips.take(1).forEach { add("Tip" to it.take(48)) }
+                            idleValues.entries
+                                .filter { !it.key.matches(Regex("^[0-9A-Fa-f]{4,}$")) }
+                                .take(24)
+                                .forEach { add(it.key to it.value) }
+                        }.ifEmpty { listOf("Status" to "Probing…") },
+                        action = "Probe" to onRefreshIdle,
+                        deepFoundValues = deepFoundValues,
+                        onDeepSearch = onDeepSearch,
+                    )
+                    3 -> DenseSensorGridPage(
+                        title = "Fuel system",
+                        rows = fuelValues.entries.map { it.key to it.value }
+                            .ifEmpty { listOf("Status" to "Probing…") },
+                        action = "Refresh" to onRefreshFuel,
+                        deepFoundValues = deepFoundValues,
+                        onDeepSearch = onDeepSearch,
+                    )
+                    4 -> TripScreen(
+                        distanceKm = trip.distanceKm,
+                        kmPerL = trip.kmPerLiter,
+                        lPer100 = trip.litersPer100,
+                        cost = trip.cost,
+                        idleSec = trip.idleSeconds,
+                        fuelPrice = trip.fuelPrice,
+                        onReset = onResetTrip,
+                        embedded = true,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                    5 -> DenseSensorGridPage(
+                        title = "Transmission",
+                        rows = transValues.entries.map { it.key to it.value }
+                            .ifEmpty { listOf("Status" to "Probing…") },
+                        action = "Probe" to onRefreshTrans,
+                        deepFoundValues = deepFoundValues,
+                        onDeepSearch = onDeepSearch,
+                    )
+                    6 -> PerformanceScreen(
+                        state = performance,
+                        onReset = onResetPerformance,
+                        phase = performance.phase,
+                        embedded = true,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                    7 -> GForceScreen(
+                        ax = gForceAx,
+                        ay = gForceAy,
+                        az = gForceAz,
+                        embedded = true,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                    else -> HealthScoresScreen(
+                        score = health,
+                        onRefresh = onRefreshHealth,
+                        embedded = true,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                }
             }
         }
     }
@@ -270,7 +273,7 @@ fun DashboardScreen(
     }
 }
 
-/** Thin digital strip — keeps RPM/Speed glanceable without stealing the sensor grid. */
+/** Thin digital strip — fixed height so pager swipes never collapse/expand the banner. */
 @Composable
 private fun CompactHeroStrip(
     rpm: Double?,
@@ -282,6 +285,7 @@ private fun CompactHeroStrip(
         modifier = Modifier
             .fillMaxWidth()
             .padding(top = 2.dp, bottom = 2.dp)
+            .height(52.dp)
             .clip(RoundedCornerShape(10.dp))
             .background(Surface)
             .padding(horizontal = 10.dp, vertical = 4.dp),
@@ -291,7 +295,10 @@ private fun CompactHeroStrip(
         HeroDigit(label = "RPM", value = rpm.fmt(), unit = "", accent = Accent, modifier = Modifier.weight(1f))
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
-            modifier = Modifier.widthIn(min = 48.dp),
+            verticalArrangement = Arrangement.Center,
+            modifier = Modifier
+                .widthIn(min = 48.dp)
+                .fillMaxHeight(),
         ) {
             Text("GEAR", color = TextMuted, fontSize = 9.sp, fontWeight = FontWeight.Medium)
             Text(
@@ -299,15 +306,21 @@ private fun CompactHeroStrip(
                 color = Accent,
                 fontSize = 22.sp,
                 fontWeight = FontWeight.Bold,
+                lineHeight = 24.sp,
             )
+            // Always reserve badge line height (ECU / EST / blank) so layout never jumps.
             val badge = when (gearSource) {
                 GearSource.ECU -> "ECU" to GoodGreen
                 GearSource.ESTIMATED -> "EST" to WarnAmber
-                GearSource.NONE -> null
+                GearSource.NONE -> " " to TextMuted
             }
-            if (badge != null) {
-                Text(badge.first, color = badge.second, fontSize = 8.sp, fontWeight = FontWeight.Bold)
-            }
+            Text(
+                text = badge.first,
+                color = badge.second,
+                fontSize = 8.sp,
+                fontWeight = FontWeight.Bold,
+                lineHeight = 10.sp,
+            )
         }
         HeroDigit(label = "SPEED", value = speedKmh.fmt(), unit = "km/h", accent = GoodGreen, modifier = Modifier.weight(1f))
     }
