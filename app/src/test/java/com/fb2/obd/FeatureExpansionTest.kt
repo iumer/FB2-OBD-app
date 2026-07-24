@@ -6,6 +6,7 @@ import com.fb2.obd.obd.DiagnosticParsers
 import com.fb2.obd.obd.DtcCatalog
 import com.fb2.obd.obd.HealthScoreCalculator
 import com.fb2.obd.obd.HondaPidCatalog
+import com.fb2.obd.obd.LiveSnapshotOverlay
 import com.fb2.obd.obd.StandardPidCatalog
 import com.fb2.obd.obd.TripComputer
 import com.fb2.obd.obd.VehicleSnapshot
@@ -82,11 +83,33 @@ class FeatureExpansionTest {
     @Test
     fun healthScore_deductsForDtcsAndAtf() {
         val snap = VehicleSnapshot(rpm = 800.0, coolantC = 90.0, batteryVolts = 14.2, stftPct = 1.0, ltftPct = 2.0)
-        val healthy = HealthScoreCalculator.compute(snap, 0, atfC = 85.0, tcSlipRpm = 20.0)
+        val healthy = HealthScoreCalculator.compute(snap, 0, atfC = 85.0, tcSlipRpm = 20.0, tcmSupportedCount = 2)
         assertEquals(100, healthy.enginePct)
-        val sick = HealthScoreCalculator.compute(snap, 3, atfC = 120.0, tcSlipRpm = 400.0)
-        assertTrue(sick.enginePct < 100)
-        assertTrue(sick.transmissionPct < 90)
+        assertTrue(healthy.transmissionDataOk)
+        val sick = HealthScoreCalculator.compute(snap, 3, atfC = 120.0, tcSlipRpm = 400.0, tcmSupportedCount = 2)
+        assertTrue((sick.enginePct ?: 100) < 100)
+        assertTrue((sick.transmissionPct ?: 100) < 90)
+    }
+
+    @Test
+    fun healthScore_unknownWhenTcmMissing() {
+        val snap = VehicleSnapshot(rpm = 800.0, coolantC = 90.0, batteryVolts = 14.2, stftPct = 1.0)
+        val score = HealthScoreCalculator.compute(snap, 0, tcmSupportedCount = 0)
+        assertTrue(score.engineDataOk)
+        assertEquals(false, score.transmissionDataOk)
+        assertEquals(null, score.transmissionPct)
+        assertTrue(score.transmissionNotes.any { it.contains("cannot score", true) })
+    }
+
+    @Test
+    fun liveSnapshotOverlay_fillsNsFromDashboard() {
+        val pid = StandardPidCatalog.byId("010C")!!
+        val probed = listOf(com.fb2.obd.obd.PidProbeResult(pid, false, null, "NO DATA"))
+        val snap = VehicleSnapshot(rpm = 794.0, coolantC = 90.0)
+        val merged = LiveSnapshotOverlay.apply(probed, snap)
+        assertTrue(merged.first().supported)
+        assertEquals(794.0, merged.first().sample!!, 0.01)
+        assertTrue(LiveSnapshotOverlay.formatDisplay(merged.first()).contains("794"))
     }
 
     @Test

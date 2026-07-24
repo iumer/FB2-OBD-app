@@ -208,9 +208,16 @@ class Elm327BluetoothSource(
     override suspend fun probePids(pids: List<PidDefinition>): List<PidProbeResult> {
         val conn = connection ?: return emptyList()
         return pids.map { pid ->
-            val raw = runCatching { conn.exec(pid.request) }.getOrNull()
-            val up = raw?.uppercase().orEmpty()
-            val bad = raw == null || listOf("NO DATA", "UNABLE", "ERROR", "?", "STOPPED").any { up.contains(it) }
+            var raw = runCatching { conn.exec(pid.request) }.getOrNull()
+            var up = raw?.uppercase().orEmpty()
+            var bad = raw == null || listOf("NO DATA", "UNABLE", "ERROR", "?", "STOPPED").any { up.contains(it) }
+            // One retry — FB2 ELM logs show intermittent NO DATA on supported PIDs under load.
+            if (bad && up.contains("NO DATA")) {
+                kotlinx.coroutines.delay(40L)
+                raw = runCatching { conn.exec(pid.request) }.getOrNull()
+                up = raw?.uppercase().orEmpty()
+                bad = raw == null || listOf("NO DATA", "UNABLE", "ERROR", "?", "STOPPED").any { up.contains(it) }
+            }
             if (bad) {
                 PidProbeResult(pid, false, null, raw)
             } else {
@@ -221,6 +228,7 @@ class Elm327BluetoothSource(
                     else -> null
                 }
                 val value = bytes?.let { pid.decode(it) }
+                // Frame answered but decode failed → still mark supported so UI isn't "n/s".
                 PidProbeResult(pid, true, value, raw)
             }
         }

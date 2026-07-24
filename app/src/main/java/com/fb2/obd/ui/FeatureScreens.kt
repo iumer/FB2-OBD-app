@@ -89,7 +89,7 @@ fun CustomSensorsScreen(
         ScreenHeader(title = "Custom sensors", onBack = onBack) {
             Chip(if (probing) "Probing\u2026" else "Probe selected") { onProbeSelected() }
         }
-        Text("Tap + to add / remove. Probe tests which ones your ECU answers.", color = TextMuted, fontSize = 12.sp)
+        Text("Tap + / SEL to add or remove. Probe tests which ones your ECU answers. SEL = selected (not “working”).", color = TextMuted, fontSize = 12.sp)
         Row(
             modifier = Modifier.padding(vertical = 8.dp),
             horizontalArrangement = Arrangement.spacedBy(4.dp),
@@ -118,8 +118,23 @@ fun CustomSensorsScreen(
                         Text(pid.label, color = TextPrimary, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
                         Text("${pid.request} \u00B7 ${pid.profile}", color = TextMuted, fontSize = 11.sp)
                     }
-                    Text(liveValues[pid.id] ?: if (on) "—" else "", color = Accent, fontSize = 13.sp)
-                    Text(if (on) "  \u2713" else "  +", color = if (on) GoodGreen else Accent, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                    val shown = liveValues[pid.id]
+                    Text(
+                        text = when {
+                            shown == null && on -> "selected"
+                            shown == null -> ""
+                            else -> shown
+                        },
+                        color = if (shown != null && shown.startsWith("n/s")) TextMuted else Accent,
+                        fontSize = 12.sp,
+                        modifier = Modifier.padding(horizontal = 8.dp),
+                    )
+                    Text(
+                        if (on) "SEL" else "+",
+                        color = if (on) GoodGreen else Accent,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                    )
                 }
             }
         }
@@ -176,7 +191,7 @@ fun IdleDiagnosticsScreen(
                     val display = values[pid.id] ?: values[pid.label] ?: "—"
                     val numeric = display.substringBefore(" ").toDoubleOrNull()
                     val color = when {
-                        display == "n/s" || display == "—" -> TextMuted
+                        display.startsWith("n/s") || display == "—" -> TextMuted
                         pid.label.contains("Misfire", true) && numeric != null && numeric > 0 -> CritRed
                         pid.label.contains("Misfire", true) && numeric == 0.0 -> GoodGreen
                         else -> Accent
@@ -306,7 +321,17 @@ fun TransmissionDashScreen(
     Column(modifier.fillMaxSize().background(Background).padding(16.dp)) {
         ScreenHeader(title = "Transmission", onBack = onBack) { Chip("Probe / refresh") { onRefresh() } }
         health?.let {
-            CardRow("Trans health", "${it.transmissionPct}%", if (it.transmissionPct >= 85) GoodGreen else WarnAmber)
+            val label = if (it.transmissionDataOk && it.transmissionPct != null) {
+                "${it.transmissionPct}%"
+            } else {
+                "n/a — insufficient data"
+            }
+            val color = when {
+                !it.transmissionDataOk -> TextMuted
+                (it.transmissionPct ?: 0) >= 85 -> GoodGreen
+                else -> WarnAmber
+            }
+            CardRow("Trans health", label, color)
             it.transmissionNotes.forEach { n -> Text("• $n", color = TextMuted, fontSize = 12.sp) }
         }
         Column(Modifier.verticalScroll(rememberScrollState()).padding(top = 8.dp)) {
@@ -315,7 +340,7 @@ fun TransmissionDashScreen(
                 "Input shaft RPM", "Output shaft RPM", "TC slip RPM", "TC lock-up status",
                 "Line pressure", "Shift solenoid A", "Shift solenoid B", "Shift solenoid C",
                 "Shift solenoid D", "Transmission load", "Kickdown status", "Adaptive learning status",
-            ).forEach { CardRow(it, values[it] ?: "n/s — probe Honda TCM pack") }
+            ).forEach { CardRow(it, values[it] ?: "n/s — not on this ECU yet", TextMuted) }
         }
     }
 }
@@ -327,9 +352,21 @@ fun HealthScoresScreen(score: HealthScore?, onRefresh: () -> Unit, onBack: () ->
         if (score == null) {
             Text("Connect and open this page to compute scores.", color = TextMuted)
         } else {
-            CardRow("Engine", "${score.enginePct}%", if (score.enginePct >= 85) GoodGreen else if (score.enginePct >= 60) WarnAmber else CritRed)
+            fun scoreLabel(ok: Boolean, pct: Int?) =
+                if (ok && pct != null) "$pct%" else "n/a — insufficient data"
+            fun scoreColor(ok: Boolean, pct: Int?) = when {
+                !ok || pct == null -> TextMuted
+                pct >= 85 -> GoodGreen
+                pct >= 60 -> WarnAmber
+                else -> CritRed
+            }
+            CardRow("Engine", scoreLabel(score.engineDataOk, score.enginePct), scoreColor(score.engineDataOk, score.enginePct))
             score.engineNotes.forEach { Text("• $it", color = TextMuted, fontSize = 13.sp) }
-            CardRow("Transmission", "${score.transmissionPct}%", if (score.transmissionPct >= 85) GoodGreen else WarnAmber)
+            CardRow(
+                "Transmission",
+                scoreLabel(score.transmissionDataOk, score.transmissionPct),
+                scoreColor(score.transmissionDataOk, score.transmissionPct),
+            )
             score.transmissionNotes.forEach { Text("• $it", color = TextMuted, fontSize = 13.sp) }
         }
     }
