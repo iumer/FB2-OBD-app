@@ -42,6 +42,9 @@ import java.util.UUID
  *
  * On connect it runs the init sequence, probes supported PIDs, then round-robins
  * the supported dashboard PIDs. All raw traffic goes to [ObdLogger].
+ *
+ * Battery: many FB2 ECUs omit PID 0142 from the support bitmask (Torque still
+ * shows volts via ATRV). We always poll ATRV and force-try 0142.
  */
 class Elm327BluetoothSource(
     private val device: BluetoothDevice,
@@ -73,6 +76,15 @@ class Elm327BluetoothSource(
         ObdPid.AMBIENT_TEMP,
     )
 
+    /** Always try these even if the support bitmask omits them. */
+    private val forcePoll = setOf(
+        ObdPid.CONTROL_MODULE_VOLTAGE.number,
+        ObdPid.MAF.number,
+        ObdPid.ENGINE_RPM.number,
+        ObdPid.SPEED.number,
+        ObdPid.COOLANT_TEMP.number,
+    )
+
     @SuppressLint("MissingPermission")
     override fun snapshots(): Flow<VehicleSnapshot> = channelFlow {
         runCatching { BluetoothAdapter.getDefaultAdapter()?.cancelDiscovery() }
@@ -84,21 +96,30 @@ class Elm327BluetoothSource(
 
         val reader = launch(Dispatchers.IO) {
             try {
-                for (cmd in INIT_SEQUENCE) {
-                    conn.exec(cmd, Elm327Connection.INIT_TIMEOUT_MS)
-                    delay(120L)
-                }
+                runInit(conn)
 
                 val supported = probeSupportedPids(conn)
-                val basePids = if (supported.isEmpty()) polled
-                else polled.filter { it.number in supported }
+                val basePids = if (supported.isEmpty()) {
+                    polled
+                } else {
+                    polled.filter { it.number in supported || it.number in forcePoll }
+                }
                 val hasEcuGear = supported.isEmpty() ||
                     ObdPid.TRANSMISSION_GEAR_RATIO.number in supported
                 val activePids = if (hasEcuGear) basePids + ObdPid.TRANSMISSION_GEAR_RATIO else basePids
-                val unsupported = if (supported.isEmpty()) emptySet()
-                else polled.map { it.number }.filter { it !in supported }.toSet()
+                // Don't mark forced PIDs as unsupported — ATRV/0142 may still work.
+                val unsupported = if (supported.isEmpty()) {
+                    emptySet()
+                } else {
+                    polled.map { it.number }
+                        .filter { it !in supported && it !in forcePoll }
+                        .toSet()
+                }
 
-                logger.logDebug(ObdLogger.Dir.INFO, "Polling ${activePids.size} PIDs; ECU gear=$hasEcuGear")
+                logger.logDebug(
+                    ObdLogger.Dir.INFO,
+                    "Polling ${activePids.size} PIDs; ECU gear=$hasEcuGear; ATRV battery fallback on",
+                )
 
                 var snapshot = VehicleSnapshot.EMPTY.copy(unsupportedPids = unsupported)
                 var deadCycles = 0
@@ -108,17 +129,17 @@ class Elm327BluetoothSource(
                     cycles++
                     var responded = 0
                     var timedOut = 0
+                    var unable = 0
+                    var busLost = false
+
                     for (pid in activePids) {
-                        // Skip PIDs that keep timing out (common on cheap clones / unsupported).
+                        if (busLost) break
                         val streak = failStreak[pid] ?: 0
-                        if (streak >= 3 && cycles % 20 != 0) {
-                            continue
-                        }
-                        val value = try {
-                            val raw = conn.exec(pid.request)
-                            responded++
-                            failStreak[pid] = 0
-                            ObdResponseParser.parse(pid, raw)
+                        // Skip flaky PIDs most cycles; retry occasionally.
+                        if (streak >= 2 && cycles % 15 != 0) continue
+
+                        val raw = try {
+                            conn.exec(pid.request)
                         } catch (io: IOException) {
                             timedOut++
                             failStreak[pid] = streak + 1
@@ -126,30 +147,64 @@ class Elm327BluetoothSource(
                                 ObdLogger.Dir.INFO,
                                 "skip ${pid.request}: ${io.message} (fail#${failStreak[pid]})",
                             )
-                            null
+                            continue
                         }
-                        // null keeps the previous sample for this PID — Dash stays sticky.
-                        snapshot = snapshot.merge(pid, value)
+
+                        if (isUnable(raw)) {
+                            unable++
+                            failStreak[pid] = streak + 1
+                            // ECU link gone — stop burning timeouts on the rest of the cycle.
+                            if (unable >= 2) {
+                                busLost = true
+                                logger.logDebug(
+                                    ObdLogger.Dir.INFO,
+                                    "bus lost (UNABLE) — soft recover",
+                                )
+                            }
+                            continue
+                        }
+
+                        val value = ObdResponseParser.parse(pid, raw)
+                        if (value != null) {
+                            responded++
+                            failStreak[pid] = 0
+                            snapshot = snapshot.merge(pid, value)
+                        } else {
+                            // Frame arrived but didn't decode — still counts as link alive.
+                            responded++
+                            failStreak[pid] = (streak + 1).coerceAtMost(2)
+                        }
                     }
-                    // Occasional keep-alive so sleepy clones don't drop RFCOMM.
-                    if (cycles % 30 == 0) {
-                        runCatching { conn.exec("01 0C", Elm327Connection.DEFAULT_TIMEOUT_MS) }
+
+                    // ATRV = adapter rail voltage (what Torque usually shows as Battery).
+                    // Prefer ECU 0142 when it answers; fall back to ATRV when missing/flaky.
+                    val voltFail = failStreak[ObdPid.CONTROL_MODULE_VOLTAGE] ?: 0
+                    if (!busLost && (snapshot.batteryVolts == null || voltFail >= 2)) {
+                        if (snapshot.batteryVolts == null || cycles % 3 == 0) {
+                            readAtrv(conn)?.let { v ->
+                                responded++
+                                snapshot = snapshot.copy(batteryVolts = v)
+                            }
+                        }
                     }
-                    if (responded == 0) {
+
+                    if (busLost) {
+                        softRecover(conn)
+                        deadCycles++
+                    } else if (responded == 0) {
                         deadCycles++
                         logger.logDebug(
                             ObdLogger.Dir.INFO,
-                            "dead cycle $deadCycles (timeouts=$timedOut/${activePids.size})",
+                            "dead cycle $deadCycles (timeouts=$timedOut unable=$unable/${activePids.size})",
                         )
-                        // Allow more transient dead cycles — idle + clone Bluetooth is flaky.
-                        if (deadCycles >= 5) {
+                        if (deadCycles >= 4) {
                             throw IOException("No response from adapter after $deadCycles dead cycles")
                         }
                     } else {
                         deadCycles = 0
                     }
+
                     snapshot = snapshot.withGear(hasEcuGear)
-                    // Don't push a totally blank frame after reconnect — keeps UI from wiping.
                     val hasAny = snapshot.rpm != null || snapshot.coolantC != null ||
                         snapshot.batteryVolts != null || snapshot.mafGps != null
                     if (hasAny || deadCycles == 0) {
@@ -169,8 +224,6 @@ class Elm327BluetoothSource(
         }
     }
         .retryWhen { cause, attempt ->
-            // Keep trying forever while the user stays on a live ELM source —
-            // walking away at idle must not permanently kill the session.
             if (cause is IOException) {
                 val backoff = (1_000L * (attempt + 1).coerceAtMost(8)).coerceAtMost(10_000L)
                 logger.logDebug(
@@ -227,7 +280,6 @@ class Elm327BluetoothSource(
 
     override suspend fun readFreezeFrame(): FreezeFrame {
         val conn = connection ?: return FreezeFrame()
-        // Request freeze-frame DTC + a few common PIDs.
         val raw = runCatching {
             conn.exec("0202") + " " + conn.exec("020C") + " " + conn.exec("020D") +
                 " " + conn.exec("0205") + " " + conn.exec("0204")
@@ -249,19 +301,32 @@ class Elm327BluetoothSource(
 
     override suspend fun probePids(pids: List<PidDefinition>): List<PidProbeResult> {
         val conn = connection ?: return emptyList()
-        return pids.map { pid ->
-            var raw = runCatching { conn.exec(pid.request) }.getOrNull()
-            var up = raw?.uppercase().orEmpty()
-            var bad = raw == null || listOf("NO DATA", "UNABLE", "ERROR", "?", "STOPPED").any { up.contains(it) }
-            // One retry — FB2 ELM logs show intermittent NO DATA on supported PIDs under load.
-            if (bad && up.contains("NO DATA")) {
-                kotlinx.coroutines.delay(40L)
-                raw = runCatching { conn.exec(pid.request) }.getOrNull()
-                up = raw?.uppercase().orEmpty()
-                bad = raw == null || listOf("NO DATA", "UNABLE", "ERROR", "?", "STOPPED").any { up.contains(it) }
+        val out = ArrayList<PidProbeResult>(pids.size)
+        var unableStreak = 0
+        for (pid in pids) {
+            // Bus already lost — don't sit on "Probing…" for minutes.
+            if (unableStreak >= 2) {
+                out += PidProbeResult(pid, false, null, "SKIPPED (bus UNABLE)")
+                continue
             }
+            var raw = runCatching {
+                conn.exec(pid.request, Elm327Connection.PROBE_TIMEOUT_MS)
+            }.getOrNull()
+            var up = raw?.uppercase().orEmpty()
+            var bad = raw == null || BAD_TOKENS.any { up.contains(it) }
+            if (bad && up.contains("NO DATA")) {
+                delay(30L)
+                raw = runCatching {
+                    conn.exec(pid.request, Elm327Connection.PROBE_TIMEOUT_MS)
+                }.getOrNull()
+                up = raw?.uppercase().orEmpty()
+                bad = raw == null || BAD_TOKENS.any { up.contains(it) }
+            }
+            if (up.contains("UNABLE")) unableStreak++
+            else if (!bad) unableStreak = 0
+
             if (bad) {
-                PidProbeResult(pid, false, null, raw)
+                out += PidProbeResult(pid, false, null, raw)
             } else {
                 val bytes = when {
                     pid.request.startsWith("01") && pid.request.length == 4 ->
@@ -270,10 +335,13 @@ class Elm327BluetoothSource(
                     else -> null
                 }
                 val value = bytes?.let { pid.decode(it) }
-                // Frame answered but decode failed → still mark supported so UI isn't "n/s".
-                PidProbeResult(pid, true, value, raw)
+                out += PidProbeResult(pid, true, value, raw)
             }
         }
+        if (unableStreak >= 2) {
+            softRecover(conn)
+        }
+        return out
     }
 
     override suspend fun probeHondaModules(): List<ModuleScanResult> {
@@ -301,7 +369,6 @@ class Elm327BluetoothSource(
     }
 
     private fun extractMode22(request: String, raw: String): IntArray? {
-        // Positive response 62 + PID bytes.
         val pidHex = request.removePrefix("22")
         val header = "62$pidHex".uppercase()
         val cleaned = raw.replace(">", " ").replace("\r", " ").replace("\n", " ").uppercase()
@@ -385,8 +452,38 @@ class Elm327BluetoothSource(
         ObdPid.TRANSMISSION_GEAR_RATIO -> copy(gearRatioActual = value ?: gearRatioActual)
     }
 
+    private suspend fun runInit(conn: Elm327Connection) {
+        for (cmd in INIT_SEQUENCE) {
+            conn.exec(cmd, Elm327Connection.INIT_TIMEOUT_MS)
+            delay(80L)
+        }
+    }
+
+    /** Restore broadcast Mode 01 after deep-search / UNABLE thrashing. */
+    private suspend fun softRecover(conn: Elm327Connection) {
+        for (cmd in RECOVER_SEQUENCE) {
+            runCatching { conn.exec(cmd, Elm327Connection.INIT_TIMEOUT_MS) }
+            delay(40L)
+        }
+    }
+
+    private suspend fun readAtrv(conn: Elm327Connection): Double? {
+        val raw = runCatching {
+            conn.exec("ATRV", Elm327Connection.PROBE_TIMEOUT_MS)
+        }.getOrNull() ?: return null
+        if (isUnable(raw)) return null
+        return ObdResponseParser.parseAtVoltage(raw)?.also {
+            logger.logDebug(ObdLogger.Dir.INFO, "ATRV battery=$it V")
+        }
+    }
+
+    private fun isUnable(raw: String): Boolean =
+        raw.uppercase().contains("UNABLE")
+
     companion object {
         val SPP_UUID: UUID = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB")
         private val INIT_SEQUENCE = listOf("ATZ", "ATE0", "ATL0", "ATS0", "ATSP0")
+        private val RECOVER_SEQUENCE = listOf("ATD", "ATE0", "ATL0", "ATS0", "ATSP0", "ATSH7DF", "ATAR")
+        private val BAD_TOKENS = listOf("NO DATA", "UNABLE", "ERROR", "?", "STOPPED")
     }
 }

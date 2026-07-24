@@ -12,6 +12,8 @@ object DeepSensorSearch {
 
     private val BAD = listOf("NO DATA", "UNABLE", "ERROR", "?", "STOPPED", "BUS INIT")
 
+    private val FULL_RESTORE = listOf("ATD", "ATE0", "ATL0", "ATS0", "ATSP0", "ATSH7DF", "ATAR")
+
     suspend fun run(
         source: ObdSource,
         label: String,
@@ -26,27 +28,52 @@ object DeepSensorSearch {
         }
         ObdLogger.logDebug(ObdLogger.Dir.INFO, "DEEP SEARCH begin [$label] ${strategies.size} strategies")
 
-        strategies.forEachIndexed { idx, strategy ->
-            onProgress(idx + 1, strategies.size, strategy.title)
-            // Small pause so Demo/UI progress is visible while walking the library.
-            delay(if (source.isLive) 40L else 180L)
-            val hit = tryStrategy(source, strategy)
-            if (hit != null) {
-                ObdLogger.logDebug(
-                    ObdLogger.Dir.INFO,
-                    "DEEP SEARCH HIT [$label] via ${strategy.id} = ${hit.value} ${strategy.unit}",
-                )
-                // Brief hold on the winning strategy title for the progress dialog.
-                onProgress(idx + 1, strategies.size, "FOUND — ${strategy.title}")
-                delay(if (source.isLive) 80L else 350L)
-                return DeepSearchReport(
-                    targetLabel = label,
-                    targetId = pid?.id ?: requestHint ?: label,
-                    attempts = idx + 1,
-                    hit = hit,
-                    notes = notes + "Found with: ${strategy.title}",
-                )
+        var unableStreak = 0
+        try {
+            strategies.forEachIndexed { idx, strategy ->
+                onProgress(idx + 1, strategies.size, strategy.title)
+                delay(if (source.isLive) 30L else 180L)
+
+                if (unableStreak >= 3) {
+                    notes += "Aborted early — adapter kept returning UNABLE TO CONNECT (ECU link lost)."
+                    return DeepSearchReport(
+                        targetLabel = label,
+                        targetId = pid?.id ?: requestHint ?: label,
+                        attempts = idx,
+                        hit = null,
+                        notes = notes,
+                    )
+                }
+
+                val hit = tryStrategy(source, strategy)
+                if (hit != null) {
+                    ObdLogger.logDebug(
+                        ObdLogger.Dir.INFO,
+                        "DEEP SEARCH HIT [$label] via ${strategy.id} = ${hit.value} ${strategy.unit}",
+                    )
+                    onProgress(idx + 1, strategies.size, "FOUND — ${strategy.title}")
+                    delay(if (source.isLive) 60L else 350L)
+                    return DeepSearchReport(
+                        targetLabel = label,
+                        targetId = pid?.id ?: requestHint ?: label,
+                        attempts = idx + 1,
+                        hit = hit,
+                        notes = notes + "Found with: ${strategy.title}",
+                    )
+                }
+                // Track consecutive bus failures across strategies.
+                // tryStrategy already tore down; peek with a cheap RPM ping.
+                val ping = source.command("010C")?.uppercase().orEmpty()
+                if (BAD.any { ping.contains(it) } || ping.isBlank()) unableStreak++
+                else unableStreak = 0
             }
+        } finally {
+            // Always restore broadcast Mode 01 so Dash polling isn't left on a weird header.
+            FULL_RESTORE.forEach { cmd ->
+                runCatching { source.command(cmd) }
+                delay(25L)
+            }
+            ObdLogger.logDebug(ObdLogger.Dir.INFO, "DEEP SEARCH restore done [$label]")
         }
 
         ObdLogger.logDebug(ObdLogger.Dir.INFO, "DEEP SEARCH miss [$label] after ${strategies.size} tries")
@@ -63,12 +90,18 @@ object DeepSensorSearch {
         try {
             strategy.setup.forEach { cmd ->
                 source.command(cmd)
-                delay(30L)
+                delay(25L)
             }
-            delay(40L)
+            delay(30L)
             val raw = source.command(strategy.request) ?: return null
             val up = raw.uppercase()
             if (BAD.any { up.contains(it) }) return null
+
+            // ATRV returns "12.6V" — not a Mode 01/22 hex frame.
+            if (strategy.request.equals("ATRV", ignoreCase = true)) {
+                val v = ObdResponseParser.parseAtVoltage(raw) ?: return null
+                return DeepSearchHit(strategy, v, raw)
+            }
 
             val bytes = when {
                 strategy.request.startsWith("01") && strategy.request.length == 4 ->
@@ -86,7 +119,7 @@ object DeepSensorSearch {
         } finally {
             strategy.teardown.forEach { cmd ->
                 runCatching { source.command(cmd) }
-                delay(20L)
+                delay(15L)
             }
         }
     }

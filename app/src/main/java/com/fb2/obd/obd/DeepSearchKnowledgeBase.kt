@@ -180,6 +180,18 @@ object DeepSearchKnowledgeBase {
     )
 
     private fun battery() = listOf(
+        // ATRV first — Torque-style adapter rail voltage; works when ECU omits 0142.
+        DeepSearchStrategy(
+            id = "atrv",
+            title = "ELM adapter voltage (ATRV)",
+            rationale = "Reads OBD-plug voltage at the adapter (same source Torque uses). Works even when the ECM does not advertise PID 0142.",
+            setup = emptyList(),
+            request = "ATRV",
+            dataBytes = 0,
+            decode = { null },
+            unit = "V",
+            teardown = emptyList(),
+        ),
         forceMode01("0142", "Force Control module voltage (0142)", 2, "V", ::volts),
         can11("7E0", "0142", "ECM 7E0 + voltage", "Direct ECM voltage.", 2, "V", ::volts),
         can11("7E0", "22130C", "Honda ECU voltage candidate", "Mode 22 placeholder.", 2, "V", ::volts),
@@ -290,6 +302,8 @@ object DeepSearchKnowledgeBase {
     fun explainLikelyCause(label: String, pid: PidDefinition?): String {
         val key = normalize(label, pid?.id, pid?.request)
         return when (key) {
+            "battery" ->
+                "PID 0142 is often missing from this Civic's support bitmask. Deep search tries ATRV (adapter rail voltage — same as Torque) first, then forced 0142 / Honda Mode 22 candidates."
             "coolant2", "ambient", "ltft" ->
                 "Usually the ECM does not advertise this SAE PID (not an ELM failure). Deep search still forces the request and tries ECU headers."
             "atf", "gear", "misfire", "hvac", "oil temperature", "fuel pressure" ->

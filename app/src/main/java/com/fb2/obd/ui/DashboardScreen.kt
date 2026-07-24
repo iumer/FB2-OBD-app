@@ -587,14 +587,19 @@ private fun MetricsPage(
         items(baseTiles) { t ->
             val unsupported = t.pid != null && t.pid.number in snapshot.unsupportedPids
             val recovered = deepFoundValues[t.label]
-            val showNs = unsupported && recovered == null
+            // Prefer a live or recovered value over the support-bitmask "n/s"
+            // (Battery often works via ATRV even when ECU omits 0142).
+            val hasLive = t.value != "--" && t.value.isNotBlank()
+            val showNs = unsupported && recovered == null && !hasLive
             val value = when {
                 recovered != null -> recovered.substringBefore(" ")
+                hasLive -> t.value
                 unsupported -> "n/s"
                 else -> t.value
             }
             val unit = when {
                 recovered != null -> recovered.substringAfter(" ", "")
+                hasLive -> t.unit
                 unsupported -> ""
                 else -> t.unit
             }

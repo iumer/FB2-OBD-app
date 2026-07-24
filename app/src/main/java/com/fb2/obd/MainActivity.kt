@@ -432,10 +432,22 @@ class MainActivity : ComponentActivity() {
 
     private fun shareText(subject: String, text: String) {
         try {
+            val safeName = subject.replace(Regex("[^A-Za-z0-9._-]+"), "_").take(40)
+            val dir = File(cacheDir, "share").also { it.mkdirs() }
+            val out = File(dir, "${safeName}.txt")
+            out.writeText(text.ifBlank { "(empty log)" })
+            val uri = FileProvider.getUriForFile(
+                this,
+                "${packageName}.fileprovider",
+                out,
+            )
             val intent = Intent(Intent.ACTION_SEND).apply {
                 type = "text/plain"
+                putExtra(Intent.EXTRA_STREAM, uri)
                 putExtra(Intent.EXTRA_SUBJECT, subject)
-                putExtra(Intent.EXTRA_TEXT, text)
+                putExtra(Intent.EXTRA_TEXT, subject)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                clipData = android.content.ClipData.newUri(contentResolver, subject, uri)
             }
             startActivity(Intent.createChooser(intent, subject))
         } catch (e: Exception) {
