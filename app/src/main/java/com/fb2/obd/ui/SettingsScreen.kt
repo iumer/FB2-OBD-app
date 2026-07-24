@@ -1,5 +1,6 @@
 package com.fb2.obd.ui
 
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -87,13 +88,18 @@ fun SettingsScreen(
     nav: SettingsNav,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
+    /**
+     * Hoisted from the activity so scroll survives navigating into a sub-page
+     * (Faults / Deep diag / etc.) and coming Back.
+     */
+    scrollState: ScrollState = rememberScrollState(),
 ) {
     Column(
         modifier = modifier
             .fillMaxSize()
             .background(Background)
             .padding(16.dp)
-            .verticalScroll(rememberScrollState()),
+            .verticalScroll(scrollState),
     ) {
         ScreenHeader(title = "Settings", onBack = onBack)
 

@@ -21,6 +21,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -94,6 +95,8 @@ class MainActivity : ComponentActivity() {
                 val dashExtraValues by viewModel.dashExtraValues.collectAsState()
 
                 var screen by remember { mutableStateOf(Screen.DASHBOARD) }
+                // Lives above the screen switch so Settings scroll is kept when opening a sub-page.
+                val settingsScrollState = rememberScrollState()
                 var showConnect by remember { mutableStateOf(false) }
                 var devices by remember { mutableStateOf(emptyList<BtDeviceUi>()) }
                 var ax by remember { mutableFloatStateOf(0f) }
@@ -237,6 +240,7 @@ class MainActivity : ComponentActivity() {
                         nav = settingsNav,
                         onBack = { screen = Screen.DASHBOARD },
                         modifier = Modifier.fillMaxSize(),
+                        scrollState = settingsScrollState,
                     )
 
                     Screen.CUSTOM -> CustomSensorsScreen(
