@@ -5,6 +5,9 @@ import android.media.AudioAttributes
 import android.media.AudioDeviceInfo
 import android.media.AudioFocusRequest
 import android.media.AudioManager
+import android.media.ToneGenerator
+import android.os.Handler
+import android.os.Looper
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import com.fb2.obd.obd.HealthThresholds
@@ -14,21 +17,21 @@ import java.util.Locale
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
- * Speaks critical / hot-band warnings using the phone’s built-in Text-to-Speech
- * engine (works offline — no downloaded voice packs required).
+ * Critical / hot-band alarms for the car HU.
+ *
+ * Always plays an audible **alarm tone** (STREAM_ALARM, with STREAM_MUSIC
+ * fallback) so the cabin hears something even when TTS is missing, muted on
+ * the nav stream, or still initializing. Also speaks the phrase via offline
+ * Text-to-Speech when ready.
  *
  * Same alert key is not repeated more often than [cooldownMs].
- *
- * Audio: requests transient focus and uses
- * [AudioAttributes.USAGE_ASSISTANCE_NAVIGATION_GUIDANCE] so alerts prefer the
- * car Bluetooth path (A2DP) when connected; falls back to SCO for voice-capable
- * kits, otherwise the phone speaker.
  */
 class VoiceAlerter(context: Context) : TextToSpeech.OnInitListener {
 
     private val appContext = context.applicationContext
     private val audioManager =
         appContext.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+    private val mainHandler = Handler(Looper.getMainLooper())
     private var tts: TextToSpeech? = null
     private val ready = AtomicBoolean(false)
     private val speaking = AtomicBoolean(false)
@@ -36,10 +39,17 @@ class VoiceAlerter(context: Context) : TextToSpeech.OnInitListener {
     private val lastHealth = mutableMapOf<String, String>()
     private var focusRequest: AudioFocusRequest? = null
     private var scoStartedByUs = false
+    @Volatile
+    private var pendingPhrase: String? = null
 
     private val speechAttrs: AudioAttributes = AudioAttributes.Builder()
         .setUsage(AudioAttributes.USAGE_ASSISTANCE_NAVIGATION_GUIDANCE)
         .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+        .build()
+
+    private val alarmAttrs: AudioAttributes = AudioAttributes.Builder()
+        .setUsage(AudioAttributes.USAGE_ALARM)
+        .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
         .build()
 
     @Volatile
@@ -58,11 +68,11 @@ class VoiceAlerter(context: Context) : TextToSpeech.OnInitListener {
         if (status != TextToSpeech.SUCCESS) {
             ObdLogger.logDebug(ObdLogger.Dir.INFO, "Voice alerts: TTS init failed ($status)")
             ready.set(false)
+            // Tone path still works; keep pending so a later retry can speak.
             return
         }
         val result = engine.setLanguage(Locale.US)
         if (result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) {
-            // Fall back to device default locale.
             engine.language = Locale.getDefault()
         }
         engine.setSpeechRate(0.95f)
@@ -85,10 +95,16 @@ class VoiceAlerter(context: Context) : TextToSpeech.OnInitListener {
         })
         ready.set(true)
         ObdLogger.logDebug(ObdLogger.Dir.INFO, "Voice alerts: TTS ready")
+        val pending = pendingPhrase
+        pendingPhrase = null
+        if (pending != null) {
+            speakPhrase("pending", pending, System.currentTimeMillis(), playTone = false)
+        }
     }
 
     /**
-     * Evaluate snapshot and speak the highest-priority new/rearmed alert.
+     * Evaluate snapshot and sound the highest-priority new/rearmed alert.
+     * Tone plays even when TTS is not ready yet.
      */
     fun onSnapshot(
         snapshot: VehicleSnapshot,
@@ -96,7 +112,8 @@ class VoiceAlerter(context: Context) : TextToSpeech.OnInitListener {
         atfC: Double? = null,
         tcSlipRpm: Double? = null,
     ) {
-        if (!enabled || !ready.get()) return
+        if (!enabled) return
+        start()
         val now = System.currentTimeMillis()
         val alerts = VoiceAlertRules.evaluate(snapshot, thresholds, atfC, tcSlipRpm)
         val activeKeys = alerts.map { it.key }.toSet()
@@ -111,37 +128,119 @@ class VoiceAlerter(context: Context) : TextToSpeech.OnInitListener {
         val candidate = alerts.firstOrNull { alert ->
             val last = lastSpokenAt[alert.key] ?: 0L
             val wasActive = lastHealth[alert.key] == alert.phrase
-            // Speak if new phrase for this key, or cooldown elapsed.
             (!wasActive) || (now - last >= cooldownMs)
         } ?: return
 
-        // Only one utterance at a time — pick the top priority due alert.
         if (speaking.get()) return
-        speak(candidate.key, candidate.phrase, now)
+        announce(candidate.key, candidate.phrase, now)
     }
 
-    fun speakTest(phrase: String = "Voice alerts ready") {
-        if (!ready.get()) {
-            start()
-            return
-        }
-        speak("test", phrase, System.currentTimeMillis())
+    /**
+     * Settings / toggle check — plays the same critical alarm tone + phrase
+     * used in production (defaults to battery critical).
+     */
+    fun speakTest(phrase: String = "Battery critical") {
+        start()
+        announce("test", phrase, System.currentTimeMillis())
     }
 
-    private fun speak(key: String, phrase: String, nowMs: Long) {
-        val engine = tts ?: return
+    private fun announce(key: String, phrase: String, nowMs: Long) {
         lastSpokenAt[key] = nowMs
         lastHealth[key] = phrase
         ObdLogger.logDebug(ObdLogger.Dir.INFO, "VOICE ALERT: $phrase")
+        playAlarmTone()
+        speakPhrase(key, phrase, nowMs, playTone = false)
+    }
+
+    private fun speakPhrase(key: String, phrase: String, @Suppress("UNUSED_PARAMETER") nowMs: Long, playTone: Boolean) {
+        if (playTone) playAlarmTone()
+        val engine = tts
+        if (!ready.get() || engine == null) {
+            pendingPhrase = phrase
+            ObdLogger.logDebug(ObdLogger.Dir.INFO, "Voice alerts: TTS not ready — tone only, queued \"$phrase\"")
+            return
+        }
         prepareAudioForSpeak()
+        speaking.set(true)
         val spoken = engine.speak(phrase, TextToSpeech.QUEUE_FLUSH, null, key)
         if (spoken != TextToSpeech.SUCCESS) {
             speaking.set(false)
             releaseAudioAfterSpeak()
+            ObdLogger.logDebug(ObdLogger.Dir.INFO, "Voice alerts: TTS speak failed ($spoken)")
         }
     }
 
-    /** Request focus and prefer BT car audio when available. */
+    /**
+     * Loud beep on STREAM_ALARM (cabin-friendly). Falls back to STREAM_MUSIC
+     * when alarm volume is unavailable. Temporarily unmutes a zeroed stream.
+     */
+    fun playAlarmTone() {
+        prepareAudioForAlarm()
+        val streams = intArrayOf(
+            AudioManager.STREAM_ALARM,
+            AudioManager.STREAM_NOTIFICATION,
+            AudioManager.STREAM_MUSIC,
+        )
+        for (stream in streams) {
+            val restore = ensureAudible(stream)
+            val ok = runCatching {
+                val tg = ToneGenerator(stream, 100)
+                // Distinct urgent pattern — ~1.2s.
+                tg.startTone(ToneGenerator.TONE_CDMA_EMERGENCY_RINGBACK, 1_200)
+                mainHandler.postDelayed({
+                    runCatching { tg.stopTone() }
+                    runCatching { tg.release() }
+                    restore?.invoke()
+                }, 1_400)
+                true
+            }.getOrDefault(false)
+            if (ok) {
+                ObdLogger.logDebug(ObdLogger.Dir.INFO, "Voice alerts: alarm tone on stream=$stream")
+                return
+            }
+            restore?.invoke()
+        }
+        ObdLogger.logDebug(ObdLogger.Dir.INFO, "Voice alerts: alarm tone failed on all streams")
+    }
+
+    private fun ensureAudible(stream: Int): (() -> Unit)? {
+        return runCatching {
+            val cur = audioManager.getStreamVolume(stream)
+            val max = audioManager.getStreamMaxVolume(stream)
+            if (cur == 0 && max > 0) {
+                val target = (max * 2 / 3).coerceAtLeast(1)
+                @Suppress("DEPRECATION")
+                audioManager.setStreamVolume(stream, target, 0)
+                return@runCatching {
+                    runCatching {
+                        @Suppress("DEPRECATION")
+                        audioManager.setStreamVolume(stream, cur, 0)
+                    }
+                    Unit
+                }
+            }
+            null
+        }.getOrNull()
+    }
+
+    private fun prepareAudioForAlarm() {
+        val req = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK)
+            .setAudioAttributes(alarmAttrs)
+            .setOnAudioFocusChangeListener { /* keep tone going */ }
+            .setAcceptsDelayedFocusGain(false)
+            .build()
+        focusRequest = req
+        val result = audioManager.requestAudioFocus(req)
+        if (result != AudioManager.AUDIOFOCUS_REQUEST_GRANTED) {
+            ObdLogger.logDebug(ObdLogger.Dir.INFO, "Voice alerts: alarm focus not granted ($result)")
+        }
+        preferBluetoothRoute()
+        // Release focus shortly after the tone finishes (TTS may still hold its own).
+        mainHandler.postDelayed({
+            if (!speaking.get()) releaseAudioAfterSpeak()
+        }, 1_600)
+    }
+
     private fun prepareAudioForSpeak() {
         requestAudioFocus()
         preferBluetoothRoute()
@@ -170,7 +269,6 @@ class VoiceAlerter(context: Context) : TextToSpeech.OnInitListener {
         val hasA2dp = devices.any { it.type == AudioDeviceInfo.TYPE_BLUETOOTH_A2DP }
         val hasScoDevice = devices.any { it.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO }
         if (hasA2dp) {
-            // System routes USAGE_ASSISTANCE_NAVIGATION_GUIDANCE over A2DP when present.
             ObdLogger.logDebug(ObdLogger.Dir.INFO, "Voice alerts: BT A2DP available")
             return
         }
@@ -205,6 +303,8 @@ class VoiceAlerter(context: Context) : TextToSpeech.OnInitListener {
 
     fun shutdown() {
         ready.set(false)
+        pendingPhrase = null
+        mainHandler.removeCallbacksAndMessages(null)
         tts?.stop()
         tts?.shutdown()
         tts = null

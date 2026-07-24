@@ -26,9 +26,13 @@ object VoiceAlertRules {
             when (status.health) {
                 Health.CRITICAL -> out += Alert(key, phrase, priority)
                 Health.ELEVATED -> {
-                    // Speak orange “hot” for temps only — avoid chatter on trims.
-                    if (key == "coolant" || key == "atf") {
-                        out += Alert("${key}_hot", phrase.replace("critical", "hot"), priority - 1)
+                    // Speak orange “hot” for temps; also warn on weak battery
+                    // (often looks red-ish on HU before it hits CRITICAL).
+                    when (key) {
+                        "coolant", "atf" ->
+                            out += Alert("${key}_hot", phrase.replace("critical", "hot"), priority - 1)
+                        "battery" ->
+                            out += Alert("battery_low", "Battery low", priority - 2)
                     }
                 }
                 else -> {}

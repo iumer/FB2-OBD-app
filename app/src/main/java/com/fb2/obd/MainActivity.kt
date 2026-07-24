@@ -315,6 +315,10 @@ class MainActivity : ComponentActivity() {
                         settings = settings,
                         onToggleEstimatedGear = viewModel::setShowEstimatedGear,
                         onToggleVoiceAlerts = viewModel::setVoiceAlerts,
+                        onCheckSoundAlert = {
+                            viewModel.testSoundAlert()
+                            toast("Playing test alarm — listen for beep + “Battery critical”")
+                        },
                         nav = settingsNav,
                         onBack = { screen = Screen.DASHBOARD },
                         modifier = Modifier.fillMaxSize(),

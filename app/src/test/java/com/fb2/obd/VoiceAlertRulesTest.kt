@@ -33,7 +33,16 @@ class VoiceAlertRulesTest {
         val alerts = VoiceAlertRules.evaluate(
             VehicleSnapshot(rpm = 800.0, coolantC = 90.0, batteryVolts = 12.0),
         )
-        assertTrue(alerts.any { it.key == "battery" && it.phrase.contains("Battery", ignoreCase = true) })
+        assertTrue(alerts.any { it.key == "battery" && it.phrase.equals("Battery critical", ignoreCase = true) })
+    }
+
+    @Test
+    fun batteryElevatedWhileRunning_speaksBatteryLow() {
+        // Orange WEAK CHARGE band (defaults: 12.8–13.2 V running) must also alarm.
+        val alerts = VoiceAlertRules.evaluate(
+            VehicleSnapshot(rpm = 800.0, coolantC = 90.0, batteryVolts = 12.9),
+        )
+        assertTrue(alerts.any { it.key == "battery_low" && it.phrase.equals("Battery low", ignoreCase = true) })
     }
 
     @Test

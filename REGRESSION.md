@@ -24,6 +24,7 @@ Keep these fixed. If a change might touch one of these areas, re-verify it.
 | I09 | Debug log Share does nothing | Fixed | FileProvider share; HU fallback → Downloads/FB2-Diag + path dialog |
 | I10 | Value LOG Share broken / truncated (large CSV as EXTRA_TEXT) | Fixed | FileProvider CSV share; same HU save fallback |
 | I11 | Voice alerts must keep working with screen off (real ELM) | Fixed | `ObdMonitorForegroundService` + wake lock + AudioFocus |
+| I27 | Battery red/orange on Dash but no audible alarm | Fixed | Alarm tone + TTS; battery ELEVATED → “Battery low”; Settings Check sound alert |
 | I12 | Android Auto sideload not showing on real HU | Documented | Needs Play Internal testing/sharing; DHU for desk — see `AGENTS.md` |
 | I13 | LOG should be main Dash only (not Fuel/Trip/Trans dumps) | Fixed | Lean CSV: events + dashboard_snapshots + dash_tiles |
 | I14 | Pakistan units (km, km/h, km/L) | Fixed | Product default |
@@ -92,7 +93,8 @@ touches ELM, Dash health, deep search, logging, or share:
 5. **Rough Idle page** — opens with live values quickly; does not hang on Probing if bus is unhealthy.
 6. **Debug log Save** — Settings → Debug log → **Save**. Writes `Downloads/FB2-Diag/` (never opens Bluetooth-only share). Dialog can Open file / optional Share… if a real app exists.
 7. **Value LOG Save** — same Save flow for current buffer or listed sessions.
-8. **Screen off alerts** — real ELM connected → sticky notification present; with voice alerts on, a critical condition still speaks after screen off.
+8. **Screen off alerts** — real ELM connected → sticky notification present; with voice alerts on, a critical condition still beeps + speaks after screen off.
+9. **Check sound alert** — Settings → **Check sound alert** must play beep + “Battery critical” on phone and (when BT audio is up) in the car.
 9. **Floating bubble (MIN)** — grant overlay permission → MIN → collapsed circle appears; drag works; tap expands **radial ring** (up to 5 live values around center); vertical swipe pages next/previous groups; idle ~6s auto-collapses to circle; tap center collapses; hold opens app. **Back → Exit & disconnect** must remove the bubble entirely. (On Dellson: verify over CarPlay if used.)
 10. **Car HU layout (automated)** — Paparazzi at 1024×600, 1280×720, 1920×720 in `CarHuSnapshotTest` / `CarHuBubbleSnapshotTest` (collapsed + radial expanded). Adaptive column counts for Dash/dense pages.
 11. **Android Auto** — phone UI / DHU only unless installed via Play Internal testing.

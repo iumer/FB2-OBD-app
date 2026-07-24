@@ -568,6 +568,16 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /**
+     * Settings “Check sound alert” — same tone + phrase as a live battery
+     * critical alarm, so the driver can verify cabin audio without waiting
+     * for a real fault.
+     */
+    fun testSoundAlert() {
+        voiceAlerter.start()
+        voiceAlerter.speakTest("Battery critical")
+    }
+
     /** Cancel the active OBD source (closes ELM socket) and mark offline. */
     fun disconnect() {
         if (_settings.value.valueLogging) {
