@@ -40,12 +40,14 @@ data class Mode06Result(
     val raw: String,
 )
 
-/** Engine / transmission health score. */
+/** Engine / transmission health score. Null pct = insufficient data (not "100% healthy"). */
 data class HealthScore(
-    val enginePct: Int = 100,
-    val transmissionPct: Int = 100,
+    val enginePct: Int? = null,
+    val transmissionPct: Int? = null,
     val engineNotes: List<String> = emptyList(),
     val transmissionNotes: List<String> = emptyList(),
+    val engineDataOk: Boolean = false,
+    val transmissionDataOk: Boolean = false,
 )
 
 /** Full-system / Honda menu scan row. */

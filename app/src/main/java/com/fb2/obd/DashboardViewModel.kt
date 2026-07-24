@@ -15,6 +15,7 @@ import com.fb2.obd.obd.FreezeFrame
 import com.fb2.obd.obd.HealthScore
 import com.fb2.obd.obd.HealthScoreCalculator
 import com.fb2.obd.obd.HondaPidCatalog
+import com.fb2.obd.obd.LiveSnapshotOverlay
 import com.fb2.obd.obd.Mode06Result
 import com.fb2.obd.obd.ModuleScanResult
 import com.fb2.obd.obd.O2TestResult
@@ -161,6 +162,8 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
     private val tripComputer = TripComputer()
     private var collectJob: Job? = null
     private var currentSource: ObdSource? = null
+    /** Last TCM probe hit count — used so Health doesn't claim 100% with zero TCM data. */
+    private var lastTcmSupportedCount: Int = 0
 
     init {
         ObdLogger.valueLoggingEnabled = _settings.value.valueLogging
@@ -216,7 +219,11 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
                     )
                 }
                 _health.update {
-                    HealthScoreCalculator.compute(snapshot, _faults.value.stored.size)
+                    HealthScoreCalculator.compute(
+                        snapshot,
+                        _faults.value.stored.size,
+                        tcmSupportedCount = lastTcmSupportedCount,
+                    )
                 }
                 _uiState.update {
                     it.copy(
@@ -247,7 +254,11 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
                 )
             }
             _health.update {
-                HealthScoreCalculator.compute(_uiState.value.snapshot, stored.size)
+                HealthScoreCalculator.compute(
+                    _uiState.value.snapshot,
+                    stored.size,
+                    tcmSupportedCount = lastTcmSupportedCount,
+                )
             }
         }
     }
@@ -300,14 +311,11 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             _custom.update { it.copy(probing = true) }
             val selected = pidCatalog.filter { it.id in _custom.value.selectedIds }
-            val results = source.probePids(selected)
+            val probed = source.probePids(selected)
+            val results = LiveSnapshotOverlay.apply(probed, _uiState.value.snapshot)
             ObdLogger.logProbe("Custom sensors", results)
             val live = results.associate { r ->
-                r.pid.id to when {
-                    !r.supported -> "n/s"
-                    r.sample != null -> "%.2f %s".format(r.sample, r.pid.unit).trim()
-                    else -> "ok"
-                }
+                r.pid.id to LiveSnapshotOverlay.formatDisplay(r)
             }
             _custom.update { it.copy(probing = false, liveValues = live) }
         }
@@ -319,14 +327,11 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
             val defs = StandardPidCatalog.fuelPageDefaults() +
                 HondaPidCatalog.engine.pids.filter { it.label.contains("Injector", true) } +
                 HondaPidCatalog.engine.pids.filter { it.label.contains("Fuel", true) }
-            val results = source.probePids(defs.distinctBy { it.id })
+            val probed = source.probePids(defs.distinctBy { it.id })
+            val results = LiveSnapshotOverlay.apply(probed, _uiState.value.snapshot)
             ObdLogger.logProbe("Fuel system", results)
             _fuelValues.value = results.associate { r ->
-                r.pid.label to when {
-                    !r.supported -> "n/s"
-                    r.sample != null -> "%.2f %s".format(r.sample, r.pid.unit).trim()
-                    else -> "—"
-                }
+                r.pid.label to LiveSnapshotOverlay.formatDisplay(r)
             }
         }
     }
@@ -335,20 +340,13 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
         val source = currentSource ?: return
         viewModelScope.launch {
             _idleDiag.update { it.copy(loading = true) }
-            val results = source.probePids(ColdStartIdleCatalog.allPids)
+            val probed = source.probePids(ColdStartIdleCatalog.allPids)
+            val results = LiveSnapshotOverlay.apply(probed, _uiState.value.snapshot)
             ObdLogger.logProbe("Cold start / rough idle", results)
             val values = results.associate { r ->
-                r.pid.id to when {
-                    !r.supported -> "n/s"
-                    r.sample != null -> "%.2f %s".format(r.sample, r.pid.unit).trim()
-                    else -> "—"
-                }
+                r.pid.id to LiveSnapshotOverlay.formatDisplay(r)
             } + results.associate { r ->
-                r.pid.label to when {
-                    !r.supported -> "n/s"
-                    r.sample != null -> "%.2f %s".format(r.sample, r.pid.unit).trim()
-                    else -> "—"
-                }
+                r.pid.label to LiveSnapshotOverlay.formatDisplay(r)
             }
             _idleDiag.value = IdleDiagState(
                 loading = false,
@@ -363,17 +361,20 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             val results = source.probePids(HondaPidCatalog.transmission.pids)
             ObdLogger.logProbe("Transmission", results)
+            lastTcmSupportedCount = results.count { it.supported }
             _transValues.value = results.associate { r ->
-                r.pid.label to when {
-                    !r.supported -> "n/s"
-                    r.sample != null -> "%.2f %s".format(r.sample, r.pid.unit).trim()
-                    else -> "—"
-                }
+                r.pid.label to LiveSnapshotOverlay.formatDisplay(r)
             }
-            val atf = results.find { it.pid.label.startsWith("ATF") }?.sample
-            val slip = results.find { it.pid.label.contains("slip", true) }?.sample
+            val atf = results.find { it.pid.label.startsWith("ATF") && it.supported }?.sample
+            val slip = results.find { it.pid.label.contains("slip", true) && it.supported }?.sample
             _health.update {
-                HealthScoreCalculator.compute(_uiState.value.snapshot, _faults.value.stored.size, atf, slip)
+                HealthScoreCalculator.compute(
+                    _uiState.value.snapshot,
+                    _faults.value.stored.size,
+                    atf,
+                    slip,
+                    tcmSupportedCount = lastTcmSupportedCount,
+                )
             }
         }
     }
@@ -429,13 +430,28 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
                 "Honda modules",
                 modules.joinToString(" | ") { "${it.module}:${it.supportedCount}/${it.totalCount}" },
             )
+            val tcm = modules.find { it.profileId == "honda_tcm" }
+            if (tcm != null) {
+                lastTcmSupportedCount = tcm.supportedCount
+                _health.update {
+                    HealthScoreCalculator.compute(
+                        _uiState.value.snapshot,
+                        _faults.value.stored.size,
+                        tcmSupportedCount = lastTcmSupportedCount,
+                    )
+                }
+            }
             _hondaScanning.value = false
         }
     }
 
     fun recalcHealth() {
         _health.update {
-            HealthScoreCalculator.compute(_uiState.value.snapshot, _faults.value.stored.size)
+            HealthScoreCalculator.compute(
+                _uiState.value.snapshot,
+                _faults.value.stored.size,
+                tcmSupportedCount = lastTcmSupportedCount,
+            )
         }
     }
 
