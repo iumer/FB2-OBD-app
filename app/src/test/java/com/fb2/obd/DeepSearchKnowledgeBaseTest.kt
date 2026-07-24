@@ -32,6 +32,8 @@ class DeepSearchKnowledgeBaseTest {
         val strategies = DeepSearchKnowledgeBase.strategiesFor(null, "Battery", "0142")
         assertTrue(strategies.isNotEmpty())
         assertTrue(strategies.first().request.equals("ATRV", ignoreCase = true))
+        assertTrue(strategies.any { it.isAdapterLocal })
+        assertTrue(strategies.any { it.isSimpleForce })
     }
 
     @Test

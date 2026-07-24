@@ -831,7 +831,8 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
         val source = currentSource ?: return
         viewModelScope.launch {
             _idleDiag.update { it.copy(loading = true) }
-            // Probe SAE / Mode 01 first so the page fills quickly; Mode 22 last.
+            val liveSnap = _uiState.value.snapshot
+            // Paint live Dash values immediately so the page isn't stuck on blank "Probing…".
             val ordered = ColdStartIdleCatalog.allPids.sortedBy { pid ->
                 when {
                     pid.request.startsWith("01") -> 0
@@ -839,9 +840,41 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
                     else -> 1
                 }
             }
-            val probed = source.probePids(ordered)
-            // Overlay live Dash ATRV/0142 volts onto the Control module voltage row.
-            val withLive = LiveSnapshotOverlay.apply(probed, _uiState.value.snapshot).toMutableList()
+            val mode01 = ordered.filter { it.request.startsWith("01") }
+            val mode22 = ordered.filter { !it.request.startsWith("01") }
+
+            val prefill = LiveSnapshotOverlay.apply(
+                mode01.map { PidProbeResult(it, false, null, null) } +
+                    mode22.map { PidProbeResult(it, false, null, null) },
+                liveSnap,
+            )
+            _idleDiag.update {
+                it.copy(
+                    loading = true,
+                    values = prefill.associate { r -> r.pid.id to LiveSnapshotOverlay.formatDisplay(r) } +
+                        prefill.associate { r -> r.pid.label to LiveSnapshotOverlay.formatDisplay(r) },
+                )
+            }
+
+            // Probe Mode 01 first (fast). Skip Mode 22 if the bus is already unhealthy.
+            val probed01 = source.probePids(mode01)
+            val unable = probed01.count { r ->
+                r.raw?.uppercase()?.contains("UNABLE") == true ||
+                    r.raw?.contains("SKIPPED", true) == true
+            }
+            val busOk = unable < 2
+            val probed22 = if (busOk) {
+                source.probePids(mode22)
+            } else {
+                ObdLogger.logDebug(
+                    ObdLogger.Dir.INFO,
+                    "Idle probe: skipping Mode 22 (bus unhealthy after Mode 01)",
+                )
+                mode22.map { PidProbeResult(it, false, null, "SKIPPED (bus unhealthy)") }
+            }
+
+            val withLive = LiveSnapshotOverlay.apply(probed01 + probed22, _uiState.value.snapshot)
+                .toMutableList()
             val battIdx = withLive.indexOfFirst {
                 it.pid.request.equals("0142", true) ||
                     it.pid.label.contains("Control module voltage", true)

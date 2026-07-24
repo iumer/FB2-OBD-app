@@ -125,6 +125,18 @@ class Elm327BluetoothSource(
                 var deadCycles = 0
                 val failStreak = mutableMapOf<ObdPid, Int>()
                 var cycles = 0
+                // Core Dash PIDs — keep these alive first when the bus is flaky.
+                val coreNumbers = setOf(
+                    ObdPid.ENGINE_RPM.number,
+                    ObdPid.SPEED.number,
+                    ObdPid.COOLANT_TEMP.number,
+                    ObdPid.MAF.number,
+                    ObdPid.INTAKE_MAP.number,
+                    ObdPid.THROTTLE.number,
+                    ObdPid.STFT_B1.number,
+                    ObdPid.FUEL_SYSTEM_STATUS.number,
+                    ObdPid.ENGINE_LOAD.number,
+                )
                 while (isActive) {
                     cycles++
                     var responded = 0
@@ -132,11 +144,25 @@ class Elm327BluetoothSource(
                     var unable = 0
                     var busLost = false
 
+                    // ATRV first every cycle — adapter rail voltage does NOT need the ECU.
+                    // Skipping it during busLost was why Battery went n/s while Torque still worked.
+                    if (cycles == 1 || snapshot.batteryVolts == null || cycles % 2 == 0) {
+                        readAtrv(conn)?.let { v ->
+                            responded++
+                            snapshot = snapshot.copy(batteryVolts = v)
+                        }
+                    }
+
+                    val recovering = deadCycles > 0
                     for (pid in activePids) {
                         if (busLost) break
+                        // While recovering, only hammer the core set so the Dash stays snappy.
+                        if (recovering && pid.number !in coreNumbers && pid.number !in forcePoll) continue
+
                         val streak = failStreak[pid] ?: 0
                         // Skip flaky PIDs most cycles; retry occasionally.
-                        if (streak >= 2 && cycles % 15 != 0) continue
+                        if (streak >= 2 && cycles % 20 != 0) continue
+                        if (streak >= 1 && recovering && cycles % 5 != 0 && pid.number !in forcePoll) continue
 
                         val raw = try {
                             conn.exec(pid.request)
@@ -176,15 +202,12 @@ class Elm327BluetoothSource(
                         }
                     }
 
-                    // ATRV = adapter rail voltage (what Torque usually shows as Battery).
-                    // Prefer ECU 0142 when it answers; fall back to ATRV when missing/flaky.
+                    // Extra ATRV refresh if 0142 never answered this cycle.
                     val voltFail = failStreak[ObdPid.CONTROL_MODULE_VOLTAGE] ?: 0
-                    if (!busLost && (snapshot.batteryVolts == null || voltFail >= 2)) {
-                        if (snapshot.batteryVolts == null || cycles % 3 == 0) {
-                            readAtrv(conn)?.let { v ->
-                                responded++
-                                snapshot = snapshot.copy(batteryVolts = v)
-                            }
+                    if (snapshot.batteryVolts == null || voltFail >= 2) {
+                        readAtrv(conn)?.let { v ->
+                            responded++
+                            snapshot = snapshot.copy(batteryVolts = v)
                         }
                     }
 
@@ -301,12 +324,14 @@ class Elm327BluetoothSource(
 
     override suspend fun probePids(pids: List<PidDefinition>): List<PidProbeResult> {
         val conn = connection ?: return emptyList()
+        // Start clean so Mode 22 / deep-search leftovers don't poison the probe.
+        softRecover(conn)
         val out = ArrayList<PidProbeResult>(pids.size)
-        var unableStreak = 0
+        var failStreak = 0
         for (pid in pids) {
-            // Bus already lost — don't sit on "Probing…" for minutes.
-            if (unableStreak >= 2) {
-                out += PidProbeResult(pid, false, null, "SKIPPED (bus UNABLE)")
+            // Bus already lost / timing out — don't sit on "Probing…" for minutes.
+            if (failStreak >= 2) {
+                out += PidProbeResult(pid, false, null, "SKIPPED (bus unhealthy)")
                 continue
             }
             var raw = runCatching {
@@ -315,15 +340,17 @@ class Elm327BluetoothSource(
             var up = raw?.uppercase().orEmpty()
             var bad = raw == null || BAD_TOKENS.any { up.contains(it) }
             if (bad && up.contains("NO DATA")) {
-                delay(30L)
+                delay(20L)
                 raw = runCatching {
                     conn.exec(pid.request, Elm327Connection.PROBE_TIMEOUT_MS)
                 }.getOrNull()
                 up = raw?.uppercase().orEmpty()
                 bad = raw == null || BAD_TOKENS.any { up.contains(it) }
             }
-            if (up.contains("UNABLE")) unableStreak++
-            else if (!bad) unableStreak = 0
+            when {
+                up.contains("UNABLE") || raw == null -> failStreak++
+                !bad -> failStreak = 0
+            }
 
             if (bad) {
                 out += PidProbeResult(pid, false, null, raw)
@@ -338,7 +365,7 @@ class Elm327BluetoothSource(
                 out += PidProbeResult(pid, true, value, raw)
             }
         }
-        if (unableStreak >= 2) {
+        if (failStreak >= 2) {
             softRecover(conn)
         }
         return out
@@ -469,7 +496,7 @@ class Elm327BluetoothSource(
 
     private suspend fun readAtrv(conn: Elm327Connection): Double? {
         val raw = runCatching {
-            conn.exec("ATRV", Elm327Connection.PROBE_TIMEOUT_MS)
+            conn.exec("ATRV", Elm327Connection.ATRV_TIMEOUT_MS)
         }.getOrNull() ?: return null
         if (isUnable(raw)) return null
         return ObdResponseParser.parseAtVoltage(raw)?.also {

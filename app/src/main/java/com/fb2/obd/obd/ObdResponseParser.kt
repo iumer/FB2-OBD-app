@@ -32,10 +32,23 @@ object ObdResponseParser {
 
     /**
      * ELM327 "ATRV" battery voltage reply, e.g. "12.5V" or "13.9". Returns volts.
+     * Rejects OBD error tokens and out-of-range parses (polluted buffers).
      */
     fun parseAtVoltage(raw: String): Double? {
-        val match = Regex("(\\d{1,2}(?:\\.\\d+)?)").find(raw.replace(",", "."))
-        return match?.value?.toDoubleOrNull()
+        val cleaned = raw.replace(">", " ").replace("\r", " ").replace("\n", " ")
+        val up = cleaned.uppercase()
+        if (listOf("UNABLE", "ERROR", "NO DATA", "STOPPED", "BUS INIT", "?").any { up.contains(it) }) {
+            return null
+        }
+        // Prefer explicit "12.6V" so we don't grab digits from a leftover Mode 01 frame.
+        val withV = Regex("(\\d{1,2}\\.\\d+)\\s*V").find(up.replace(',', '.'))
+        if (withV != null) {
+            val v = withV.groupValues[1].toDoubleOrNull() ?: return null
+            return v.takeIf { it in 5.0..20.0 }
+        }
+        val match = Regex("(\\d{1,2}(?:\\.\\d+)?)").find(cleaned.replace(",", "."))
+        val v = match?.value?.toDoubleOrNull() ?: return null
+        return v.takeIf { it in 5.0..20.0 }
     }
 
     private fun extractDataBytes(header: String, expected: Int, raw: String): IntArray? {

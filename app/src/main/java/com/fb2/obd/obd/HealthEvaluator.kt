@@ -111,6 +111,8 @@ object HealthEvaluator {
         val thr = throttlePct ?: 0.0
         val idle = spd < 2.0 && (rpm ?: 0.0) in 500.0..1200.0
         val heavy = thr >= 60.0 || gps >= t.mafHeavyGoodMin
+        // Closed throttle while moving = coast / overrun — low MAF is normal (Torque-normal).
+        val coasting = !idle && thr < 25.0 && spd >= 2.0
         return when {
             idle -> when {
                 gps in t.mafIdleGoodMin..t.mafIdleGoodMax -> MetricStatus(Health.GOOD, "IDLE OK")
@@ -125,10 +127,15 @@ object HealthEvaluator {
                 gps < t.mafCruiseGoodMin -> MetricStatus(Health.WARN, "LOW LOAD")
                 else -> MetricStatus(Health.GOOD, "NORMAL")
             }
+            coasting -> when {
+                gps >= t.mafIdleWarnMin -> MetricStatus(Health.GOOD, "COAST OK")
+                else -> MetricStatus(Health.WARN, "LOW COAST")
+            }
             else -> when {
                 // Cruise / light load (city speeds often sit below classic "cruise" MAF)
                 gps in t.mafCruiseGoodMin..t.mafCruiseGoodMax -> MetricStatus(Health.GOOD, "CRUISE OK")
-                gps < t.mafIdleWarnMin -> MetricStatus(Health.CRITICAL, "VERY LOW")
+                // CRITICAL only for near-zero flow while actually driving under load.
+                gps < 0.8 -> MetricStatus(Health.CRITICAL, "VERY LOW")
                 gps < t.mafCruiseGoodMin -> MetricStatus(Health.WARN, "LOW")
                 gps <= t.mafHeavyGoodMax -> MetricStatus(Health.GOOD, "NORMAL")
                 else -> MetricStatus(Health.WARN, "HIGH")

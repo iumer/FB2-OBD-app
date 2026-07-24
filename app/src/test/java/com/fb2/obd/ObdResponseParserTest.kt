@@ -94,6 +94,9 @@ class ObdResponseParserTest {
     @Test
     fun atVoltage_parses() {
         assertEquals(12.5, ObdResponseParser.parseAtVoltage("12.5V\r>")!!, 0.001)
+        assertEquals(14.2, ObdResponseParser.parseAtVoltage("14.2")!!, 0.001)
+        assertNull(ObdResponseParser.parseAtVoltage("UNABLE TO CONNECT"))
+        assertNull(ObdResponseParser.parseAtVoltage("41 0C 0B 20")) // polluted Mode 01 frame
     }
 
     @Test

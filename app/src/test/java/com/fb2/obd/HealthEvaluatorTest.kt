@@ -71,11 +71,15 @@ class HealthEvaluatorTest {
         assertEquals(Health.GOOD, HealthEvaluator.maf(3.8, 850.0, 0.0).health)
         assertEquals("IDLE OK", HealthEvaluator.maf(3.8, 850.0, 0.0).label)
         assertEquals(Health.GOOD, HealthEvaluator.maf(5.0, 700.0, 0.0).health)
-        assertEquals(Health.WARN, HealthEvaluator.maf(2.0, 700.0, 0.0).health)
-        assertEquals(Health.CRITICAL, HealthEvaluator.maf(1.0, 700.0, 0.0).health)
+        assertEquals(Health.GOOD, HealthEvaluator.maf(2.0, 700.0, 0.0).health)
+        assertEquals(Health.WARN, HealthEvaluator.maf(1.2, 700.0, 0.0).health)
+        assertEquals(Health.CRITICAL, HealthEvaluator.maf(0.5, 700.0, 0.0).health)
         // Light city cruise ~8 g/s should be green, not "LOW".
         assertEquals(Health.GOOD, HealthEvaluator.maf(8.0, 1400.0, 25.0, 17.0).health)
         assertEquals(Health.GOOD, HealthEvaluator.maf(22.0, 2200.0, 70.0, 20.0).health)
+        // Coast / overrun at city speed with closed throttle — low MAF is normal.
+        assertEquals(Health.GOOD, HealthEvaluator.maf(3.7, 1300.0, 24.0, 14.0).health)
+        assertEquals("COAST OK", HealthEvaluator.maf(3.7, 1300.0, 24.0, 14.0).label)
     }
 
     @Test

@@ -28,13 +28,22 @@ class HealthThresholdsTest {
     }
 
     @Test
-    fun store_roundTrips() {
+    fun store_migratesHarshMafBands_onSchemaBump() {
         val file = tmp.newFile("health_thresholds.json")
-        val store = HealthThresholdStore(file)
-        val custom = HealthThresholds.DEFAULT.withField("coolantGoodMax", 94.0)
-        store.save(custom)
-        val loaded = store.load()
-        assertEquals(94.0, loaded.coolantGoodMax, 0.001)
-        assertTrue(file.readText().contains("coolantGoodMax"))
+        // Simulate an older install that saved schema 2 with the harsh 6–10 idle band.
+        file.writeText(
+            """
+            {"schemaVersion":2,"mafIdleGoodMin":6.0,"mafIdleGoodMax":10.0,"mafIdleWarnMin":4.0,
+             "mafCruiseGoodMin":15.0,"mafCruiseGoodMax":35.0,"coolantGoodMax":90.0}
+            """.trimIndent(),
+        )
+        val loaded = HealthThresholdStore(file).load()
+        assertEquals(2.0, loaded.mafIdleGoodMin, 0.001)
+        assertEquals(8.0, loaded.mafIdleGoodMax, 0.001)
+        assertEquals(1.0, loaded.mafIdleWarnMin, 0.001)
+        assertEquals(2.5, loaded.mafCruiseGoodMin, 0.001)
+        // Non-MAF fields still round-trip from the old file when present.
+        assertEquals(90.0, loaded.coolantGoodMax, 0.001)
+        assertTrue(file.readText().contains("\"schemaVersion\": 3") || file.readText().contains("\"schemaVersion\":3"))
     }
 }
