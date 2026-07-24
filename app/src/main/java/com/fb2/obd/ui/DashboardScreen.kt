@@ -206,23 +206,23 @@ private fun CompactHeroStrip(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(top = 2.dp, bottom = 4.dp)
-            .clip(RoundedCornerShape(12.dp))
+            .padding(top = 2.dp, bottom = 2.dp)
+            .clip(RoundedCornerShape(10.dp))
             .background(Surface)
-            .padding(horizontal = 12.dp, vertical = 6.dp),
+            .padding(horizontal = 10.dp, vertical = 4.dp),
         horizontalArrangement = Arrangement.SpaceEvenly,
         verticalAlignment = Alignment.CenterVertically,
     ) {
         HeroDigit(label = "RPM", value = rpm.fmt(), unit = "", accent = Accent, modifier = Modifier.weight(1f))
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
-            modifier = Modifier.widthIn(min = 56.dp),
+            modifier = Modifier.widthIn(min = 48.dp),
         ) {
-            Text("GEAR", color = TextMuted, fontSize = 10.sp, fontWeight = FontWeight.Medium)
+            Text("GEAR", color = TextMuted, fontSize = 9.sp, fontWeight = FontWeight.Medium)
             Text(
                 text = if (gearSource == GearSource.NONE) "–" else (gear?.toString() ?: "–"),
                 color = Accent,
-                fontSize = 28.sp,
+                fontSize = 22.sp,
                 fontWeight = FontWeight.Bold,
             )
             val badge = when (gearSource) {
@@ -231,7 +231,7 @@ private fun CompactHeroStrip(
                 GearSource.NONE -> null
             }
             if (badge != null) {
-                Text(badge.first, color = badge.second, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                Text(badge.first, color = badge.second, fontSize = 8.sp, fontWeight = FontWeight.Bold)
             }
         }
         HeroDigit(label = "SPEED", value = speedKmh.fmt(), unit = "km/h", accent = GoodGreen, modifier = Modifier.weight(1f))
@@ -247,20 +247,20 @@ private fun HeroDigit(
     modifier: Modifier = Modifier,
 ) {
     Column(modifier = modifier, horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(label, color = accent, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+        Text(label, color = accent, fontSize = 9.sp, fontWeight = FontWeight.Bold)
         Row(verticalAlignment = Alignment.Bottom) {
             Text(
                 text = value,
                 color = TextPrimary,
-                fontSize = 30.sp,
+                fontSize = 22.sp,
                 fontWeight = FontWeight.Bold,
             )
             if (unit.isNotEmpty()) {
                 Text(
                     text = " $unit",
                     color = TextMuted,
-                    fontSize = 11.sp,
-                    modifier = Modifier.padding(bottom = 4.dp),
+                    fontSize = 10.sp,
+                    modifier = Modifier.padding(bottom = 2.dp),
                 )
             }
         }
