@@ -18,9 +18,13 @@ non-obvious cloud specifics.
 
 ### Commands
 
+- **After every code change, run the full checklist in [`REGRESSION.md`](REGRESSION.md)**
+  (unit tests + lint + debug APK → `dist/FB2-Diag-debug.apk`). That file also
+  lists every user-reported issue that must stay fixed.
 - Unit tests (pure JVM, fast): `./gradlew testDebugUnitTest`
 - Lint: `./gradlew lintDebug`
 - Build APK: `./gradlew assembleDebug` → `app/build/outputs/apk/debug/app-debug.apk`
+  (also copy to `dist/FB2-Diag-debug.apk` for sideload).
 
 ### Running / demoing the UI
 
