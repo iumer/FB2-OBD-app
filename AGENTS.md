@@ -108,17 +108,15 @@ non-obvious cloud specifics.
   `PARTIAL_WAKE_LOCK`). Demo mode must not start it. Voice alerts use AudioFocus +
   `USAGE_ASSISTANCE_NAVIGATION_GUIDANCE` and prefer car BT audio when available.
 - **Floating Dash bubble:** Dash **MIN** chip starts `FloatingDashOverlayService`
-  (needs `SYSTEM_ALERT_WINDOW`). Collapsed = one draggable circle. Expanded =
-  same center + up to **5 satellite circles** around it (`FloatingDashMetrics`
-  pages of 5). Vertical swipe pages metrics; center stays fixed. Idle ~6s
-  auto-collapses; tap center toggles; **long-press opens the app and dismisses
-  the bubble** (`stopSelf`). Live values from `VehicleLiveStore` /
-  `CarDashTile.health`. Aimed at Dellson HU + CarPlay overlay; may be blocked by
-  some HU firmwares.
-  **Exit & disconnect** (back → confirm) calls `FloatingDashOverlayService.stop`
-  + `finishAndRemoveTask` — do **not** stop the overlay from Activity `onStop`
-  (that would kill MIN). Service uses `START_NOT_STICKY` so swipe-away does not
-  resurrect an empty bubble.
+  as a **foreground service** (`specialUse` + sticky notification) so the bubble
+  survives going to Home / CarPlay. MainActivity waits for `ACTION_READY` (overlay
+  attached) before `moveTaskToBack` — do not background first or OEMs may hide /
+  defer the WindowManager view. Needs `SYSTEM_ALERT_WINDOW`.
+  Collapsed = one draggable circle. Expanded = center + up to **5 satellites**.
+  Vertical swipe pages metrics. Idle ~6s auto-collapses. **Long-press opens the
+  app and dismisses the bubble.** Exit & disconnect also stops the overlay.
+  Bubble position is clamped to the current display (landscape app → portrait
+  Home must not push it off-screen).
 - **Dash tile remap:** Double-tap any main-Dash tile to open the same sensor
   picker as `+`. Remaps persist in `dash_tile_overrides.json`. Remapped tiles
   show a `2× change` hint; picker can **Restore default**. Triple-tap still
