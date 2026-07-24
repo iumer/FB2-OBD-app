@@ -28,6 +28,22 @@
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
     <!-- Floating dash bubble over CarPlay / other apps (Dellson HU) -->
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <!-- Legacy public-Downloads export for API ≤ 28 (MediaStore used on Q+) -->
+    <uses-permission
+        android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        android:maxSdkVersion="28" />
+
+    <!-- Let us discover real ACTION_SEND targets (Android 11+ package visibility). -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.SEND" />
+            <data android:mimeType="*/*" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.SEND" />
+            <data android:mimeType="text/*" />
+        </intent>
+    </queries>
 
     <uses-feature
         android:name="android.hardware.bluetooth"

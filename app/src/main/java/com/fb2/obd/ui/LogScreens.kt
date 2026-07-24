@@ -68,7 +68,7 @@ fun DebugLogScreen(
     ) {
         ScreenHeader(title = "Debug log", onBack = onBack) {
             Row {
-                HeaderAction("Share", onShare)
+                HeaderAction("Share/Save", onShare)
                 HeaderAction("Clear", onClear)
             }
         }
@@ -123,7 +123,7 @@ fun ValueLogScreen(
     ) {
         ScreenHeader(title = "Value log", onBack = onBack) {
             Row {
-                HeaderAction("Share current", onShare)
+                HeaderAction("Share/Save", onShare)
                 HeaderAction("Clear current", onClear)
             }
         }
@@ -172,7 +172,7 @@ fun ValueLogScreen(
                             )
                         }
                         Text(
-                            text = "Share",
+                            text = "Save",
                             color = Accent,
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
