@@ -508,9 +508,9 @@ private fun DenseTile(
                 if (onDeepSearch != null) {
                     Modifier.clickable {
                         val now = System.currentTimeMillis()
-                        taps = if (now - lastTapMs < 500L) taps + 1 else 1
+                        taps = if (now - lastTapMs < 700L) taps + 1 else 1
                         lastTapMs = now
-                        if (taps >= 2) {
+                        if (taps >= 3) {
                             taps = 0
                             onDeepSearch()
                         }
@@ -563,7 +563,7 @@ private fun DenseTile(
             }
         }
         if (deepSearchHint) {
-            Text("tap×2 deep", color = Accent, fontSize = 8.sp, maxLines = 1)
+            Text("tap×3 deep", color = Accent, fontSize = 8.sp, maxLines = 1)
         }
     }
 }

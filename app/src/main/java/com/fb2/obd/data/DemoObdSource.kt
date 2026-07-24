@@ -45,28 +45,26 @@ class DemoObdSource(
             val rpm = (baseRpm + (if (accelerating) 700.0 else 0.0)).coerceIn(750.0, 6500.0)
 
             coolant = (coolant + 0.6).coerceAtMost(92.0)
-            // Post-thermostat sensor stays cool until the thermostat opens (~82C),
-            // then tracks a few degrees below the main sensor.
-            val coolant2 = if (coolant < 82.0) 30.0 + (coolant - 40.0).coerceAtLeast(0.0) * 0.25
-            else coolant - 3.0
 
             val throttle = (10.0 + 40.0 * (0.5 + 0.5 * phase)).coerceIn(0.0, 100.0)
             val load = (15.0 + 55.0 * (0.5 + 0.5 * phase)).coerceIn(0.0, 100.0)
 
+            // Mirror a real FB2: Coolant2 / Ambient / LTFT stay n/s until the user
+            // triple-taps and runs Deep search (Demo command() still answers those PIDs).
             val snapshot = VehicleSnapshot(
                 rpm = rpm.roundToInt().toDouble(),
                 speedKmh = speed.roundToInt().toDouble(),
                 coolantC = coolant.roundToInt().toDouble(),
-                coolant2C = coolant2.roundToInt().toDouble(),
+                coolant2C = null,
                 intakeC = 32.0,
-                ambientC = 28.0,
+                ambientC = null,
                 engineLoadPct = load,
                 throttlePct = throttle,
                 timingAdvance = 12.0,
                 mafGps = 4.0 + load / 5.0,
                 mapKpa = 30.0 + load,
                 stftPct = 2.0 * sin(t / 5.0),
-                ltftPct = 3.5,
+                ltftPct = null,
                 batteryVolts = 14.2 + 0.1 * sin(t / 7.0),
                 gear = gearEstimator.estimate(speed, rpm),
                 gearSource = if (gearEstimator.estimate(speed, rpm) != null) {
@@ -74,6 +72,7 @@ class DemoObdSource(
                 } else {
                     GearSource.NONE
                 },
+                unsupportedPids = setOf(0x67, 0x46, 0x07), // Coolant2, Ambient, LTFT
             )
             emit(snapshot)
             t += 1.0
