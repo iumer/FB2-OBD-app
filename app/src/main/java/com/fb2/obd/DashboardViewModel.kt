@@ -330,10 +330,10 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
         loggingJob?.cancel()
         loggingJob = null
         val wasOn = ObdLogger.valueLoggingEnabled
+        // Final snapshot while logging is still enabled.
+        logLiveTabs(_uiState.value.snapshot, force = true)
         ObdLogger.valueLoggingEnabled = false
         _settings.update { it.copy(valueLogging = false) }
-        // Final snapshot of every tab before freeze.
-        logLiveTabs(_uiState.value.snapshot, force = true)
         val empty = ObdLogger.valueRows().isEmpty() &&
             ObdLogger.probeRows().isEmpty() &&
             ObdLogger.tabValueRows().isEmpty()
@@ -446,10 +446,9 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
             mapOf(
                 "DistanceKm" to "%.3f".format(trip.distanceKm),
                 "KmPerL" to (trip.kmPerLiter?.let { "%.2f".format(it) } ?: "n/s"),
-                "LPer100" to (trip.litersPer100?.let { "%.2f".format(it) } ?: "n/s"),
-                "Cost" to "%.1f".format(trip.cost),
+                "CostPkr" to "%.1f".format(trip.cost),
                 "IdleSec" to "%.0f".format(trip.idleSeconds),
-                "FuelPrice" to "%.0f".format(trip.fuelPrice),
+                "FuelPricePkrPerL" to "%.0f".format(trip.fuelPrice),
             ),
             now,
         )
@@ -461,7 +460,6 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
                 "Phase" to perf.phase.name,
                 "SpeedKmh" to (perf.currentSpeedKmh?.toString() ?: "n/s"),
                 "0-100" to (perf.current.zeroTo100Kmh?.toString() ?: "—"),
-                "0-60mph" to (perf.current.zeroTo60Mph?.toString() ?: "—"),
                 "0-160" to (perf.current.zeroTo160Kmh?.toString() ?: "—"),
                 "60-100" to (perf.current.sixtyTo100Kmh?.toString() ?: "—"),
                 "Best0-100" to (perf.best.zeroTo100Kmh?.toString() ?: "—"),
@@ -647,6 +645,19 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
         tripComputer.reset()
         _trip.update {
             TripState(fuelPrice = tripComputer.fuelPricePerLiter)
+        }
+    }
+
+    /** PKR per liter — used for trip cost. Clamped to a sensible petrol range. */
+    fun setFuelPricePerLiter(price: Double) {
+        val p = price.coerceIn(50.0, 1000.0)
+        tripComputer.fuelPricePerLiter = p
+        _settings.update { it.copy(fuelPricePerLiter = p) }
+        _trip.update {
+            it.copy(
+                cost = tripComputer.tripCost,
+                fuelPrice = p,
+            )
         }
     }
 

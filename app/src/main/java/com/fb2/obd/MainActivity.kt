@@ -259,6 +259,7 @@ class MainActivity : ComponentActivity() {
                         onRefreshTrans = viewModel::refreshTransmission,
                         onManageCustom = { screen = Screen.CUSTOM },
                         onResetTrip = viewModel::resetTrip,
+                        onSetFuelPrice = viewModel::setFuelPricePerLiter,
                         onResetPerformance = viewModel::resetPerformance,
                         onRefreshHealth = viewModel::recalcHealth,
                         deepFoundValues = deepFoundValues,

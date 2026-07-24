@@ -121,15 +121,8 @@ fun PerformanceScreen(
 
         val c = state.current
         ResultRow("0 \u2013 100 km/h", fmt(c.zeroTo100Kmh))
-        ResultRow("0 \u2013 60 mph", fmt(c.zeroTo60Mph))
         ResultRow("0 \u2013 160 km/h", fmt(c.zeroTo160Kmh))
         ResultRow("60 \u2013 100 km/h", fmt(c.sixtyTo100Kmh))
-        ResultRow(
-            "\u00BC mile",
-            c.quarterMileSec?.let {
-                "%.2f s @ %d km/h".format(it, (c.quarterMileTrapKmh ?: 0.0).toInt())
-            } ?: "\u2014",
-        )
 
         Text(
             text = "BEST",
