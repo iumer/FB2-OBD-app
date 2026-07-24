@@ -30,7 +30,7 @@ Keep these fixed. If a change might touch one of these areas, re-verify it.
 | I15 | Health colours / long-press threshold editor | Fixed | `HealthThresholds` + store |
 | I16 | Fuel Open/Closed Loop on Dash | Fixed | PID `0103` |
 | I17 | Always-on event logging (`# events`) | Fixed | `DiagnosticEventTracker` |
-| I18 | Floating minimize bubble over CarPlay / other apps | Fixed | `FloatingDashOverlayService` + Dash **MIN** chip; needs overlay permission |
+| I18 | Floating minimize bubble over CarPlay / other apps | Fixed | Radial ring: collapsed circle + up to 5 satellites; vertical page swipe; 6s auto-collapse |
 
 When the user reports a **new** bug, add a new `Ixx` row here (Status: Open → Fixed)
 and add a matching automated or manual check in sections 2–3.
@@ -85,8 +85,8 @@ touches ELM, Dash health, deep search, logging, or share:
 6. **Debug log Share** — Settings → Debug log → Share → system chooser appears (toast “Opening share sheet…”).
 7. **Value LOG Share** — stop a LOG session → share CSV via chooser.
 8. **Screen off alerts** — real ELM connected → sticky notification present; with voice alerts on, a critical condition still speaks after screen off.
-9. **Floating bubble (MIN)** — grant overlay permission → MIN → bubble appears; drag works; tap expands swipeable metrics with health colors; OPEN APP returns; CLOSE BUBBLE removes overlay. (On Dellson: verify over CarPlay if used.)
-10. **Car HU layout (automated)** — Paparazzi at 1024×600, 1280×720, 1920×720 in `CarHuSnapshotTest` / `CarHuBubbleSnapshotTest`.
+9. **Floating bubble (MIN)** — grant overlay permission → MIN → collapsed circle appears; drag works; tap expands **radial ring** (up to 5 live values around center); vertical swipe pages next/previous groups; idle ~6s auto-collapses to circle; tap center collapses; hold opens app. (On Dellson: verify over CarPlay if used.)
+10. **Car HU layout (automated)** — Paparazzi at 1024×600, 1280×720, 1920×720 in `CarHuSnapshotTest` / `CarHuBubbleSnapshotTest` (collapsed + radial expanded).
 11. **Android Auto** — phone UI / DHU only unless installed via Play Internal testing.
 
 ---

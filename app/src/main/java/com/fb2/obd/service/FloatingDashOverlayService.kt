@@ -9,14 +9,14 @@ import android.graphics.Color
 import android.graphics.PixelFormat
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
+import android.os.Handler
 import android.os.IBinder
-import android.util.TypedValue
+import android.os.Looper
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
 import android.widget.FrameLayout
-import android.widget.LinearLayout
 import android.widget.TextView
 import com.fb2.obd.MainActivity
 import com.fb2.obd.car.CarDashState
@@ -31,18 +31,23 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import kotlin.math.abs
+import kotlin.math.cos
 import kotlin.math.roundToInt
+import kotlin.math.sin
 
 /**
- * System overlay "floating dash" bubble for Dellson / Android HU use:
- * - Collapsed: draggable colored dot that keeps updating from [VehicleLiveStore]
- * - Expanded: swipeable circular list of main-Dash metrics with health colors
+ * Floating OBD overlay for Dellson / Android HU:
+ * - Collapsed: one draggable circular button
+ * - Expanded: same center button + up to 5 satellite circles around it
+ * - Vertical swipe pages through remaining metrics (center stays fixed)
+ * - Auto-collapses after idle timeout
  *
- * Requires [android.Manifest.permission.SYSTEM_ALERT_WINDOW] (draw over other apps).
+ * Requires [android.Manifest.permission.SYSTEM_ALERT_WINDOW].
  */
 class FloatingDashOverlayService : Service() {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private val mainHandler = Handler(Looper.getMainLooper())
     private var collectJob: Job? = null
 
     private lateinit var windowManager: WindowManager
@@ -51,18 +56,20 @@ class FloatingDashOverlayService : Service() {
     private var params: WindowManager.LayoutParams? = null
 
     private var expanded = false
-    private var metricIndex = 0
+    private var pageIndex = 0
     private var latest: CarDashState = CarDashState()
     private var metrics: List<FloatingDashMetrics.Metric> = emptyList()
 
-    // Collapsed views
-    private lateinit var bubble: TextView
-    // Expanded views
-    private lateinit var panel: LinearLayout
-    private lateinit var labelView: TextView
-    private lateinit var valueView: TextView
-    private lateinit var statusView: TextView
-    private lateinit var indexView: TextView
+    private lateinit var center: TextView
+    private val satellites = ArrayList<TextView>(FloatingDashMetrics.PAGE_SIZE)
+    private var pageHint: TextView? = null
+
+    private val autoCollapse = Runnable {
+        if (expanded) {
+            setExpanded(false)
+            ObdLogger.logDebug(ObdLogger.Dir.INFO, "Floating dash auto-collapsed")
+        }
+    }
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -76,7 +83,8 @@ class FloatingDashOverlayService : Service() {
             VehicleLiveStore.dash.collectLatest { state ->
                 latest = state
                 metrics = FloatingDashMetrics.from(state)
-                if (metricIndex >= metrics.size) metricIndex = 0
+                val pages = FloatingDashMetrics.pageCount(metrics)
+                if (pageIndex >= pages) pageIndex = 0
                 render()
             }
         }
@@ -88,19 +96,14 @@ class FloatingDashOverlayService : Service() {
                 stopSelf()
                 return START_NOT_STICKY
             }
-            ACTION_COLLAPSE -> {
-                expanded = false
-                render()
-            }
-            ACTION_EXPAND -> {
-                expanded = true
-                render()
-            }
+            ACTION_COLLAPSE -> setExpanded(false)
+            ACTION_EXPAND -> setExpanded(true)
         }
         return START_STICKY
     }
 
     override fun onDestroy() {
+        mainHandler.removeCallbacks(autoCollapse)
         collectJob?.cancel()
         scope.cancel()
         root?.let { runCatching { windowManager.removeView(it) } }
@@ -114,91 +117,62 @@ class FloatingDashOverlayService : Service() {
         val density = resources.displayMetrics.density
         fun dp(v: Int) = (v * density).roundToInt()
 
-        val container = FrameLayout(this).apply {
-            setPadding(dp(4), dp(4), dp(4), dp(4))
-        }
+        val collapsed = dp(COLLAPSED_DP)
+        val satSize = dp(SAT_DP)
+        val centerSize = dp(CENTER_DP)
 
-        bubble = TextView(this).apply {
-            layoutParams = FrameLayout.LayoutParams(dp(56), dp(56))
+        val container = FrameLayout(this)
+
+        center = TextView(this).apply {
+            layoutParams = FrameLayout.LayoutParams(centerSize, centerSize)
             gravity = Gravity.CENTER
             setTextColor(Color.WHITE)
-            textSize = 11f
+            textSize = 10f
             typeface = Typeface.DEFAULT_BOLD
             textAlignment = View.TEXT_ALIGNMENT_CENTER
-            setPadding(dp(4), dp(10), dp(4), dp(10))
-            background = circleDrawable(COLOR_ACCENT)
+            setPadding(dp(4), dp(8), dp(4), dp(8))
+            background = circleDrawable(COLOR_ACCENT, fillAlpha = 230)
+            elevation = dp(6).toFloat()
         }
 
-        panel = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
+        repeat(FloatingDashMetrics.PAGE_SIZE) {
+            val sat = TextView(this).apply {
+                layoutParams = FrameLayout.LayoutParams(satSize, satSize)
+                visibility = View.GONE
+                setTextColor(Color.WHITE)
+                textSize = 9f
+                typeface = Typeface.DEFAULT_BOLD
+                textAlignment = View.TEXT_ALIGNMENT_CENTER
+                setPadding(dp(4), dp(6), dp(4), dp(6))
+                background = circleDrawable(COLOR_ACCENT, fillAlpha = 210)
+                elevation = dp(4).toFloat()
+            }
+            satellites += sat
+            container.addView(sat)
+        }
+
+        pageHint = TextView(this).apply {
+            layoutParams = FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+            ).apply {
+                gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
+                bottomMargin = dp(4)
+            }
             visibility = View.GONE
-            setPadding(dp(14), dp(12), dp(14), dp(12))
-            background = roundRectDrawable(COLOR_SURFACE, dp(16))
-            elevation = dp(8).toFloat()
-            layoutParams = FrameLayout.LayoutParams(dp(220), FrameLayout.LayoutParams.WRAP_CONTENT)
-            minimumWidth = dp(200)
-        }
-
-        labelView = TextView(this).apply {
-            setTextColor(COLOR_MUTED)
-            textSize = 12f
-            typeface = Typeface.DEFAULT_BOLD
-        }
-        valueView = TextView(this).apply {
-            setTextColor(Color.WHITE)
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 28f)
-            typeface = Typeface.DEFAULT_BOLD
-            setPadding(0, dp(4), 0, dp(2))
-        }
-        statusView = TextView(this).apply {
-            setTextColor(COLOR_GOOD)
-            textSize = 12f
-            typeface = Typeface.DEFAULT_BOLD
-        }
-        indexView = TextView(this).apply {
-            setTextColor(COLOR_MUTED)
-            textSize = 10f
-            setPadding(0, dp(6), 0, 0)
-        }
-        val hint = TextView(this).apply {
-            text = "swipe · tap bubble to collapse · hold OPEN"
             setTextColor(COLOR_MUTED)
             textSize = 9f
-            setPadding(0, dp(4), 0, 0)
-        }
-        val openBtn = TextView(this).apply {
-            text = "OPEN APP"
-            setTextColor(COLOR_ACCENT)
-            textSize = 11f
             typeface = Typeface.DEFAULT_BOLD
-            setPadding(0, dp(8), 0, 0)
-            setOnClickListener { openAppAndKeepOverlay() }
+            setPadding(dp(8), dp(2), dp(8), dp(2))
+            setBackgroundColor(Color.argb(160, 11, 15, 20))
         }
-        val closeBtn = TextView(this).apply {
-            text = "CLOSE BUBBLE"
-            setTextColor(COLOR_CRIT)
-            textSize = 11f
-            typeface = Typeface.DEFAULT_BOLD
-            setPadding(0, dp(4), 0, 0)
-            setOnClickListener { stopSelf() }
-        }
+        container.addView(pageHint)
+        container.addView(center) // on top for taps
 
-        panel.addView(labelView)
-        panel.addView(valueView)
-        panel.addView(statusView)
-        panel.addView(indexView)
-        panel.addView(hint)
-        panel.addView(openBtn)
-        panel.addView(closeBtn)
-
-        container.addView(bubble)
-        container.addView(panel)
-
-        val layoutType = WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
         val lp = WindowManager.LayoutParams(
-            WindowManager.LayoutParams.WRAP_CONTENT,
-            WindowManager.LayoutParams.WRAP_CONTENT,
-            layoutType,
+            collapsed,
+            collapsed,
+            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
                 WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS or
                 WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED,
@@ -209,90 +183,94 @@ class FloatingDashOverlayService : Service() {
             y = prefs.getInt(KEY_Y, dp(120))
         }
 
-        var downX = 0f
-        var downY = 0f
+        var downRawX = 0f
+        var downRawY = 0f
         var startX = 0
         var startY = 0
         var moved = false
-        var swipeStartX = 0f
+        var mode = TouchMode.NONE
+        var longPressFired = false
+
+        // OnTouchListener consumes events, so long-press must be scheduled here
+        // (View.setOnLongClickListener will not fire).
+        val longPress = Runnable {
+            if (!moved && mode == TouchMode.NONE) {
+                longPressFired = true
+                openAppAndKeepOverlay()
+            }
+        }
+
+        fun applyDrag(event: MotionEvent) {
+            val dx = (event.rawX - downRawX).roundToInt()
+            val dy = (event.rawY - downRawY).roundToInt()
+            if (abs(dx) > dp(4) || abs(dy) > dp(4)) moved = true
+            lp.x = (startX + dx).coerceAtLeast(0)
+            lp.y = (startY + dy).coerceAtLeast(0)
+            windowManager.updateViewLayout(container, lp)
+        }
 
         val touchListener = View.OnTouchListener { _, event ->
             when (event.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
-                    downX = event.rawX
-                    downY = event.rawY
-                    swipeStartX = event.rawX
+                    downRawX = event.rawX
+                    downRawY = event.rawY
                     startX = lp.x
                     startY = lp.y
                     moved = false
+                    longPressFired = false
+                    mode = TouchMode.NONE
+                    bumpAutoCollapse()
+                    mainHandler.removeCallbacks(longPress)
+                    mainHandler.postDelayed(longPress, LONG_PRESS_MS)
                     true
                 }
                 MotionEvent.ACTION_MOVE -> {
-                    val dx = (event.rawX - downX).roundToInt()
-                    val dy = (event.rawY - downY).roundToInt()
-                    if (abs(dx) > dp(4) || abs(dy) > dp(4)) moved = true
-                    if (!expanded || moved) {
-                        lp.x = (startX + dx).coerceAtLeast(0)
-                        lp.y = (startY + dy).coerceAtLeast(0)
-                        windowManager.updateViewLayout(container, lp)
+                    val moveDx = event.rawX - downRawX
+                    val moveDy = event.rawY - downRawY
+                    if (mode == TouchMode.NONE && (abs(moveDx) > dp(8) || abs(moveDy) > dp(8))) {
+                        mode = when {
+                            expanded && abs(moveDy) > abs(moveDx) * 1.2f -> TouchMode.PAGE
+                            else -> TouchMode.DRAG
+                        }
+                        mainHandler.removeCallbacks(longPress)
+                    }
+                    when (mode) {
+                        TouchMode.DRAG -> applyDrag(event)
+                        TouchMode.PAGE -> { /* wait for UP */ }
+                        TouchMode.NONE -> Unit
                     }
                     true
                 }
-                MotionEvent.ACTION_UP -> {
-                    val swipeDx = event.rawX - swipeStartX
-                    if (!moved) {
-                        if (expanded) {
-                            // tap empty → collapse handled on bubble; on panel cycle?
-                            // bubble tap toggles
-                        } else {
-                            expanded = true
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    mainHandler.removeCallbacks(longPress)
+                    val dy = event.rawY - downRawY
+                    when {
+                        longPressFired -> Unit
+                        mode == TouchMode.PAGE && abs(dy) > dp(36) -> {
+                            val pages = FloatingDashMetrics.pageCount(metrics)
+                            if (dy < 0) pageIndex = (pageIndex + 1) % pages
+                            else pageIndex = (pageIndex - 1 + pages) % pages
+                            bumpAutoCollapse()
                             render()
                         }
-                    } else if (expanded && abs(swipeDx) > dp(40) && abs(event.rawY - downY) < dp(40)) {
-                        // horizontal swipe cycles metrics
-                        if (swipeDx < 0) metricIndex = (metricIndex + 1) % metrics.size.coerceAtLeast(1)
-                        else metricIndex = (metricIndex - 1 + metrics.size) % metrics.size.coerceAtLeast(1)
-                        render()
+                        !moved && event.actionMasked == MotionEvent.ACTION_UP -> {
+                            // Tap center / ring: toggle expand/collapse
+                            setExpanded(!expanded)
+                        }
+                        mode == TouchMode.DRAG -> {
+                            prefs.edit().putInt(KEY_X, lp.x).putInt(KEY_Y, lp.y).apply()
+                        }
                     }
-                    prefs.edit().putInt(KEY_X, lp.x).putInt(KEY_Y, lp.y).apply()
+                    mode = TouchMode.NONE
                     true
                 }
                 else -> false
             }
         }
 
-        bubble.setOnTouchListener { _, event ->
-            when (event.actionMasked) {
-                MotionEvent.ACTION_DOWN -> {
-                    downX = event.rawX
-                    downY = event.rawY
-                    startX = lp.x
-                    startY = lp.y
-                    moved = false
-                    true
-                }
-                MotionEvent.ACTION_MOVE -> {
-                    val dx = (event.rawX - downX).roundToInt()
-                    val dy = (event.rawY - downY).roundToInt()
-                    if (abs(dx) > dp(4) || abs(dy) > dp(4)) moved = true
-                    lp.x = (startX + dx).coerceAtLeast(0)
-                    lp.y = (startY + dy).coerceAtLeast(0)
-                    windowManager.updateViewLayout(container, lp)
-                    true
-                }
-                MotionEvent.ACTION_UP -> {
-                    if (!moved) {
-                        expanded = !expanded
-                        render()
-                    }
-                    prefs.edit().putInt(KEY_X, lp.x).putInt(KEY_Y, lp.y).apply()
-                    true
-                }
-                else -> false
-            }
-        }
-
-        panel.setOnTouchListener(touchListener)
+        center.setOnTouchListener(touchListener)
+        container.setOnTouchListener(touchListener)
+        satellites.forEach { it.setOnTouchListener(touchListener) }
 
         root = container
         params = lp
@@ -303,46 +281,119 @@ class FloatingDashOverlayService : Service() {
     }
 
     private fun render() {
+        val density = resources.displayMetrics.density
+        fun dp(v: Int) = (v * density).roundToInt()
+        val container = root ?: return
+        val lp = params ?: return
+
+        val collapsed = dp(COLLAPSED_DP)
+        val expandedSize = dp(EXPANDED_DP)
+        val satSize = dp(SAT_DP)
+        val centerSize = dp(CENTER_DP)
+        val radius = dp(RADIUS_DP)
+
         if (metrics.isEmpty()) {
             metrics = listOf(FloatingDashMetrics.Metric("Dash", "--", "", null, "WAITING"))
         }
-        val m = metrics[metricIndex.coerceIn(0, metrics.lastIndex)]
-        val color = healthColor(m.health)
+        val page = FloatingDashMetrics.page(metrics, pageIndex)
+        val worst = FloatingDashMetrics.worstHealth(metrics.mapNotNull { it.health })
+        val rim = healthColor(worst)
+
+        // Center always visible
+        center.layoutParams = FrameLayout.LayoutParams(centerSize, centerSize).apply {
+            gravity = Gravity.CENTER
+        }
+        center.text = if (expanded) {
+            "FB2\n${pageIndex + 1}/${FloatingDashMetrics.pageCount(metrics)}"
+        } else {
+            val first = page.firstOrNull() ?: metrics.first()
+            "${first.label.take(4).uppercase()}\n${first.value}"
+        }
+        center.background = circleDrawable(rim, fillAlpha = 235)
 
         if (expanded) {
-            bubble.visibility = View.GONE
-            panel.visibility = View.VISIBLE
-            labelView.text = m.label.uppercase()
-            valueView.text = buildString {
-                append(m.value)
-                if (m.unit.isNotBlank()) {
-                    append(' ')
-                    append(m.unit)
+            lp.width = expandedSize
+            lp.height = expandedSize
+            pageHint?.visibility = View.VISIBLE
+            pageHint?.text = "↕ scroll · tap center to collapse"
+            // Place satellites in a pentagon around center
+            val cx = (expandedSize - satSize) / 2f
+            val cy = (expandedSize - satSize) / 2f
+            for (i in 0 until FloatingDashMetrics.PAGE_SIZE) {
+                val sat = satellites[i]
+                if (i < page.size) {
+                    val m = page[i]
+                    val angleDeg = -90.0 + i * (360.0 / FloatingDashMetrics.PAGE_SIZE)
+                    val rad = Math.toRadians(angleDeg)
+                    val x = (cx + radius * cos(rad)).roundToInt()
+                    val y = (cy + radius * sin(rad)).roundToInt()
+                    sat.visibility = View.VISIBLE
+                    sat.layoutParams = FrameLayout.LayoutParams(satSize, satSize).apply {
+                        leftMargin = x
+                        topMargin = y
+                    }
+                    val unit = m.unit.take(4)
+                    sat.text = buildString {
+                        append(m.label.take(7).uppercase())
+                        append('\n')
+                        append(m.value)
+                        if (unit.isNotBlank()) {
+                            append('\n')
+                            append(unit)
+                        }
+                    }
+                    sat.background = circleDrawable(healthColor(m.health), fillAlpha = 215)
+                } else {
+                    sat.visibility = View.GONE
                 }
             }
-            valueView.setTextColor(color)
-            statusView.text = m.status ?: m.health ?: "—"
-            statusView.setTextColor(color)
-            indexView.text = "${metricIndex + 1} / ${metrics.size}  ·  ${latest.statusLine}"
-            panel.background = roundRectDrawable(COLOR_SURFACE, (16 * resources.displayMetrics.density).roundToInt()).apply {
-                setStroke((2 * resources.displayMetrics.density).roundToInt(), color)
-            }
         } else {
-            panel.visibility = View.GONE
-            bubble.visibility = View.VISIBLE
-            val shortLabel = m.label.take(4).uppercase()
-            bubble.text = "$shortLabel\n${m.value}"
-            bubble.background = circleDrawable(color)
+            lp.width = collapsed
+            lp.height = collapsed
+            pageHint?.visibility = View.GONE
+            satellites.forEach { it.visibility = View.GONE }
+        }
+
+        runCatching { windowManager.updateViewLayout(container, lp) }
+        container.requestLayout()
+    }
+
+    private fun setExpanded(value: Boolean) {
+        val lp = params ?: return
+        if (expanded == value) {
+            if (value) bumpAutoCollapse()
+            render()
+            return
+        }
+        val density = resources.displayMetrics.density
+        fun dp(v: Int) = (v * density).roundToInt()
+        val delta = (dp(EXPANDED_DP) - dp(COLLAPSED_DP)) / 2
+        if (value) {
+            lp.x = (lp.x - delta).coerceAtLeast(0)
+            lp.y = (lp.y - delta).coerceAtLeast(0)
+        } else {
+            lp.x += delta
+            lp.y += delta
+        }
+        expanded = value
+        if (expanded) bumpAutoCollapse() else mainHandler.removeCallbacks(autoCollapse)
+        render()
+    }
+
+    private fun bumpAutoCollapse() {
+        mainHandler.removeCallbacks(autoCollapse)
+        if (expanded) {
+            mainHandler.postDelayed(autoCollapse, AUTO_COLLAPSE_MS)
         }
     }
 
     private fun openAppAndKeepOverlay() {
+        mainHandler.removeCallbacks(autoCollapse)
         val launch = Intent(this, MainActivity::class.java).apply {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
         }
         startActivity(launch)
-        expanded = false
-        render()
+        setExpanded(false)
     }
 
     private fun healthColor(health: String?): Int = when (health) {
@@ -354,32 +405,33 @@ class FloatingDashOverlayService : Service() {
         else -> COLOR_ACCENT
     }
 
-    private fun circleDrawable(color: Int): GradientDrawable =
+    private fun circleDrawable(color: Int, fillAlpha: Int): GradientDrawable =
         GradientDrawable().apply {
             shape = GradientDrawable.OVAL
-            setColor(Color.argb(230, 20, 27, 34))
+            setColor(Color.argb(fillAlpha, 20, 27, 34))
             setStroke((3 * resources.displayMetrics.density).roundToInt(), color)
         }
 
-    private fun roundRectDrawable(fill: Int, radius: Int): GradientDrawable =
-        GradientDrawable().apply {
-            shape = GradientDrawable.RECTANGLE
-            cornerRadius = radius.toFloat()
-            setColor(fill)
-        }
+    private enum class TouchMode { NONE, DRAG, PAGE }
 
     companion object {
         private const val PREFS = "floating_dash"
         private const val KEY_X = "x"
         private const val KEY_Y = "y"
 
+        private const val COLLAPSED_DP = 56
+        private const val CENTER_DP = 56
+        private const val SAT_DP = 68
+        private const val EXPANDED_DP = 280
+        private const val RADIUS_DP = 96
+        private const val AUTO_COLLAPSE_MS = 6_000L
+        private const val LONG_PRESS_MS = 520L
+
         const val ACTION_STOP = "com.fb2.obd.action.STOP_FLOATING_DASH"
         const val ACTION_EXPAND = "com.fb2.obd.action.EXPAND_FLOATING_DASH"
         const val ACTION_COLLAPSE = "com.fb2.obd.action.COLLAPSE_FLOATING_DASH"
 
-        // Match Theme.kt
         private val COLOR_ACCENT = Color.parseColor("#00E5FF")
-        private val COLOR_SURFACE = Color.parseColor("#E6141B22")
         private val COLOR_GOOD = Color.parseColor("#29D07B")
         private val COLOR_WARN = Color.parseColor("#FFB300")
         private val COLOR_HOT = Color.parseColor("#FF8A3D")

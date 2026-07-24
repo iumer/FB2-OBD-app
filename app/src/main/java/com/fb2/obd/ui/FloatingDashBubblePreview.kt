@@ -2,17 +2,12 @@ package com.fb2.obd.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -36,25 +31,39 @@ import com.fb2.obd.ui.theme.Surface
 import com.fb2.obd.ui.theme.TextMuted
 import com.fb2.obd.ui.theme.TextPrimary
 import com.fb2.obd.ui.theme.WarnAmber
+import kotlin.math.cos
+import kotlin.math.roundToInt
+import kotlin.math.sin
 
 /**
  * Compose stand-in for [com.fb2.obd.service.FloatingDashOverlayService] used in
  * Paparazzi car-HU reviews (real overlay is a WindowManager View).
+ *
+ * Collapsed = one circle. Expanded = center + up to 5 satellites on a ring,
+ * paged via [pageIndex].
  */
 @Composable
 fun FloatingDashBubblePreview(
     metrics: List<FloatingDashMetrics.Metric>,
-    index: Int,
+    pageIndex: Int = 0,
     expanded: Boolean,
     modifier: Modifier = Modifier,
     statusLine: String = "LIVE",
+    /** @deprecated Kept for older call sites; prefer [pageIndex]. */
+    index: Int = 0,
 ) {
     val safe = metrics.ifEmpty {
         listOf(FloatingDashMetrics.Metric("Dash", "--", "", null, "WAITING"))
     }
-    val i = index.coerceIn(0, safe.lastIndex)
-    val m = safe[i]
-    val color = healthColor(m.health)
+    val page = if (expanded) {
+        FloatingDashMetrics.page(safe, pageIndex)
+    } else {
+        val i = index.coerceIn(0, safe.lastIndex)
+        listOf(safe[i])
+    }
+    val pages = FloatingDashMetrics.pageCount(safe)
+    val worst = FloatingDashMetrics.worstHealth(safe.mapNotNull { it.health })
+    val rim = healthColor(worst)
 
     Box(
         modifier = modifier
@@ -72,80 +81,51 @@ fun FloatingDashBubblePreview(
             modifier = Modifier.align(Alignment.Center),
         )
 
-        if (expanded) {
-            Column(
-                modifier = Modifier
-                    .widthIn(min = 200.dp, max = 240.dp)
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(Surface.copy(alpha = 0.95f))
-                    .border(2.dp, color, RoundedCornerShape(16.dp))
-                    .padding(14.dp),
-            ) {
+        Box(
+            modifier = Modifier
+                .padding(start = 24.dp)
+                .size(if (expanded) 280.dp else 56.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            if (expanded) {
+                val radiusPx = 96f
+                page.forEachIndexed { i, m ->
+                    val angleDeg = -90.0 + i * (360.0 / FloatingDashMetrics.PAGE_SIZE)
+                    val rad = Math.toRadians(angleDeg)
+                    val ox = (radiusPx * cos(rad)).roundToInt()
+                    val oy = (radiusPx * sin(rad)).roundToInt()
+                    SatelliteBubble(
+                        metric = m,
+                        modifier = Modifier.offset(ox.dp, oy.dp),
+                    )
+                }
                 Text(
-                    text = m.label.uppercase(),
-                    color = TextMuted,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Text(
-                    text = buildString {
-                        append(m.value)
-                        if (m.unit.isNotBlank()) {
-                            append(' ')
-                            append(m.unit)
-                        }
-                    },
-                    color = color,
-                    fontSize = 28.sp,
-                    fontWeight = FontWeight.Bold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Text(
-                    text = m.status ?: m.health ?: "—",
-                    color = color,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Text(
-                    text = "${i + 1} / ${safe.size}  ·  $statusLine",
-                    color = TextMuted,
-                    fontSize = 10.sp,
-                    modifier = Modifier.padding(top = 6.dp),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Text(
-                    text = "swipe · tap bubble to collapse",
+                    text = "↕ scroll · $statusLine",
                     color = TextMuted,
                     fontSize = 9.sp,
-                    modifier = Modifier.padding(top = 4.dp),
-                )
-                Row(
+                    fontWeight = FontWeight.Bold,
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 8.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                ) {
-                    Text("OPEN APP", color = Accent, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                    Text("CLOSE", color = CritRed, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                }
+                        .align(Alignment.BottomCenter)
+                        .padding(bottom = 4.dp),
+                )
             }
-        } else {
+
+            // Center floating button (always)
+            val centerMetric = page.firstOrNull() ?: safe.first()
             Box(
                 modifier = Modifier
                     .size(56.dp)
                     .clip(CircleShape)
                     .background(Surface.copy(alpha = 0.92f))
-                    .border(3.dp, color, CircleShape),
+                    .border(3.dp, rim, CircleShape),
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
-                    text = "${m.label.take(4).uppercase()}\n${m.value}",
+                    text = if (expanded) {
+                        "FB2\n${pageIndex.coerceIn(0, pages - 1) + 1}/$pages"
+                    } else {
+                        "${centerMetric.label.take(4).uppercase()}\n${centerMetric.value}"
+                    },
                     color = TextPrimary,
                     fontSize = 10.sp,
                     fontWeight = FontWeight.Bold,
@@ -156,6 +136,41 @@ fun FloatingDashBubblePreview(
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun SatelliteBubble(
+    metric: FloatingDashMetrics.Metric,
+    modifier: Modifier = Modifier,
+) {
+    val color = healthColor(metric.health)
+    Box(
+        modifier = modifier
+            .size(68.dp)
+            .clip(CircleShape)
+            .background(Surface.copy(alpha = 0.92f))
+            .border(2.dp, color, CircleShape),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = buildString {
+                append(metric.label.take(7).uppercase())
+                append('\n')
+                append(metric.value)
+                if (metric.unit.isNotBlank()) {
+                    append('\n')
+                    append(metric.unit.take(4))
+                }
+            },
+            color = TextPrimary,
+            fontSize = 9.sp,
+            fontWeight = FontWeight.Bold,
+            textAlign = TextAlign.Center,
+            lineHeight = 11.sp,
+            maxLines = 3,
+            overflow = TextOverflow.Clip,
+        )
     }
 }
 

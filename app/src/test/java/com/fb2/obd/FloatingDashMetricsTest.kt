@@ -14,7 +14,7 @@ import org.junit.Test
 class FloatingDashMetricsTest {
 
     @Test
-    fun wheel_startsWithHeroThenTiles() {
+    fun wheel_prefersRadialOrder() {
         val state = CarDashBuilder.build(
             snapshot = VehicleSnapshot(
                 rpm = 1800.0,
@@ -22,6 +22,8 @@ class FloatingDashMetricsTest {
                 coolantC = 88.0,
                 batteryVolts = 14.1,
                 mafGps = 8.0,
+                mapKpa = 40.0,
+                intakeC = 32.0,
                 gear = 3,
                 gearSource = GearSource.ESTIMATED,
             ),
@@ -38,11 +40,26 @@ class FloatingDashMetricsTest {
         )
         val metrics = FloatingDashMetrics.from(state)
         assertEquals("RPM", metrics[0].label)
-        assertEquals("Speed", metrics[1].label)
-        assertEquals("Gear", metrics[2].label)
-        assertTrue(metrics.any { it.label == "Battery" })
+        // First radial page should lead with the high-signal ring set.
+        val page0 = FloatingDashMetrics.page(metrics, 0)
+        assertEquals(5, page0.size)
+        assertEquals(listOf("RPM", "Coolant 1", "MAP", "Battery", "Intake"), page0.map { it.label })
+        assertTrue(metrics.any { it.label == "Speed" })
         assertTrue(metrics.any { it.label == "MAF" })
         assertTrue(metrics.size >= 10)
+    }
+
+    @Test
+    fun page_scrollsGroupsOfFive() {
+        val metrics = (1..12).map {
+            FloatingDashMetrics.Metric("M$it", "$it", "", null, null)
+        }
+        assertEquals(3, FloatingDashMetrics.pageCount(metrics))
+        assertEquals(listOf("M1", "M2", "M3", "M4", "M5"), FloatingDashMetrics.page(metrics, 0).map { it.label })
+        assertEquals(listOf("M6", "M7", "M8", "M9", "M10"), FloatingDashMetrics.page(metrics, 1).map { it.label })
+        assertEquals(listOf("M11", "M12"), FloatingDashMetrics.page(metrics, 2).map { it.label })
+        // Out-of-range clamps to last page
+        assertEquals(listOf("M11", "M12"), FloatingDashMetrics.page(metrics, 99).map { it.label })
     }
 
     @Test

@@ -108,9 +108,12 @@ non-obvious cloud specifics.
   `PARTIAL_WAKE_LOCK`). Demo mode must not start it. Voice alerts use AudioFocus +
   `USAGE_ASSISTANCE_NAVIGATION_GUIDANCE` and prefer car BT audio when available.
 - **Floating Dash bubble:** Dash **MIN** chip starts `FloatingDashOverlayService`
-  (needs `SYSTEM_ALERT_WINDOW`). Collapsed draggable dot; tap expands swipeable
-  main-Dash metrics with health colors from `VehicleLiveStore` / `CarDashTile.health`.
-  Aimed at Dellson HU + CarPlay overlay use; may be blocked by some HU firmwares.
+  (needs `SYSTEM_ALERT_WINDOW`). Collapsed = one draggable circle. Expanded =
+  same center + up to **5 satellite circles** around it (`FloatingDashMetrics`
+  pages of 5). Vertical swipe pages metrics; center stays fixed. Idle ~6s
+  auto-collapses; tap center toggles; long-press opens the app. Live values from
+  `VehicleLiveStore` / `CarDashTile.health`. Aimed at Dellson HU + CarPlay
+  overlay; may be blocked by some HU firmwares.
 - MAF/MAP health is context-aware (idle / coast / cruise / heavy); pass RPM,
   speed, and throttle into `HealthEvaluator.maf` / `map`. MAF threshold schema is
   currently **3** (`HealthThresholdStore`) — old harsh idle bands are force-migrated.

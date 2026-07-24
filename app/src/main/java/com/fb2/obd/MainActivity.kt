@@ -562,7 +562,7 @@ class MainActivity : ComponentActivity() {
         try {
             FloatingDashOverlayService.startOverlay(this)
             moveTaskToBack(true)
-            toast("Floating Dash on — tap bubble for values, hold to reopen")
+            toast("Floating Dash on — tap for ring, swipe pages, hold to reopen")
         } catch (e: Exception) {
             toast("Bubble failed: ${e.message ?: "overlay error"}")
         }

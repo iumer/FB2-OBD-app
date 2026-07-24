@@ -108,7 +108,7 @@ class CarHuBubbleSnapshotTest {
             FB2Theme {
                 FloatingDashBubblePreview(
                     metrics = metrics,
-                    index = 0,
+                    pageIndex = 0,
                     expanded = false,
                     statusLine = "LIVE · ELM327",
                 )
@@ -120,11 +120,12 @@ class CarHuBubbleSnapshotTest {
     fun bubble_expanded_critical_battery() {
         val metrics = sampleMetrics()
         val battIdx = metrics.indexOfFirst { it.label.contains("Battery", true) }.coerceAtLeast(0)
+        val page = battIdx / FloatingDashMetrics.PAGE_SIZE
         paparazzi.snapshot {
             FB2Theme {
                 FloatingDashBubblePreview(
                     metrics = metrics,
-                    index = battIdx,
+                    pageIndex = page,
                     expanded = true,
                     statusLine = "LIVE · ELM327",
                 )
@@ -136,11 +137,12 @@ class CarHuBubbleSnapshotTest {
     fun bubble_expanded_maf() {
         val metrics = sampleMetrics()
         val mafIdx = metrics.indexOfFirst { it.label.equals("MAF", true) }.coerceAtLeast(0)
+        val page = mafIdx / FloatingDashMetrics.PAGE_SIZE
         paparazzi.snapshot {
             FB2Theme {
                 FloatingDashBubblePreview(
                     metrics = metrics,
-                    index = mafIdx,
+                    pageIndex = page,
                     expanded = true,
                     statusLine = "LIVE · ELM327",
                 )
