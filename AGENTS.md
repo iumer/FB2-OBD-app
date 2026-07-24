@@ -44,11 +44,13 @@ non-obvious cloud specifics.
 - Honda enhanced packs in `HondaPidCatalog` use Mode 22 placeholders
   (`2211xx`…`2219xx`). Real FB2 / market-specific ECUs often need different IDs
   **and** CAN headers (`ATSH`). Until recently the app never sent headers — that
-  is an app/protocol gap, not proof the ELM adapter is broken. Double-tap any
-  `n/s` tile to run **Deep search** (`DeepSearchKnowledgeBase` + `DeepSensorSearch`).
+  is an app/protocol gap, not proof the ELM adapter is broken. **Triple-tap** any
+  `n/s` tile to run **Deep research** (`DeepSearchKnowledgeBase` + `DeepSensorSearch`).
 - Coolant2 (`0167`), Ambient (`0146`), and LTFT (`0107`) frequently return
   `n/s` on this Civic because the ECM support bitmask omits them — usually an
   ECU limitation. Deep search still forces the PID and tries ECM headers.
+- **Demo simulation** intentionally marks Coolant2 / Ambient / LTFT as `n/s` so
+  you can triple-tap → Yes → watch the library walk and recover a value without a car.
 - “AI explanations” on the Faults screen are curated text in `DtcCatalog.explain`,
   not a live LLM.
 - `sdkmanager`/Gradle may print `SDK XML version 4 ... only understands up to 3`.

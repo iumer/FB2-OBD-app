@@ -28,12 +28,17 @@ object DeepSensorSearch {
 
         strategies.forEachIndexed { idx, strategy ->
             onProgress(idx + 1, strategies.size, strategy.title)
+            // Small pause so Demo/UI progress is visible while walking the library.
+            delay(if (source.isLive) 40L else 180L)
             val hit = tryStrategy(source, strategy)
             if (hit != null) {
                 ObdLogger.logDebug(
                     ObdLogger.Dir.INFO,
                     "DEEP SEARCH HIT [$label] via ${strategy.id} = ${hit.value} ${strategy.unit}",
                 )
+                // Brief hold on the winning strategy title for the progress dialog.
+                onProgress(idx + 1, strategies.size, "FOUND — ${strategy.title}")
+                delay(if (source.isLive) 80L else 350L)
                 return DeepSearchReport(
                     targetLabel = label,
                     targetId = pid?.id ?: requestHint ?: label,

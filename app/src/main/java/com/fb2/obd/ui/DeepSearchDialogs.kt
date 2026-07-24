@@ -36,11 +36,11 @@ fun DeepSearchDialogs(
         state.running -> {
             AlertDialog(
                 onDismissRequest = { /* block cancel mid-run — teardown must finish */ },
-                title = { Text("Deep searching…", color = TextPrimary, fontWeight = FontWeight.Bold) },
+                title = { Text("Deep research running…", color = TextPrimary, fontWeight = FontWeight.Bold) },
                 text = {
                     Column {
                         Text(
-                            text = state.progress.ifBlank { "Trying alternate OBD modes & ECU headers…" },
+                            text = state.progress.ifBlank { "Searching protocol library (modes, headers, Honda IDs)…" },
                             color = TextMuted,
                             fontSize = 13.sp,
                             modifier = Modifier.padding(bottom = 12.dp),
@@ -114,13 +114,21 @@ fun DeepSearchDialogs(
             val label = state.confirmLabel
             AlertDialog(
                 onDismissRequest = onDismiss,
-                title = { Text("Deep search?", color = TextPrimary, fontWeight = FontWeight.Bold) },
+                title = {
+                    Text("Deep research this sensor?", color = TextPrimary, fontWeight = FontWeight.Bold)
+                },
                 text = {
                     Column {
                         Text(
-                            text = "Try to recover \"$label\" using alternate OBD modes, protocols, and Honda ECU headers?",
+                            text = "\"$label\" is showing n/s. Do you want a deep analysis to try fetching this value?",
                             color = TextPrimary,
                             fontSize = 14.sp,
+                            modifier = Modifier.padding(bottom = 8.dp),
+                        )
+                        Text(
+                            text = "The app will search its protocol library: force Mode 01, ISO/CAN switches, ECM/TCM headers (ATSH), and alternate Honda Mode 22 IDs — not just one request.",
+                            color = TextMuted,
+                            fontSize = 12.sp,
                             modifier = Modifier.padding(bottom = 8.dp),
                         )
                         Text(
@@ -129,8 +137,8 @@ fun DeepSearchDialogs(
                             fontSize = 12.sp,
                         )
                         Text(
-                            text = "This may briefly pause live polling while commands run.",
-                            color = TextMuted,
+                            text = "Works in Demo simulation too — try Coolant 2, Ambient, or LTFT.",
+                            color = Accent,
                             fontSize = 11.sp,
                             modifier = Modifier.padding(top = 8.dp),
                         )
@@ -138,11 +146,11 @@ fun DeepSearchDialogs(
                 },
                 confirmButton = {
                     TextButton(onClick = onConfirm) {
-                        Text("Search deeply", color = Accent, fontWeight = FontWeight.Bold)
+                        Text("Yes — deep research", color = Accent, fontWeight = FontWeight.Bold)
                     }
                 },
                 dismissButton = {
-                    TextButton(onClick = onDismiss) { Text("Cancel", color = TextPrimary) }
+                    TextButton(onClick = onDismiss) { Text("No", color = TextPrimary) }
                 },
                 containerColor = Background,
             )
