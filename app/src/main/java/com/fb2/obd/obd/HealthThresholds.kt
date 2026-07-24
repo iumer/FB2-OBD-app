@@ -40,13 +40,16 @@ data class HealthThresholds(
     val ambientColdBelow: Double = 5.0,
     val ambientGoodMax: Double = 45.0,
 
-    val mafIdleGoodMin: Double = 6.0,
-    val mafIdleGoodMax: Double = 10.0,
-    val mafIdleWarnMin: Double = 4.0,
-    val mafCruiseGoodMin: Double = 15.0,
-    val mafCruiseGoodMax: Double = 35.0,
-    val mafHeavyGoodMin: Double = 40.0,
-    val mafHeavyGoodMax: Double = 120.0,
+    // R18 1.8L idle MAF is typically ~2.5–5.5 g/s (Torque-normal). Older 6–10
+    // defaults falsely flagged idle as CRITICAL.
+    val mafIdleGoodMin: Double = 2.5,
+    val mafIdleGoodMax: Double = 6.5,
+    val mafIdleWarnMin: Double = 1.5,
+    // Light city cruise on FB2 is often 4–15 g/s — not the highway 15–35 band.
+    val mafCruiseGoodMin: Double = 4.0,
+    val mafCruiseGoodMax: Double = 40.0,
+    val mafHeavyGoodMin: Double = 30.0,
+    val mafHeavyGoodMax: Double = 130.0,
 
     val mapIdleGoodMin: Double = 25.0,
     val mapIdleGoodMax: Double = 40.0,

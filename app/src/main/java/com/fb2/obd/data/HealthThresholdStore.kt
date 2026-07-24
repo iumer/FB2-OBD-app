@@ -12,8 +12,13 @@ class HealthThresholdStore(private val file: File) {
         return runCatching {
             val o = JSONObject(file.readText())
             val d = HealthThresholds.DEFAULT
+            val schema = if (o.has("schemaVersion")) o.optInt("schemaVersion", 1) else 1
             fun d(key: String, fallback: Double) =
                 if (o.has(key) && !o.isNull(key)) o.getDouble(key) else fallback
+            // schema < 2 kept the too-high R18 MAF idle band (6–10). Force new defaults
+            // for MAF fields once; user can still retune afterward (save bumps schema).
+            fun maf(key: String, fallback: Double) =
+                if (schema >= 2) d(key, fallback) else fallback
             HealthThresholds(
                 coolantColdBelow = d("coolantColdBelow", d.coolantColdBelow),
                 coolantGoodMax = d("coolantGoodMax", d.coolantGoodMax),
@@ -38,13 +43,13 @@ class HealthThresholdStore(private val file: File) {
                 intakeWarnMax = d("intakeWarnMax", d.intakeWarnMax),
                 ambientColdBelow = d("ambientColdBelow", d.ambientColdBelow),
                 ambientGoodMax = d("ambientGoodMax", d.ambientGoodMax),
-                mafIdleGoodMin = d("mafIdleGoodMin", d.mafIdleGoodMin),
-                mafIdleGoodMax = d("mafIdleGoodMax", d.mafIdleGoodMax),
-                mafIdleWarnMin = d("mafIdleWarnMin", d.mafIdleWarnMin),
-                mafCruiseGoodMin = d("mafCruiseGoodMin", d.mafCruiseGoodMin),
-                mafCruiseGoodMax = d("mafCruiseGoodMax", d.mafCruiseGoodMax),
-                mafHeavyGoodMin = d("mafHeavyGoodMin", d.mafHeavyGoodMin),
-                mafHeavyGoodMax = d("mafHeavyGoodMax", d.mafHeavyGoodMax),
+                mafIdleGoodMin = maf("mafIdleGoodMin", d.mafIdleGoodMin),
+                mafIdleGoodMax = maf("mafIdleGoodMax", d.mafIdleGoodMax),
+                mafIdleWarnMin = maf("mafIdleWarnMin", d.mafIdleWarnMin),
+                mafCruiseGoodMin = maf("mafCruiseGoodMin", d.mafCruiseGoodMin),
+                mafCruiseGoodMax = maf("mafCruiseGoodMax", d.mafCruiseGoodMax),
+                mafHeavyGoodMin = maf("mafHeavyGoodMin", d.mafHeavyGoodMin),
+                mafHeavyGoodMax = maf("mafHeavyGoodMax", d.mafHeavyGoodMax),
                 mapIdleGoodMin = d("mapIdleGoodMin", d.mapIdleGoodMin),
                 mapIdleGoodMax = d("mapIdleGoodMax", d.mapIdleGoodMax),
                 mapCruiseGoodMin = d("mapCruiseGoodMin", d.mapCruiseGoodMin),
@@ -65,12 +70,15 @@ class HealthThresholdStore(private val file: File) {
                 atfElevatedMax = d("atfElevatedMax", d.atfElevatedMax),
                 slipGoodMax = d("slipGoodMax", d.slipGoodMax),
                 slipWarnMax = d("slipWarnMax", d.slipWarnMax),
-            )
+            ).also { loaded ->
+                if (schema < SCHEMA_VERSION) save(loaded)
+            }
         }.getOrElse { HealthThresholds.DEFAULT }
     }
 
     fun save(t: HealthThresholds) {
         val o = JSONObject().apply {
+            put("schemaVersion", SCHEMA_VERSION)
             put("coolantColdBelow", t.coolantColdBelow)
             put("coolantGoodMax", t.coolantGoodMax)
             put("coolantWarnMax", t.coolantWarnMax)
@@ -124,5 +132,10 @@ class HealthThresholdStore(private val file: File) {
         }
         file.parentFile?.mkdirs()
         file.writeText(o.toString(2))
+    }
+
+    companion object {
+        /** Bumped when default MAF bands were retuned for R18 idle (~2.5–6.5 g/s). */
+        const val SCHEMA_VERSION = 2
     }
 }

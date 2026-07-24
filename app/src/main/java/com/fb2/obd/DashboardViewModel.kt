@@ -31,6 +31,7 @@ import com.fb2.obd.obd.ModuleScanResult
 import com.fb2.obd.obd.O2TestResult
 import com.fb2.obd.obd.PidCategory
 import com.fb2.obd.obd.PidDefinition
+import com.fb2.obd.obd.PidProbeResult
 import com.fb2.obd.obd.ReadinessStatus
 import com.fb2.obd.obd.StandardPidCatalog
 import com.fb2.obd.obd.TripComputer
@@ -266,6 +267,16 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
                 val text = "%.2f %s".format(hit.value, hit.strategy.unit).trim()
                 _deepFoundValues.update {
                     it + (label to text) + (report.targetId to text)
+                }
+                // Battery deep-search (esp. ATRV) must also feed the live snapshot
+                // so health score / voice / CSV see volts, not just the tile overlay.
+                val isBattery = label.contains("battery", true) ||
+                    label.contains("ecu v", true) ||
+                    report.targetId.contains("0142", true)
+                if (isBattery) {
+                    _uiState.update { st ->
+                        st.copy(snapshot = st.snapshot.copy(batteryVolts = hit.value))
+                    }
                 }
             }
             _deepSearch.update {
@@ -820,18 +831,38 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
         val source = currentSource ?: return
         viewModelScope.launch {
             _idleDiag.update { it.copy(loading = true) }
-            val probed = source.probePids(ColdStartIdleCatalog.allPids)
-            val results = LiveSnapshotOverlay.apply(probed, _uiState.value.snapshot)
-            ObdLogger.logProbe("Cold start / rough idle", results)
-            val values = results.associate { r ->
+            // Probe SAE / Mode 01 first so the page fills quickly; Mode 22 last.
+            val ordered = ColdStartIdleCatalog.allPids.sortedBy { pid ->
+                when {
+                    pid.request.startsWith("01") -> 0
+                    pid.request.startsWith("22") -> 2
+                    else -> 1
+                }
+            }
+            val probed = source.probePids(ordered)
+            // Overlay live Dash ATRV/0142 volts onto the Control module voltage row.
+            val withLive = LiveSnapshotOverlay.apply(probed, _uiState.value.snapshot).toMutableList()
+            val battIdx = withLive.indexOfFirst {
+                it.pid.request.equals("0142", true) ||
+                    it.pid.label.contains("Control module voltage", true)
+            }
+            val liveBatt = _uiState.value.snapshot.batteryVolts
+            if (battIdx >= 0 && liveBatt != null &&
+                (!withLive[battIdx].supported || withLive[battIdx].sample == null)
+            ) {
+                val pid = withLive[battIdx].pid
+                withLive[battIdx] = PidProbeResult(pid, true, liveBatt, "ATRV/live")
+            }
+            ObdLogger.logProbe("Cold start / rough idle", withLive)
+            val values = withLive.associate { r ->
                 r.pid.id to LiveSnapshotOverlay.formatDisplay(r)
-            } + results.associate { r ->
+            } + withLive.associate { r ->
                 r.pid.label to LiveSnapshotOverlay.formatDisplay(r)
             }
             _idleDiag.value = IdleDiagState(
                 loading = false,
                 values = values,
-                tips = ColdStartIdleCatalog.analyze(results),
+                tips = ColdStartIdleCatalog.analyze(withLive),
             )
         }
     }

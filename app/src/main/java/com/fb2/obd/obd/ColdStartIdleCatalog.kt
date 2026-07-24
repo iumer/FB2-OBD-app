@@ -58,26 +58,6 @@ object ColdStartIdleCatalog {
 
     val sections: List<Section> = listOf(
         Section(
-            title = "Misfires (per cylinder)",
-            hint = "Rising counts on one cylinder → plug/coil/injector/compression. Even counts on all → fuel quality, vacuum leak, or timing.",
-            pids = HondaPidCatalog.engine.pids.filter { it.label.contains("Misfire", true) } +
-                idleControlCandidates.filter { it.label.contains("misfire", true) } +
-                HondaPidCatalog.engine.pids.filter { it.label.contains("Knock", true) },
-        ),
-        Section(
-            title = "Fuel delivery / pump pressure",
-            hint = "FB2 is port-injected; SAE fuel-rail PIDs are often n/s. We probe SAE + Honda candidates — send debug log if any answer.",
-            pids = listOfNotNull(
-                StandardPidCatalog.byId("0103"),
-                StandardPidCatalog.byId("010A"),
-                StandardPidCatalog.byId("0122"),
-                StandardPidCatalog.byId("0123"),
-                StandardPidCatalog.byId("0159"),
-                StandardPidCatalog.byId("015E"),
-            ) + fuelPressureCandidates +
-                HondaPidCatalog.engine.pids.filter { it.label.contains("Injector", true) },
-        ),
-        Section(
             title = "Cold start / idle quality",
             hint = "Capture while cold (coolant < ~50°C) at idle in Park/Neutral, AC off, then again after warm-up.",
             pids = listOfNotNull(
@@ -109,6 +89,26 @@ object ColdStartIdleCatalog {
                 StandardPidCatalog.byId("0134"),
                 StandardPidCatalog.byId("0144"),
             ),
+        ),
+        Section(
+            title = "Fuel delivery / pump pressure",
+            hint = "FB2 is port-injected; SAE fuel-rail PIDs are often n/s. We probe SAE + Honda candidates — send debug log if any answer.",
+            pids = listOfNotNull(
+                StandardPidCatalog.byId("0103"),
+                StandardPidCatalog.byId("010A"),
+                StandardPidCatalog.byId("0122"),
+                StandardPidCatalog.byId("0123"),
+                StandardPidCatalog.byId("0159"),
+                StandardPidCatalog.byId("015E"),
+            ) + fuelPressureCandidates +
+                HondaPidCatalog.engine.pids.filter { it.label.contains("Injector", true) },
+        ),
+        Section(
+            title = "Misfires (per cylinder)",
+            hint = "Rising counts on one cylinder → plug/coil/injector/compression. Even counts on all → fuel quality, vacuum leak, or timing. Mode 22 often n/s on clones.",
+            pids = HondaPidCatalog.engine.pids.filter { it.label.contains("Misfire", true) } +
+                idleControlCandidates.filter { it.label.contains("misfire", true) } +
+                HondaPidCatalog.engine.pids.filter { it.label.contains("Knock", true) },
         ),
     )
 

@@ -28,6 +28,23 @@ class DeepSearchKnowledgeBaseTest {
     }
 
     @Test
+    fun battery_prefersAtrvFirst() {
+        val strategies = DeepSearchKnowledgeBase.strategiesFor(null, "Battery", "0142")
+        assertTrue(strategies.isNotEmpty())
+        assertTrue(strategies.first().request.equals("ATRV", ignoreCase = true))
+    }
+
+    @Test
+    fun demoDeepSearch_recoversBatteryViaAtrv() = runBlocking {
+        val source = DemoObdSource()
+        val report = DeepSensorSearch.run(source, "Battery", null, "0142")
+        assertTrue(report.success)
+        assertNotNull(report.hit)
+        assertTrue(report.hit!!.value in 12.0..15.0)
+        assertTrue(report.hit!!.strategy.request.equals("ATRV", true))
+    }
+
+    @Test
     fun demoDeepSearch_recoversAmbient() = runBlocking {
         val source = DemoObdSource()
         val pid = StandardPidCatalog.all.find { it.request == "0146" }

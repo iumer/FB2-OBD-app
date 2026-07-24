@@ -107,7 +107,10 @@ class DemoObdSource(
     override suspend fun command(raw: String): String? {
         val cmd = raw.trim().uppercase().replace(" ", "")
         return when {
-            cmd.startsWith("AT") -> "OK"
+            cmd.startsWith("AT") -> when {
+                cmd == "ATRV" -> "14.2V"
+                else -> "OK"
+            }
             cmd == "0100" -> "41 00 BE 3E B8 11"
             cmd == "0101" -> "41 01 00 07 E5 E5"
             cmd == "0103" -> "41 03 02 00" // closed loop bank 1

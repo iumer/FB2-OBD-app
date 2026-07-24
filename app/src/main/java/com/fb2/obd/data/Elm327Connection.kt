@@ -73,7 +73,9 @@ class Elm327Connection(
 
     companion object {
         /** Short enough that one hung PID doesn't freeze the Dash for long. */
-        const val DEFAULT_TIMEOUT_MS = 1200L
-        const val INIT_TIMEOUT_MS = 2500L
+        const val DEFAULT_TIMEOUT_MS = 900L
+        /** Even shorter for one-off probe pages (idle/fuel/trans) so UI unsticks. */
+        const val PROBE_TIMEOUT_MS = 700L
+        const val INIT_TIMEOUT_MS = 2200L
     }
 }

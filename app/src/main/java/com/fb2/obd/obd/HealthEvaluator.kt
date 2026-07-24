@@ -126,7 +126,7 @@ object HealthEvaluator {
                 else -> MetricStatus(Health.GOOD, "NORMAL")
             }
             else -> when {
-                // Cruise / light load
+                // Cruise / light load (city speeds often sit below classic "cruise" MAF)
                 gps in t.mafCruiseGoodMin..t.mafCruiseGoodMax -> MetricStatus(Health.GOOD, "CRUISE OK")
                 gps < t.mafIdleWarnMin -> MetricStatus(Health.CRITICAL, "VERY LOW")
                 gps < t.mafCruiseGoodMin -> MetricStatus(Health.WARN, "LOW")
