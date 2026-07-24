@@ -14,6 +14,19 @@ object LiveSnapshotOverlay {
         }
     }
 
+    fun liveSample(pid: PidDefinition, snapshot: VehicleSnapshot): Double? = liveValue(pid, snapshot)
+
+    fun formatLiveOrNs(pid: PidDefinition, snapshot: VehicleSnapshot, fallback: String? = null): String {
+        val v = liveValue(pid, snapshot)
+        if (v != null) return "%.2f %s".format(v, pid.unit).trim()
+        if (fallback != null) return fallback
+        return if (pid.profile.startsWith("honda", ignoreCase = true) || pid.request.startsWith("22")) {
+            "n/s — not on this ECU yet"
+        } else {
+            "—"
+        }
+    }
+
     private fun liveValue(pid: PidDefinition, s: VehicleSnapshot): Double? {
         // Match by Mode 01 request or common labels.
         return when (pid.request.uppercase()) {

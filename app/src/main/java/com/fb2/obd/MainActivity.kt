@@ -35,6 +35,7 @@ import androidx.core.content.ContextCompat
 import com.fb2.obd.data.DemoObdSource
 import com.fb2.obd.data.Elm327BluetoothSource
 import com.fb2.obd.data.ObdLogger
+import com.fb2.obd.obd.LiveSnapshotOverlay
 import com.fb2.obd.ui.BtDeviceUi
 import com.fb2.obd.ui.ConnectDialog
 import com.fb2.obd.ui.CustomSensorsScreen
@@ -89,6 +90,8 @@ class MainActivity : ComponentActivity() {
                 val hondaScan by viewModel.hondaScan.collectAsState()
                 val hondaScanning by viewModel.hondaScanning.collectAsState()
                 val maintenance by viewModel.maintenance.collectAsState()
+                val dashExtraPidIds by viewModel.dashExtraPidIds.collectAsState()
+                val dashExtraValues by viewModel.dashExtraValues.collectAsState()
 
                 var screen by remember { mutableStateOf(Screen.DASHBOARD) }
                 var showConnect by remember { mutableStateOf(false) }
@@ -199,6 +202,32 @@ class MainActivity : ComponentActivity() {
                             }
                         },
                         onSettingsClick = { screen = Screen.SETTINGS },
+                        catalog = viewModel.pidCatalog,
+                        extraPidIds = dashExtraPidIds,
+                        extraValues = dashExtraValues,
+                        onSetExtraPid = viewModel::setDashExtraPid,
+                        customValues = buildMap {
+                            custom.selectedIds.forEach { id ->
+                                val pid = viewModel.pidCatalog.find { it.id == id } ?: return@forEach
+                                put(
+                                    pid.label,
+                                    custom.liveValues[id]
+                                        ?: LiveSnapshotOverlay.formatLiveOrNs(
+                                            pid,
+                                            state.snapshot,
+                                            custom.liveValues[pid.label],
+                                        ),
+                                )
+                            }
+                        },
+                        fuelValues = fuelValues,
+                        idleValues = idleDiag.values,
+                        idleTips = idleDiag.tips,
+                        transValues = transValues,
+                        onRefreshCustom = viewModel::probeCustomSelected,
+                        onRefreshIdle = viewModel::refreshIdleDiagnostics,
+                        onRefreshFuel = viewModel::refreshFuelPage,
+                        onRefreshTrans = viewModel::refreshTransmission,
                     )
 
                     Screen.SETTINGS -> SettingsScreen(
@@ -320,6 +349,7 @@ class MainActivity : ComponentActivity() {
                         onReset = { viewModel.resetPerformance() },
                         onBack = { screen = Screen.SETTINGS },
                         modifier = Modifier.fillMaxSize(),
+                        phase = performance.phase,
                     )
 
                     Screen.DEBUG_LOG -> {

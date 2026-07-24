@@ -68,6 +68,7 @@ data class PerformanceState(
     val current: AccelResult = AccelResult(),
     val best: AccelResult = AccelResult(),
     val currentSpeedKmh: Double? = null,
+    val phase: com.fb2.obd.perf.AccelPhase = com.fb2.obd.perf.AccelPhase.NEED_STOP,
 )
 
 data class TripState(
@@ -155,8 +156,36 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
     private val _maintenance = MutableStateFlow(MaintenanceStore.defaultTemplate())
     val maintenance: StateFlow<List<MaintenanceEntry>> = _maintenance.asStateFlow()
 
+    private val _dashExtraPidIds = MutableStateFlow<List<String>>(emptyList())
+    val dashExtraPidIds: StateFlow<List<String>> = _dashExtraPidIds.asStateFlow()
+
+    private val _dashExtraValues = MutableStateFlow<Map<String, String>>(emptyMap())
+    val dashExtraValues: StateFlow<Map<String, String>> = _dashExtraValues.asStateFlow()
+
     val pidCatalog: List<PidDefinition> =
         StandardPidCatalog.all + HondaPidCatalog.allPids
+
+    fun setDashExtraPid(slot: Int, pid: PidDefinition) {
+        _dashExtraPidIds.update { cur ->
+            val next = cur.toMutableList()
+            while (next.size <= slot) next.add("")
+            next[slot] = pid.id
+            next.filter { it.isNotBlank() }
+        }
+        // One-shot probe so tiles outside the main poll set still show a value.
+        val source = currentSource ?: return
+        viewModelScope.launch {
+            val probed = source.probePids(listOf(pid))
+            val results = LiveSnapshotOverlay.apply(probed, _uiState.value.snapshot)
+            val text = results.firstOrNull()?.let { LiveSnapshotOverlay.formatDisplay(it) } ?: "—"
+            _dashExtraValues.update { it + (pid.id to text) }
+        }
+    }
+
+    fun clearDashExtraPid(pidId: String) {
+        _dashExtraPidIds.update { it.filter { id -> id != pidId } }
+        _dashExtraValues.update { it - pidId }
+    }
 
     private val accelTimer = AccelerationTimer()
     private val tripComputer = TripComputer()
@@ -216,6 +245,7 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
                         current = accelTimer.current,
                         best = accelTimer.best,
                         currentSpeedKmh = snapshot.speedKmh,
+                        phase = accelTimer.phase,
                     )
                 }
                 _health.update {
@@ -284,7 +314,13 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
 
     fun resetPerformance() {
         accelTimer.reset()
-        _performance.update { it.copy(current = accelTimer.current, best = accelTimer.best) }
+        _performance.update {
+            it.copy(
+                current = accelTimer.current,
+                best = accelTimer.best,
+                phase = accelTimer.phase,
+            )
+        }
     }
 
     fun resetTrip() {
