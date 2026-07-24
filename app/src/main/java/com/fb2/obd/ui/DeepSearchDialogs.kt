@@ -2,6 +2,7 @@ package com.fb2.obd.ui
 
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -11,6 +12,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -22,6 +24,20 @@ import com.fb2.obd.ui.theme.GoodGreen
 import com.fb2.obd.ui.theme.TextMuted
 import com.fb2.obd.ui.theme.TextPrimary
 import com.fb2.obd.ui.theme.WarnAmber
+
+@Composable
+private fun DialogScrollBody(content: @Composable () -> Unit) {
+    // Landscape dialogs clip long text; force a bounded, scrollable body.
+    val maxH = (LocalConfiguration.current.screenHeightDp * 0.45f).dp.coerceAtLeast(120.dp)
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(max = maxH)
+            .verticalScroll(rememberScrollState()),
+    ) {
+        content()
+    }
+}
 
 @Composable
 fun DeepSearchDialogs(
@@ -38,7 +54,7 @@ fun DeepSearchDialogs(
                 onDismissRequest = { /* block cancel mid-run — teardown must finish */ },
                 title = { Text("Deep research running…", color = TextPrimary, fontWeight = FontWeight.Bold) },
                 text = {
-                    Column {
+                    DialogScrollBody {
                         Text(
                             text = state.progress.ifBlank { "Searching protocol library (modes, headers, Honda IDs)…" },
                             color = TextMuted,
@@ -64,7 +80,7 @@ fun DeepSearchDialogs(
                     )
                 },
                 text = {
-                    Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                    DialogScrollBody {
                         Text(
                             text = report.targetLabel,
                             color = TextPrimary,
@@ -118,15 +134,15 @@ fun DeepSearchDialogs(
                     Text("Deep research this sensor?", color = TextPrimary, fontWeight = FontWeight.Bold)
                 },
                 text = {
-                    Column {
+                    DialogScrollBody {
                         Text(
-                            text = "\"$label\" is showing n/s. Do you want a deep analysis to try fetching this value?",
+                            text = "\"$label\" is showing n/s. Run a deep analysis to try fetching this value?",
                             color = TextPrimary,
                             fontSize = 14.sp,
                             modifier = Modifier.padding(bottom = 8.dp),
                         )
                         Text(
-                            text = "The app will search its protocol library: force Mode 01, ISO/CAN switches, ECM/TCM headers (ATSH), and alternate Honda Mode 22 IDs — not just one request.",
+                            text = "Searches the protocol library: force Mode 01, ISO/CAN switches, ECM/TCM headers (ATSH), and alternate Honda Mode 22 IDs — not just one request.",
                             color = TextMuted,
                             fontSize = 12.sp,
                             modifier = Modifier.padding(bottom = 8.dp),
@@ -137,7 +153,7 @@ fun DeepSearchDialogs(
                             fontSize = 12.sp,
                         )
                         Text(
-                            text = "Works in Demo simulation too — try Coolant 2, Ambient, or LTFT.",
+                            text = "Scroll for full text. Demo: try Coolant 2, Ambient, or LTFT.",
                             color = Accent,
                             fontSize = 11.sp,
                             modifier = Modifier.padding(top = 8.dp),
