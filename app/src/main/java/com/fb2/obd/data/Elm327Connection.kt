@@ -13,6 +13,9 @@ import java.io.IOException
  * Both the continuous PID polling loop and one-off commands (DTC read/clear,
  * terminal) go through [exec], guarded by a [Mutex] so reads/writes never
  * interleave on the single serial stream. Raw traffic is mirrored to [ObdLogger].
+ *
+ * Timeouts are short on purpose: cheap clones hang often; failing fast lets the
+ * poller skip a PID and keep the rest of the Dash alive.
  */
 class Elm327Connection(
     private val socket: BluetoothSocket,
@@ -32,8 +35,15 @@ class Elm327Connection(
         runCatching { socket.close() }
     }
 
+    fun isConnected(): Boolean = socket.isConnected
+
     private fun sendRaw(command: String, timeoutMs: Long): String {
         logger.logDebug(ObdLogger.Dir.TX, command)
+        // Drain any leftover bytes from a previous hung response so we don't
+        // mis-parse the next PID.
+        while (input.available() > 0) {
+            if (input.read() < 0) break
+        }
         output.write((command + "\r").toByteArray())
         output.flush()
         val sb = StringBuilder()
@@ -41,7 +51,7 @@ class Elm327Connection(
         while (System.currentTimeMillis() < deadline) {
             if (input.available() > 0) {
                 val b = input.read()
-                if (b == -1) break
+                if (b == -1) throw IOException("socket closed during '$command'")
                 val c = b.toChar()
                 if (c == '>') {
                     logger.logDebug(ObdLogger.Dir.RX, sb.toString())
@@ -49,13 +59,21 @@ class Elm327Connection(
                 }
                 sb.append(c)
             } else {
-                Thread.sleep(5L)
+                Thread.sleep(4L)
             }
+        }
+        val partial = sb.toString().trim()
+        if (partial.isNotEmpty()) {
+            logger.logDebug(ObdLogger.Dir.INFO, "timeout '$command' partial=${partial.take(60)}")
+            // Prefer returning a partial frame over killing the whole cycle.
+            return partial
         }
         throw IOException("read timeout for '$command'")
     }
 
     companion object {
-        const val DEFAULT_TIMEOUT_MS = 3000L
+        /** Short enough that one hung PID doesn't freeze the Dash for long. */
+        const val DEFAULT_TIMEOUT_MS = 1200L
+        const val INIT_TIMEOUT_MS = 2500L
     }
 }

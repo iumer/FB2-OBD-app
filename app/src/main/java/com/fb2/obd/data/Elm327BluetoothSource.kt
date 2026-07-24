@@ -85,7 +85,7 @@ class Elm327BluetoothSource(
         val reader = launch(Dispatchers.IO) {
             try {
                 for (cmd in INIT_SEQUENCE) {
-                    conn.exec(cmd)
+                    conn.exec(cmd, Elm327Connection.INIT_TIMEOUT_MS)
                     delay(120L)
                 }
 
@@ -102,29 +102,62 @@ class Elm327BluetoothSource(
 
                 var snapshot = VehicleSnapshot.EMPTY.copy(unsupportedPids = unsupported)
                 var deadCycles = 0
+                val failStreak = mutableMapOf<ObdPid, Int>()
+                var cycles = 0
                 while (isActive) {
+                    cycles++
                     var responded = 0
+                    var timedOut = 0
                     for (pid in activePids) {
+                        // Skip PIDs that keep timing out (common on cheap clones / unsupported).
+                        val streak = failStreak[pid] ?: 0
+                        if (streak >= 3 && cycles % 20 != 0) {
+                            continue
+                        }
                         val value = try {
                             val raw = conn.exec(pid.request)
                             responded++
+                            failStreak[pid] = 0
                             ObdResponseParser.parse(pid, raw)
                         } catch (io: IOException) {
-                            logger.logDebug(ObdLogger.Dir.INFO, "skip ${pid.request}: ${io.message}")
+                            timedOut++
+                            failStreak[pid] = streak + 1
+                            logger.logDebug(
+                                ObdLogger.Dir.INFO,
+                                "skip ${pid.request}: ${io.message} (fail#${failStreak[pid]})",
+                            )
                             null
                         }
+                        // null keeps the previous sample for this PID — Dash stays sticky.
                         snapshot = snapshot.merge(pid, value)
+                    }
+                    // Occasional keep-alive so sleepy clones don't drop RFCOMM.
+                    if (cycles % 30 == 0) {
+                        runCatching { conn.exec("01 0C", Elm327Connection.DEFAULT_TIMEOUT_MS) }
                     }
                     if (responded == 0) {
                         deadCycles++
-                        if (deadCycles >= 2) throw IOException("No response from adapter")
+                        logger.logDebug(
+                            ObdLogger.Dir.INFO,
+                            "dead cycle $deadCycles (timeouts=$timedOut/${activePids.size})",
+                        )
+                        // Allow more transient dead cycles — idle + clone Bluetooth is flaky.
+                        if (deadCycles >= 5) {
+                            throw IOException("No response from adapter after $deadCycles dead cycles")
+                        }
                     } else {
                         deadCycles = 0
                     }
                     snapshot = snapshot.withGear(hasEcuGear)
-                    trySend(snapshot)
+                    // Don't push a totally blank frame after reconnect — keeps UI from wiping.
+                    val hasAny = snapshot.rpm != null || snapshot.coolantC != null ||
+                        snapshot.batteryVolts != null || snapshot.mafGps != null
+                    if (hasAny || deadCycles == 0) {
+                        trySend(snapshot)
+                    }
                 }
             } catch (e: Exception) {
+                logger.logDebug(ObdLogger.Dir.INFO, "ELM poll stopped: ${e.message}")
                 close(e)
             }
         }
@@ -136,11 +169,18 @@ class Elm327BluetoothSource(
         }
     }
         .retryWhen { cause, attempt ->
-            if (cause is IOException && attempt < MAX_RECONNECTS) {
-                logger.logDebug(ObdLogger.Dir.INFO, "reconnect attempt ${attempt + 1}")
-                delay(1500L)
+            // Keep trying forever while the user stays on a live ELM source —
+            // walking away at idle must not permanently kill the session.
+            if (cause is IOException) {
+                val backoff = (1_000L * (attempt + 1).coerceAtMost(8)).coerceAtMost(10_000L)
+                logger.logDebug(
+                    ObdLogger.Dir.INFO,
+                    "reconnect attempt ${attempt + 1} in ${backoff}ms (${cause.message})",
+                )
+                delay(backoff)
                 true
             } else {
+                logger.logDebug(ObdLogger.Dir.INFO, "reconnect aborted: ${cause.message}")
                 false
             }
         }
@@ -347,7 +387,6 @@ class Elm327BluetoothSource(
 
     companion object {
         val SPP_UUID: UUID = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB")
-        private const val MAX_RECONNECTS = 3L
         private val INIT_SEQUENCE = listOf("ATZ", "ATE0", "ATL0", "ATS0", "ATSP0")
     }
 }
