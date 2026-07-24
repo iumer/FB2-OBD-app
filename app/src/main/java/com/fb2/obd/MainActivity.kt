@@ -251,6 +251,7 @@ class MainActivity : ComponentActivity() {
                         trip = trip,
                         performance = performance,
                         health = health,
+                        dtcCount = state.dtcCount,
                         gForceAx = ax,
                         gForceAy = ay,
                         gForceAz = az,

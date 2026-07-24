@@ -113,6 +113,7 @@ fun DashboardScreen(
     trip: TripState = TripState(),
     performance: PerformanceState = PerformanceState(),
     health: HealthScore? = null,
+    dtcCount: Int? = null,
     gForceAx: Float = 0f,
     gForceAy: Float = 0f,
     gForceAz: Float = 9.81f,
@@ -199,6 +200,8 @@ fun DashboardScreen(
                         deepFoundValues = deepFoundValues,
                         catalog = catalog,
                         thresholds = healthThresholds,
+                        dtcCount = dtcCount,
+                        healthScore = health,
                         onEmptySlotClick = { pickerSlot = it },
                         onDeepSearch = onDeepSearch,
                         onEditThresholds = { editMetric = it },
@@ -213,6 +216,7 @@ fun DashboardScreen(
                         deepFoundValues = deepFoundValues,
                         onDeepSearch = onDeepSearch,
                         thresholds = healthThresholds,
+                        snapshot = s,
                         onEditThresholds = { editMetric = it },
                     )
                     2 -> DenseSensorGridPage(
@@ -227,6 +231,7 @@ fun DashboardScreen(
                         deepFoundValues = deepFoundValues,
                         onDeepSearch = onDeepSearch,
                         thresholds = healthThresholds,
+                        snapshot = s,
                         onEditThresholds = { editMetric = it },
                     )
                     3 -> DenseSensorGridPage(
@@ -237,6 +242,7 @@ fun DashboardScreen(
                         deepFoundValues = deepFoundValues,
                         onDeepSearch = onDeepSearch,
                         thresholds = healthThresholds,
+                        snapshot = s,
                         onEditThresholds = { editMetric = it },
                     )
                     4 -> TripScreen(
@@ -258,6 +264,7 @@ fun DashboardScreen(
                         deepFoundValues = deepFoundValues,
                         onDeepSearch = onDeepSearch,
                         thresholds = healthThresholds,
+                        snapshot = s,
                         onEditThresholds = { editMetric = it },
                     )
                     6 -> PerformanceScreen(
@@ -484,12 +491,15 @@ private fun MetricsPage(
     deepFoundValues: Map<String, String>,
     catalog: List<PidDefinition>,
     thresholds: HealthThresholds,
+    dtcCount: Int?,
+    healthScore: HealthScore?,
     onEmptySlotClick: (Int) -> Unit,
     onDeepSearch: (label: String, pidId: String?) -> Unit,
     onEditThresholds: (EditableMetric) -> Unit,
 ) {
     val engineRunning = (snapshot.rpm ?: 0.0) > 0.0
     val t = thresholds
+    val vehiclePct = healthScore?.vehiclePct
     val baseTiles = listOf(
         TileData(
             "Coolant 1", snapshot.coolantC.fmt(), "\u00B0C",
@@ -529,15 +539,38 @@ private fun MetricsPage(
         ),
         TileData(
             "MAF", snapshot.mafGps.fmt(1), "g/s",
-            HealthEvaluator.maf(snapshot.mafGps, snapshot.rpm, snapshot.speedKmh, t), ObdPid.MAF,
+            HealthEvaluator.maf(snapshot.mafGps, snapshot.rpm, snapshot.speedKmh, snapshot.throttlePct, t),
+            ObdPid.MAF,
         ),
         TileData(
             "MAP", snapshot.mapKpa.fmt(), "kPa",
-            HealthEvaluator.map(snapshot.mapKpa, snapshot.throttlePct, t), ObdPid.INTAKE_MAP,
+            HealthEvaluator.map(snapshot.mapKpa, snapshot.throttlePct, snapshot.rpm, snapshot.speedKmh, t),
+            ObdPid.INTAKE_MAP,
         ),
         TileData(
             "Timing", snapshot.timingAdvance.fmt(), "\u00B0",
             HealthEvaluator.timing(snapshot.timingAdvance, t), ObdPid.TIMING_ADVANCE,
+        ),
+        TileData(
+            "Fuel loop",
+            snapshot.fuelSystemStatus?.take(12) ?: "--",
+            "",
+            HealthEvaluator.fuelSystem(snapshot.fuelSystemStatus, snapshot.coolantC),
+            ObdPid.FUEL_SYSTEM_STATUS,
+        ),
+        TileData(
+            "DTCs",
+            dtcCount?.toString() ?: "--",
+            "",
+            HealthEvaluator.dtcCount(dtcCount),
+            null,
+        ),
+        TileData(
+            "Health",
+            vehiclePct?.toString() ?: "--",
+            if (vehiclePct != null) "%" else "",
+            HealthEvaluator.vehicleHealth(vehiclePct),
+            null,
         ),
     )
 
@@ -627,6 +660,7 @@ private fun DenseSensorGridPage(
     deepFoundValues: Map<String, String> = emptyMap(),
     onDeepSearch: (label: String, pidId: String?) -> Unit = { _, _ -> },
     thresholds: HealthThresholds = HealthThresholds.DEFAULT,
+    snapshot: VehicleSnapshot = VehicleSnapshot.EMPTY,
     onEditThresholds: (EditableMetric) -> Unit = {},
 ) {
     Column(modifier = Modifier.fillMaxSize()) {
@@ -699,61 +733,69 @@ private fun DenseSensorGridPage(
                 val transStatus = if (unsupported) {
                     null
                 } else {
-                    HealthEvaluator.forTransmissionLabel(label, effective, thresholds)
-                        ?: EditableMetric.fromTileLabel(label)?.let { metric ->
-                            // Custom / Idle / Fuel pages: colour by known metric if label matches.
-                            when (metric) {
-                                EditableMetric.COOLANT -> HealthEvaluator.coolant(
-                                    effective.substringBefore(" ").toDoubleOrNull(),
-                                    thresholds,
-                                )
-                                EditableMetric.BATTERY -> HealthEvaluator.battery(
-                                    effective.substringBefore(" ").toDoubleOrNull(),
-                                    true,
-                                    thresholds,
-                                )
-                                EditableMetric.FUEL_TRIM -> HealthEvaluator.fuelTrim(
-                                    effective.substringBefore(" ").toDoubleOrNull(),
-                                    thresholds,
-                                )
-                                EditableMetric.ENGINE_LOAD -> HealthEvaluator.engineLoad(
-                                    effective.substringBefore(" ").toDoubleOrNull(),
-                                    thresholds,
-                                )
-                                EditableMetric.INTAKE -> HealthEvaluator.intakeAir(
-                                    effective.substringBefore(" ").toDoubleOrNull(),
-                                    thresholds,
-                                )
-                                EditableMetric.MAF -> HealthEvaluator.maf(
-                                    effective.substringBefore(" ").toDoubleOrNull(),
-                                    null,
-                                    null,
-                                    thresholds,
-                                )
-                                EditableMetric.MAP -> HealthEvaluator.map(
-                                    effective.substringBefore(" ").toDoubleOrNull(),
-                                    null,
-                                    thresholds,
-                                )
-                                EditableMetric.TIMING -> HealthEvaluator.timing(
-                                    effective.substringBefore(" ").toDoubleOrNull(),
-                                    thresholds,
-                                )
-                                EditableMetric.RPM -> HealthEvaluator.rpm(
-                                    effective.substringBefore(" ").toDoubleOrNull(),
-                                    thresholds,
-                                )
-                                EditableMetric.ATF -> HealthEvaluator.atfTemp(
-                                    effective.substringBefore(" ").toDoubleOrNull(),
-                                    thresholds,
-                                )
-                                EditableMetric.TC_SLIP -> HealthEvaluator.tcSlip(
-                                    effective.substringBefore(" ").toDoubleOrNull(),
-                                    thresholds,
-                                )
-                                else -> null
+                    val fuelLoopLabel = label.contains("fuel system", true) ||
+                        label.contains("fuel loop", true)
+                    when {
+                        fuelLoopLabel -> HealthEvaluator.fuelSystem(effective, snapshot.coolantC)
+                        else -> HealthEvaluator.forTransmissionLabel(label, effective, thresholds)
+                            ?: EditableMetric.fromTileLabel(label)?.let { metric ->
+                                // Custom / Idle / Fuel pages: colour by known metric if label matches.
+                                when (metric) {
+                                    EditableMetric.COOLANT -> HealthEvaluator.coolant(
+                                        effective.substringBefore(" ").toDoubleOrNull(),
+                                        thresholds,
+                                    )
+                                    EditableMetric.BATTERY -> HealthEvaluator.battery(
+                                        effective.substringBefore(" ").toDoubleOrNull(),
+                                        true,
+                                        thresholds,
+                                    )
+                                    EditableMetric.FUEL_TRIM -> HealthEvaluator.fuelTrim(
+                                        effective.substringBefore(" ").toDoubleOrNull(),
+                                        thresholds,
+                                    )
+                                    EditableMetric.ENGINE_LOAD -> HealthEvaluator.engineLoad(
+                                        effective.substringBefore(" ").toDoubleOrNull(),
+                                        thresholds,
+                                    )
+                                    EditableMetric.INTAKE -> HealthEvaluator.intakeAir(
+                                        effective.substringBefore(" ").toDoubleOrNull(),
+                                        thresholds,
+                                    )
+                                    EditableMetric.MAF -> HealthEvaluator.maf(
+                                        effective.substringBefore(" ").toDoubleOrNull(),
+                                        snapshot.rpm,
+                                        snapshot.speedKmh,
+                                        snapshot.throttlePct,
+                                        thresholds,
+                                    )
+                                    EditableMetric.MAP -> HealthEvaluator.map(
+                                        effective.substringBefore(" ").toDoubleOrNull(),
+                                        snapshot.throttlePct,
+                                        snapshot.rpm,
+                                        snapshot.speedKmh,
+                                        thresholds,
+                                    )
+                                    EditableMetric.TIMING -> HealthEvaluator.timing(
+                                        effective.substringBefore(" ").toDoubleOrNull(),
+                                        thresholds,
+                                    )
+                                    EditableMetric.RPM -> HealthEvaluator.rpm(
+                                        effective.substringBefore(" ").toDoubleOrNull(),
+                                        thresholds,
+                                    )
+                                    EditableMetric.ATF -> HealthEvaluator.atfTemp(
+                                        effective.substringBefore(" ").toDoubleOrNull(),
+                                        thresholds,
+                                    )
+                                    EditableMetric.TC_SLIP -> HealthEvaluator.tcSlip(
+                                        effective.substringBefore(" ").toDoubleOrNull(),
+                                        thresholds,
+                                    )
+                                    else -> null
+                                }
                             }
-                        }
+                    }
                 }
                 DenseTile(
                     label = label,

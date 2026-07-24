@@ -48,7 +48,16 @@ data class HealthScore(
     val transmissionNotes: List<String> = emptyList(),
     val engineDataOk: Boolean = false,
     val transmissionDataOk: Boolean = false,
-)
+) {
+    /** Combined vehicle health for the main Dash tile. */
+    val vehiclePct: Int?
+        get() = when {
+            engineDataOk && transmissionDataOk && enginePct != null && transmissionPct != null ->
+                (enginePct + transmissionPct) / 2
+            engineDataOk -> enginePct
+            else -> null
+        }
+}
 
 /** Full-system / Honda menu scan row. */
 data class ModuleScanResult(

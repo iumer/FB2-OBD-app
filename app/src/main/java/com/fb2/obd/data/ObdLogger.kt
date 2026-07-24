@@ -8,6 +8,7 @@ import java.util.Locale
 /**
  * In-memory logging for diagnostics:
  * - debug log (raw ELM TX/RX/INFO),
+ * - event log (important state transitions — always on),
  * - dashboard snapshot time series,
  * - per-tab key/value samples (Custom / Idle / Fuel / Trip / Trans / Perf / …),
  * - page probe results.
@@ -19,6 +20,7 @@ object ObdLogger {
     enum class Dir { TX, RX, INFO }
 
     data class DebugLine(val timestampMs: Long, val dir: Dir, val text: String)
+    data class EventRow(val timestampMs: Long, val category: String, val message: String)
     data class ValueRow(val timestampMs: Long, val snapshot: VehicleSnapshot)
     data class TabValueRow(
         val timestampMs: Long,
@@ -38,11 +40,13 @@ object ObdLogger {
     )
 
     private const val MAX_DEBUG = 8000
+    private const val MAX_EVENTS = 4000
     private const val MAX_VALUES = 8000
     private const val MAX_TAB = 24_000
     private const val MAX_PROBES = 12_000
 
     private val debug = ArrayDeque<DebugLine>()
+    private val events = ArrayDeque<EventRow>()
     private val values = ArrayDeque<ValueRow>()
     private val tabValues = ArrayDeque<TabValueRow>()
     private val probes = ArrayDeque<ProbeRow>()
@@ -62,6 +66,22 @@ object ObdLogger {
         if (clean.isEmpty() && dir != Dir.INFO) return
         synchronized(lock) {
             debug.addLast(DebugLine(nowMs, dir, clean))
+            while (debug.size > MAX_DEBUG) debug.removeFirst()
+        }
+    }
+
+    /**
+     * Important diagnostic event (zone change, gear, ELM connect, DTC, …).
+     * Always recorded — not gated on [valueLoggingEnabled].
+     */
+    fun logEvent(category: String, message: String, nowMs: Long = System.currentTimeMillis()) {
+        val cat = category.trim().ifBlank { "EVENT" }
+        val msg = message.replace("\r", " ").replace("\n", " ").trim()
+        if (msg.isEmpty()) return
+        synchronized(lock) {
+            events.addLast(EventRow(nowMs, cat, msg))
+            while (events.size > MAX_EVENTS) events.removeFirst()
+            debug.addLast(DebugLine(nowMs, Dir.INFO, "EVENT [$cat] $msg"))
             while (debug.size > MAX_DEBUG) debug.removeFirst()
         }
     }
@@ -141,6 +161,8 @@ object ObdLogger {
 
     fun debugLines(): List<DebugLine> = synchronized(lock) { debug.toList() }
 
+    fun eventRows(): List<EventRow> = synchronized(lock) { events.toList() }
+
     fun valueRows(): List<ValueRow> = synchronized(lock) { values.toList() }
 
     fun tabValueRows(): List<TabValueRow> = synchronized(lock) { tabValues.toList() }
@@ -149,10 +171,13 @@ object ObdLogger {
 
     fun clearDebug() = synchronized(lock) { debug.clear() }
 
+    fun clearEvents() = synchronized(lock) { events.clear() }
+
     fun clearValues() = synchronized(lock) {
         values.clear()
         tabValues.clear()
         probes.clear()
+        events.clear()
     }
 
     fun debugText(): String = synchronized(lock) {
@@ -165,16 +190,22 @@ object ObdLogger {
      */
     fun valuesCsv(): String = synchronized(lock) {
         val header = "time_ms,rpm,speed_kmh,coolant1_c,coolant2_c,intake_c,ambient_c," +
-            "load_pct,throttle_pct,timing,maf_gps,map_kpa,stft_pct,ltft_pct,ecu_v,gear"
+            "load_pct,throttle_pct,timing,maf_gps,map_kpa,stft_pct,ltft_pct,ecu_v,gear,fuel_loop"
         val rows = values.joinToString("\n") { row ->
             val s = row.snapshot
             listOf(
                 row.timestampMs, s.rpm, s.speedKmh, s.coolantC, s.coolant2C, s.intakeC,
                 s.ambientC, s.engineLoadPct, s.throttlePct, s.timingAdvance, s.mafGps,
-                s.mapKpa, s.stftPct, s.ltftPct, s.batteryVolts, s.gear,
+                s.mapKpa, s.stftPct, s.ltftPct, s.batteryVolts, s.gear, s.fuelSystemStatus,
             ).joinToString(",") { it?.toString() ?: "" }
         }
         val snapCsv = if (rows.isEmpty()) header else "$header\n$rows"
+
+        val eventHeader = "time_ms,category,message"
+        val eventBody = events.joinToString("\n") { e ->
+            listOf(e.timestampMs, csvEscape(e.category), csvEscape(e.message)).joinToString(",")
+        }
+        val eventCsv = if (eventBody.isEmpty()) eventHeader else "$eventHeader\n$eventBody"
 
         val tabHeader = "time_ms,tab,key,value"
         val tabBody = tabValues.joinToString("\n") { t ->
@@ -213,7 +244,10 @@ object ObdLogger {
 
         buildString {
             appendLine("# fb2_session_log")
-            appendLine("# sections: dashboard_snapshots | tab_values | page_probes | debug_log")
+            appendLine("# sections: events | dashboard_snapshots | tab_values | page_probes | debug_log")
+            appendLine()
+            appendLine("# events")
+            appendLine(eventCsv)
             appendLine()
             appendLine("# dashboard_snapshots")
             appendLine(snapCsv)

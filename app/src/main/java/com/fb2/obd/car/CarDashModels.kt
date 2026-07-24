@@ -64,6 +64,8 @@ object CarDashBuilder {
         sourceName: String,
         logging: Boolean,
         showEstimatedGear: Boolean,
+        dtcCount: Int? = null,
+        healthScore: com.fb2.obd.obd.HealthScore? = null,
     ): CarDashState {
         val gearSource = if (!showEstimatedGear && snapshot.gearSource == GearSource.ESTIMATED) {
             GearSource.NONE
@@ -79,6 +81,7 @@ object CarDashBuilder {
 
         val engineRunning = (snapshot.rpm ?: 0.0) > 0.0
         val t = thresholds
+        val vehiclePct = healthScore?.vehiclePct
         val base = listOf(
             Triple("Coolant 1", snapshot.coolantC.fmt(), "\u00B0C") to
                 HealthEvaluator.coolant(snapshot.coolantC, t),
@@ -99,11 +102,21 @@ object CarDashBuilder {
             Triple("LTFT", snapshot.ltftPct.fmt(1), "%") to
                 HealthEvaluator.fuelTrim(snapshot.ltftPct, t),
             Triple("MAF", snapshot.mafGps.fmt(1), "g/s") to
-                HealthEvaluator.maf(snapshot.mafGps, snapshot.rpm, snapshot.speedKmh, t),
+                HealthEvaluator.maf(
+                    snapshot.mafGps, snapshot.rpm, snapshot.speedKmh, snapshot.throttlePct, t,
+                ),
             Triple("MAP", snapshot.mapKpa.fmt(), "kPa") to
-                HealthEvaluator.map(snapshot.mapKpa, snapshot.throttlePct, t),
+                HealthEvaluator.map(
+                    snapshot.mapKpa, snapshot.throttlePct, snapshot.rpm, snapshot.speedKmh, t,
+                ),
             Triple("Timing", snapshot.timingAdvance.fmt(), "\u00B0") to
                 HealthEvaluator.timing(snapshot.timingAdvance, t),
+            Triple("Fuel loop", snapshot.fuelSystemStatus?.take(12) ?: "--", "") to
+                HealthEvaluator.fuelSystem(snapshot.fuelSystemStatus, snapshot.coolantC),
+            Triple("DTCs", dtcCount?.toString() ?: "--", "") to
+                HealthEvaluator.dtcCount(dtcCount),
+            Triple("Health", vehiclePct?.toString() ?: "--", if (vehiclePct != null) "%" else "") to
+                HealthEvaluator.vehicleHealth(vehiclePct),
         ).mapIndexed { idx, (triple, status) ->
             val pid = when (idx) {
                 0 -> ObdPid.COOLANT_TEMP
@@ -117,9 +130,11 @@ object CarDashBuilder {
                 8 -> ObdPid.LTFT_B1
                 9 -> ObdPid.MAF
                 10 -> ObdPid.INTAKE_MAP
-                else -> ObdPid.TIMING_ADVANCE
+                11 -> ObdPid.TIMING_ADVANCE
+                12 -> ObdPid.FUEL_SYSTEM_STATUS
+                else -> null
             }
-            val unsupported = pid.number in snapshot.unsupportedPids
+            val unsupported = pid != null && pid.number in snapshot.unsupportedPids
             val recovered = deepFoundValues[triple.first]
             val showNs = unsupported && recovered == null
             val value = when {

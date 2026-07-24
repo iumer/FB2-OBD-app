@@ -19,12 +19,15 @@ class HealthThresholdStore(private val file: File) {
                 coolantGoodMax = d("coolantGoodMax", d.coolantGoodMax),
                 coolantWarnMax = d("coolantWarnMax", d.coolantWarnMax),
                 coolantElevatedMax = d("coolantElevatedMax", d.coolantElevatedMax),
+                coolantVoiceAbove = d("coolantVoiceAbove", d.coolantVoiceAbove),
                 battRunGoodMin = d("battRunGoodMin", d.battRunGoodMin),
                 battRunGoodMax = d("battRunGoodMax", d.battRunGoodMax),
                 battRunWarnMin = d("battRunWarnMin", d.battRunWarnMin),
+                battRunElevatedMin = d("battRunElevatedMin", d.battRunElevatedMin),
                 battRunCriticalAbove = d("battRunCriticalAbove", d.battRunCriticalAbove),
                 battRestGoodAbove = d("battRestGoodAbove", d.battRestGoodAbove),
                 battRestWarnAbove = d("battRestWarnAbove", d.battRestWarnAbove),
+                battRestElevatedAbove = d("battRestElevatedAbove", d.battRestElevatedAbove),
                 trimGoodMax = d("trimGoodMax", d.trimGoodMax),
                 trimWarnMax = d("trimWarnMax", d.trimWarnMax),
                 trimElevatedMax = d("trimElevatedMax", d.trimElevatedMax),
@@ -38,6 +41,15 @@ class HealthThresholdStore(private val file: File) {
                 mafIdleGoodMin = d("mafIdleGoodMin", d.mafIdleGoodMin),
                 mafIdleGoodMax = d("mafIdleGoodMax", d.mafIdleGoodMax),
                 mafIdleWarnMin = d("mafIdleWarnMin", d.mafIdleWarnMin),
+                mafCruiseGoodMin = d("mafCruiseGoodMin", d.mafCruiseGoodMin),
+                mafCruiseGoodMax = d("mafCruiseGoodMax", d.mafCruiseGoodMax),
+                mafHeavyGoodMin = d("mafHeavyGoodMin", d.mafHeavyGoodMin),
+                mafHeavyGoodMax = d("mafHeavyGoodMax", d.mafHeavyGoodMax),
+                mapIdleGoodMin = d("mapIdleGoodMin", d.mapIdleGoodMin),
+                mapIdleGoodMax = d("mapIdleGoodMax", d.mapIdleGoodMax),
+                mapCruiseGoodMin = d("mapCruiseGoodMin", d.mapCruiseGoodMin),
+                mapCruiseGoodMax = d("mapCruiseGoodMax", d.mapCruiseGoodMax),
+                mapWotGoodMin = d("mapWotGoodMin", d.mapWotGoodMin),
                 mapGoodMax = d("mapGoodMax", d.mapGoodMax),
                 mapWarnMax = d("mapWarnMax", d.mapWarnMax),
                 mapWotThrottleMin = d("mapWotThrottleMin", d.mapWotThrottleMin),
@@ -63,12 +75,15 @@ class HealthThresholdStore(private val file: File) {
             put("coolantGoodMax", t.coolantGoodMax)
             put("coolantWarnMax", t.coolantWarnMax)
             put("coolantElevatedMax", t.coolantElevatedMax)
+            put("coolantVoiceAbove", t.coolantVoiceAbove)
             put("battRunGoodMin", t.battRunGoodMin)
             put("battRunGoodMax", t.battRunGoodMax)
             put("battRunWarnMin", t.battRunWarnMin)
+            put("battRunElevatedMin", t.battRunElevatedMin)
             put("battRunCriticalAbove", t.battRunCriticalAbove)
             put("battRestGoodAbove", t.battRestGoodAbove)
             put("battRestWarnAbove", t.battRestWarnAbove)
+            put("battRestElevatedAbove", t.battRestElevatedAbove)
             put("trimGoodMax", t.trimGoodMax)
             put("trimWarnMax", t.trimWarnMax)
             put("trimElevatedMax", t.trimElevatedMax)
@@ -82,6 +97,15 @@ class HealthThresholdStore(private val file: File) {
             put("mafIdleGoodMin", t.mafIdleGoodMin)
             put("mafIdleGoodMax", t.mafIdleGoodMax)
             put("mafIdleWarnMin", t.mafIdleWarnMin)
+            put("mafCruiseGoodMin", t.mafCruiseGoodMin)
+            put("mafCruiseGoodMax", t.mafCruiseGoodMax)
+            put("mafHeavyGoodMin", t.mafHeavyGoodMin)
+            put("mafHeavyGoodMax", t.mafHeavyGoodMax)
+            put("mapIdleGoodMin", t.mapIdleGoodMin)
+            put("mapIdleGoodMax", t.mapIdleGoodMax)
+            put("mapCruiseGoodMin", t.mapCruiseGoodMin)
+            put("mapCruiseGoodMax", t.mapCruiseGoodMax)
+            put("mapWotGoodMin", t.mapWotGoodMin)
             put("mapGoodMax", t.mapGoodMax)
             put("mapWarnMax", t.mapWarnMax)
             put("mapWotThrottleMin", t.mapWotThrottleMin)

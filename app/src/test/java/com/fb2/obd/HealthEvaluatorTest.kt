@@ -11,12 +11,12 @@ class HealthEvaluatorTest {
     @Test
     fun coolant_fb2Bands() {
         assertEquals(Health.COLD, HealthEvaluator.coolant(55.0).health)
-        assertEquals(Health.GOOD, HealthEvaluator.coolant(92.0).health)
-        assertEquals("NORMAL", HealthEvaluator.coolant(92.0).label)
-        assertEquals(Health.WARN, HealthEvaluator.coolant(100.0).health)
-        assertEquals(Health.ELEVATED, HealthEvaluator.coolant(106.0).health)
-        assertEquals(Health.CRITICAL, HealthEvaluator.coolant(112.0).health)
-        assertEquals("OVERHEAT", HealthEvaluator.coolant(112.0).label)
+        assertEquals(Health.GOOD, HealthEvaluator.coolant(85.0).health)
+        assertEquals("NORMAL", HealthEvaluator.coolant(85.0).label)
+        assertEquals(Health.WARN, HealthEvaluator.coolant(95.0).health)
+        assertEquals(Health.ELEVATED, HealthEvaluator.coolant(100.0).health)
+        assertEquals(Health.CRITICAL, HealthEvaluator.coolant(105.0).health)
+        assertEquals("OVERHEAT", HealthEvaluator.coolant(105.0).label)
         assertEquals(Health.UNKNOWN, HealthEvaluator.coolant(null).health)
     }
 
@@ -25,7 +25,8 @@ class HealthEvaluatorTest {
         assertEquals(Health.GOOD, HealthEvaluator.battery(14.2, true).health)
         assertEquals("CHARGING OK", HealthEvaluator.battery(14.2, true).label)
         assertEquals(Health.WARN, HealthEvaluator.battery(13.4, true).health)
-        assertEquals(Health.CRITICAL, HealthEvaluator.battery(12.8, true).health)
+        assertEquals(Health.ELEVATED, HealthEvaluator.battery(13.0, true).health)
+        assertEquals(Health.CRITICAL, HealthEvaluator.battery(12.5, true).health)
         assertEquals(Health.CRITICAL, HealthEvaluator.battery(15.5, true).health)
     }
 
@@ -33,7 +34,8 @@ class HealthEvaluatorTest {
     fun battery_engineOff() {
         assertEquals(Health.GOOD, HealthEvaluator.battery(12.7, false).health)
         assertEquals(Health.WARN, HealthEvaluator.battery(12.4, false).health)
-        assertEquals(Health.CRITICAL, HealthEvaluator.battery(12.0, false).health)
+        assertEquals(Health.ELEVATED, HealthEvaluator.battery(12.1, false).health)
+        assertEquals(Health.CRITICAL, HealthEvaluator.battery(11.8, false).health)
     }
 
     @Test
@@ -46,17 +48,21 @@ class HealthEvaluatorTest {
     }
 
     @Test
-    fun load_intake_map_timing() {
+    fun load_displayOnly_intake_map_timing() {
+        // Load / throttle: display only — always green when present
         assertEquals(Health.GOOD, HealthEvaluator.engineLoad(40.0).health)
-        assertEquals(Health.WARN, HealthEvaluator.engineLoad(70.0).health)
-        assertEquals(Health.CRITICAL, HealthEvaluator.engineLoad(90.0).health)
+        assertEquals(Health.GOOD, HealthEvaluator.engineLoad(90.0).health)
+        assertEquals(Health.GOOD, HealthEvaluator.throttle(80.0).health)
         assertEquals(Health.GOOD, HealthEvaluator.intakeAir(32.0).health)
+        assertEquals(Health.COLD, HealthEvaluator.intakeAir(10.0).health)
         assertEquals(Health.CRITICAL, HealthEvaluator.intakeAir(65.0).health)
-        assertEquals(Health.GOOD, HealthEvaluator.map(35.0, 18.0).health)
-        assertEquals(Health.GOOD, HealthEvaluator.map(98.0, 95.0).health) // WOT OK
-        assertEquals(Health.WARN, HealthEvaluator.map(98.0, 20.0).health)
-        assertEquals(Health.CRITICAL, HealthEvaluator.timing(-2.0).health)
+        assertEquals(Health.GOOD, HealthEvaluator.map(35.0, 18.0, 700.0, 0.0).health) // idle
+        assertEquals(Health.GOOD, HealthEvaluator.map(98.0, 95.0, 3000.0, 80.0).health) // WOT OK
+        assertEquals(Health.WARN, HealthEvaluator.map(98.0, 20.0, 2500.0, 60.0).health)
+        assertEquals(Health.WARN, HealthEvaluator.timing(-2.0).health) // 0 to -5 yellow
+        assertEquals(Health.CRITICAL, HealthEvaluator.timing(-6.0).health)
         assertEquals(Health.GOOD, HealthEvaluator.timing(15.0).health)
+        assertEquals(Health.WARN, HealthEvaluator.timing(0.0).health)
     }
 
     @Test
@@ -64,6 +70,16 @@ class HealthEvaluatorTest {
         assertEquals(Health.GOOD, HealthEvaluator.maf(8.0, 700.0, 0.0).health)
         assertEquals(Health.WARN, HealthEvaluator.maf(4.5, 700.0, 0.0).health)
         assertEquals(Health.CRITICAL, HealthEvaluator.maf(3.0, 700.0, 0.0).health)
+        assertEquals(Health.GOOD, HealthEvaluator.maf(22.0, 2200.0, 70.0, 20.0).health) // cruise
+    }
+
+    @Test
+    fun fuelSystem_and_dtc() {
+        assertEquals(Health.GOOD, HealthEvaluator.fuelSystem("CLOSED LOOP", 90.0).health)
+        assertEquals(Health.WARN, HealthEvaluator.fuelSystem("OPEN LOOP", 90.0).health)
+        assertEquals(Health.COLD, HealthEvaluator.fuelSystem("OPEN LOOP", 40.0).health)
+        assertEquals(Health.GOOD, HealthEvaluator.dtcCount(0).health)
+        assertEquals(Health.CRITICAL, HealthEvaluator.dtcCount(2).health)
     }
 
     @Test

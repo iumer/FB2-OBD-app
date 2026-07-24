@@ -56,6 +56,10 @@ enum class ObdPid(
     LTFT_B1("0107", "LTFT", "%", 1, { d ->
         if (d.isNotEmpty()) (d[0] - 128) * 100.0 / 128.0 else null
     }),
+    /** Raw bank-1 status byte; use [FuelSystemDecoder] for Open/Closed Loop text. */
+    FUEL_SYSTEM_STATUS("0103", "Fuel loop", "", 2, { d ->
+        if (d.isNotEmpty()) d[0].toDouble() else null
+    }),
     CONTROL_MODULE_VOLTAGE("0142", "ECU V", "V", 2, { d ->
         if (d.size >= 2) ((d[0] * 256) + d[1]) / 1000.0 else null
     }),

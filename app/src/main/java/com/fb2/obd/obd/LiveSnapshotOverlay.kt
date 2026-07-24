@@ -9,6 +9,16 @@ object LiveSnapshotOverlay {
     fun apply(results: List<PidProbeResult>, snapshot: VehicleSnapshot): List<PidProbeResult> {
         return results.map { r ->
             if (r.supported && r.sample != null) return@map r
+            if (r.pid.request.equals("0103", true) && !snapshot.fuelSystemStatus.isNullOrBlank()) {
+                val status = snapshot.fuelSystemStatus
+                // Encode CLOSED as 2.0 so formatDisplay can rebuild the label.
+                val raw = when {
+                    status.contains("CLOSED", true) -> 2.0
+                    status.contains("OPEN", true) -> 1.0
+                    else -> null
+                }
+                return@map PidProbeResult(r.pid, supported = true, sample = raw, raw = r.raw ?: "from-live-dashboard")
+            }
             val live = liveValue(r.pid, snapshot) ?: return@map r
             PidProbeResult(r.pid, supported = true, sample = live, raw = r.raw ?: "from-live-dashboard")
         }
@@ -17,6 +27,11 @@ object LiveSnapshotOverlay {
     fun liveSample(pid: PidDefinition, snapshot: VehicleSnapshot): Double? = liveValue(pid, snapshot)
 
     fun formatLiveOrNs(pid: PidDefinition, snapshot: VehicleSnapshot, fallback: String? = null): String {
+        if (pid.request.equals("0103", true)) {
+            snapshot.fuelSystemStatus?.let { return it }
+            fallback?.let { return it }
+            return "—"
+        }
         val v = liveValue(pid, snapshot)
         if (v != null) return "%.2f %s".format(v, pid.unit).trim()
         if (fallback != null) return fallback
@@ -44,6 +59,7 @@ object LiveSnapshotOverlay {
             "0106" -> s.stftPct
             "0107" -> s.ltftPct
             "0142" -> s.batteryVolts
+            "0103" -> null // text-only via fuelSystemStatus
             else -> when {
                 pid.label.equals("RPM", true) -> s.rpm
                 pid.label.equals("Speed", true) -> s.speedKmh
@@ -69,6 +85,9 @@ object LiveSnapshotOverlay {
             "n/s — not on this ECU yet"
         } else {
             "n/s"
+        }
+        r.pid.request.equals("0103", true) -> {
+            FuelSystemDecoder.fromRawByte(r.sample) ?: "UNKNOWN"
         }
         r.sample != null -> "%.2f %s".format(r.sample, r.pid.unit).trim()
         else -> "ok"

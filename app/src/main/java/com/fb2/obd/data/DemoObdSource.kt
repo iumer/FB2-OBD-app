@@ -48,6 +48,8 @@ class DemoObdSource(
 
             val throttle = (10.0 + 40.0 * (0.5 + 0.5 * phase)).coerceIn(0.0, 100.0)
             val load = (15.0 + 55.0 * (0.5 + 0.5 * phase)).coerceIn(0.0, 100.0)
+            // Open loop while cold, closed loop once warm (demo).
+            val fuelLoop = if (coolant < 70.0) "OPEN LOOP" else "CLOSED LOOP"
 
             // Mirror a real FB2: Coolant2 / Ambient / LTFT stay n/s until the user
             // triple-taps and runs Deep search (Demo command() still answers those PIDs).
@@ -66,6 +68,7 @@ class DemoObdSource(
                 stftPct = 2.0 * sin(t / 5.0),
                 ltftPct = null,
                 batteryVolts = 14.2 + 0.1 * sin(t / 7.0),
+                fuelSystemStatus = fuelLoop,
                 gear = null,
                 gearSource = GearSource.NONE,
                 gearConfidencePct = null,
@@ -107,6 +110,7 @@ class DemoObdSource(
             cmd.startsWith("AT") -> "OK"
             cmd == "0100" -> "41 00 BE 3E B8 11"
             cmd == "0101" -> "41 01 00 07 E5 E5"
+            cmd == "0103" -> "41 03 02 00" // closed loop bank 1
             cmd == "0105" -> "41 05 7B"
             cmd == "0107" -> "41 07 80" // LTFT ~0% — deep-search demo hit
             cmd == "010C" -> "41 0C 0B 20"
@@ -179,6 +183,10 @@ class DemoObdSource(
 
     override suspend fun probePids(pids: List<PidDefinition>) = pids.map { pid ->
         when {
+            pid.request.equals("0103", true) -> {
+                // Byte A = 0x02 → CLOSED LOOP
+                PidProbeResult(pid, true, 2.0, "41 03 02 00")
+            }
             pid.request.startsWith("01") -> {
                 val sample = pid.decode(intArrayOf(120, 0, 0, 0)) ?: 1.0
                 PidProbeResult(pid, true, sample, "OK")

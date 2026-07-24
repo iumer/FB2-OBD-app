@@ -8,6 +8,7 @@ import com.fb2.obd.obd.DiagnosticParsers
 import com.fb2.obd.obd.Dtc
 import com.fb2.obd.obd.DtcDecoder
 import com.fb2.obd.obd.FreezeFrame
+import com.fb2.obd.obd.FuelSystemDecoder
 import com.fb2.obd.obd.GearEstimator
 import com.fb2.obd.obd.GearSource
 import com.fb2.obd.obd.HondaPidCatalog
@@ -67,6 +68,7 @@ class Elm327BluetoothSource(
         ObdPid.INTAKE_MAP,
         ObdPid.STFT_B1,
         ObdPid.LTFT_B1,
+        ObdPid.FUEL_SYSTEM_STATUS,
         ObdPid.CONTROL_MODULE_VOLTAGE,
         ObdPid.AMBIENT_TEMP,
     )
@@ -336,6 +338,9 @@ class Elm327BluetoothSource(
         ObdPid.INTAKE_MAP -> copy(mapKpa = value ?: mapKpa)
         ObdPid.STFT_B1 -> copy(stftPct = value ?: stftPct)
         ObdPid.LTFT_B1 -> copy(ltftPct = value ?: ltftPct)
+        ObdPid.FUEL_SYSTEM_STATUS -> copy(
+            fuelSystemStatus = FuelSystemDecoder.fromRawByte(value) ?: fuelSystemStatus,
+        )
         ObdPid.CONTROL_MODULE_VOLTAGE -> copy(batteryVolts = value ?: batteryVolts)
         ObdPid.TRANSMISSION_GEAR_RATIO -> copy(gearRatioActual = value ?: gearRatioActual)
     }
