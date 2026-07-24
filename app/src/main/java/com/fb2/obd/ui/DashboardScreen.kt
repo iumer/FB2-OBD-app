@@ -56,6 +56,7 @@ import com.fb2.obd.obd.Health
 import com.fb2.obd.obd.HealthEvaluator
 import com.fb2.obd.obd.HealthScore
 import com.fb2.obd.obd.LiveSnapshotOverlay
+import com.fb2.obd.obd.MetricStatus
 import com.fb2.obd.obd.ObdPid
 import com.fb2.obd.obd.PidCategory
 import com.fb2.obd.obd.PidDefinition
@@ -162,6 +163,7 @@ fun DashboardScreen(
             } else {
                 s.gearSource
             },
+            gearConfidencePct = s.gearConfidencePct,
         )
 
         PageTabs(
@@ -283,7 +285,10 @@ private fun CompactHeroStrip(
     speedKmh: Double?,
     gear: Int?,
     gearSource: GearSource,
+    gearConfidencePct: Int? = null,
 ) {
+    val rpmStatus = HealthEvaluator.rpm(rpm)
+    val speedStatus = HealthEvaluator.speed(speedKmh)
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -295,12 +300,23 @@ private fun CompactHeroStrip(
         horizontalArrangement = Arrangement.SpaceEvenly,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        HeroDigit(label = "RPM", value = rpm.fmt(), unit = "", accent = Accent, modifier = Modifier.weight(1f))
+        HeroDigit(
+            label = "RPM",
+            value = rpm.fmt(),
+            unit = "",
+            accent = if (rpmStatus.health == Health.UNKNOWN || rpmStatus.health == Health.GOOD) {
+                Accent
+            } else {
+                rpmStatus.health.color()
+            },
+            valueColor = if (rpmStatus.health == Health.UNKNOWN) TextPrimary else rpmStatus.health.color(),
+            modifier = Modifier.weight(1f),
+        )
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center,
             modifier = Modifier
-                .widthIn(min = 48.dp)
+                .widthIn(min = 52.dp)
                 .fillMaxHeight(),
         ) {
             Text(
@@ -317,10 +333,12 @@ private fun CompactHeroStrip(
                 fontWeight = FontWeight.Bold,
                 style = tightTextStyle(20.sp),
             )
-            // Always reserve badge line height (ECU / EST / blank) so layout never jumps.
             val badge = when (gearSource) {
                 GearSource.ECU -> "ECU" to GoodGreen
-                GearSource.ESTIMATED -> "EST" to WarnAmber
+                GearSource.ESTIMATED -> {
+                    val conf = gearConfidencePct?.let { "$it%" } ?: "EST"
+                    conf to WarnAmber
+                }
                 GearSource.NONE -> " " to TextMuted
             }
             Text(
@@ -331,7 +349,14 @@ private fun CompactHeroStrip(
                 style = tightTextStyle(8.sp),
             )
         }
-        HeroDigit(label = "SPEED", value = speedKmh.fmt(), unit = "km/h", accent = GoodGreen, modifier = Modifier.weight(1f))
+        HeroDigit(
+            label = "SPEED",
+            value = speedKmh.fmt(),
+            unit = "km/h",
+            accent = GoodGreen,
+            valueColor = speedStatus.health.color(),
+            modifier = Modifier.weight(1f),
+        )
     }
 }
 
@@ -341,6 +366,7 @@ private fun HeroDigit(
     value: String,
     unit: String,
     accent: Color,
+    valueColor: Color = TextPrimary,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -352,7 +378,7 @@ private fun HeroDigit(
         Row(verticalAlignment = Alignment.Bottom) {
             Text(
                 text = value,
-                color = TextPrimary,
+                color = valueColor,
                 fontSize = 20.sp,
                 fontWeight = FontWeight.Bold,
                 style = tightTextStyle(20.sp),
@@ -421,18 +447,54 @@ private fun MetricsPage(
 ) {
     val engineRunning = (snapshot.rpm ?: 0.0) > 0.0
     val baseTiles = listOf(
-        TileData("Coolant 1", snapshot.coolantC.fmt(), "\u00B0C", HealthEvaluator.coolant(snapshot.coolantC), ObdPid.COOLANT_TEMP),
-        TileData("Coolant 2", snapshot.coolant2C.fmt(), "\u00B0C", HealthEvaluator.coolant(snapshot.coolant2C), ObdPid.COOLANT_TEMP_2),
-        TileData("Battery", snapshot.batteryVolts.fmt(1), "V", HealthEvaluator.battery(snapshot.batteryVolts, engineRunning), ObdPid.CONTROL_MODULE_VOLTAGE),
-        TileData("Intake", snapshot.intakeC.fmt(), "\u00B0C", pid = ObdPid.INTAKE_TEMP),
-        TileData("Ambient", snapshot.ambientC.fmt(), "\u00B0C", pid = ObdPid.AMBIENT_TEMP),
-        TileData("Load", snapshot.engineLoadPct.fmt(), "%", pid = ObdPid.ENGINE_LOAD),
-        TileData("Throttle", snapshot.throttlePct.fmt(), "%", pid = ObdPid.THROTTLE),
-        TileData("STFT", snapshot.stftPct.fmt(1), "%", HealthEvaluator.fuelTrim(snapshot.stftPct), ObdPid.STFT_B1),
-        TileData("LTFT", snapshot.ltftPct.fmt(1), "%", HealthEvaluator.fuelTrim(snapshot.ltftPct), ObdPid.LTFT_B1),
-        TileData("MAF", snapshot.mafGps.fmt(1), "g/s", pid = ObdPid.MAF),
-        TileData("MAP", snapshot.mapKpa.fmt(), "kPa", pid = ObdPid.INTAKE_MAP),
-        TileData("Timing", snapshot.timingAdvance.fmt(), "\u00B0", pid = ObdPid.TIMING_ADVANCE),
+        TileData(
+            "Coolant 1", snapshot.coolantC.fmt(), "\u00B0C",
+            HealthEvaluator.coolant(snapshot.coolantC), ObdPid.COOLANT_TEMP,
+        ),
+        TileData(
+            "Coolant 2", snapshot.coolant2C.fmt(), "\u00B0C",
+            HealthEvaluator.coolant(snapshot.coolant2C), ObdPid.COOLANT_TEMP_2,
+        ),
+        TileData(
+            "Battery", snapshot.batteryVolts.fmt(1), "V",
+            HealthEvaluator.battery(snapshot.batteryVolts, engineRunning), ObdPid.CONTROL_MODULE_VOLTAGE,
+        ),
+        TileData(
+            "Intake", snapshot.intakeC.fmt(), "\u00B0C",
+            HealthEvaluator.intakeAir(snapshot.intakeC), ObdPid.INTAKE_TEMP,
+        ),
+        TileData(
+            "Ambient", snapshot.ambientC.fmt(), "\u00B0C",
+            HealthEvaluator.ambient(snapshot.ambientC), ObdPid.AMBIENT_TEMP,
+        ),
+        TileData(
+            "Load", snapshot.engineLoadPct.fmt(), "%",
+            HealthEvaluator.engineLoad(snapshot.engineLoadPct), ObdPid.ENGINE_LOAD,
+        ),
+        TileData(
+            "Throttle", snapshot.throttlePct.fmt(), "%",
+            HealthEvaluator.throttle(snapshot.throttlePct), ObdPid.THROTTLE,
+        ),
+        TileData(
+            "STFT", snapshot.stftPct.fmt(1), "%",
+            HealthEvaluator.fuelTrim(snapshot.stftPct), ObdPid.STFT_B1,
+        ),
+        TileData(
+            "LTFT", snapshot.ltftPct.fmt(1), "%",
+            HealthEvaluator.fuelTrim(snapshot.ltftPct), ObdPid.LTFT_B1,
+        ),
+        TileData(
+            "MAF", snapshot.mafGps.fmt(1), "g/s",
+            HealthEvaluator.maf(snapshot.mafGps, snapshot.rpm, snapshot.speedKmh), ObdPid.MAF,
+        ),
+        TileData(
+            "MAP", snapshot.mapKpa.fmt(), "kPa",
+            HealthEvaluator.map(snapshot.mapKpa, snapshot.throttlePct), ObdPid.INTAKE_MAP,
+        ),
+        TileData(
+            "Timing", snapshot.timingAdvance.fmt(), "\u00B0",
+            HealthEvaluator.timing(snapshot.timingAdvance), ObdPid.TIMING_ADVANCE,
+        ),
     )
 
     val extras = extraPidIds.mapNotNull { id -> catalog.find { it.id.equals(id, true) } }
@@ -463,7 +525,8 @@ private fun MetricsPage(
                 label = t.label,
                 value = value,
                 unit = unit,
-                health = if (showNs) null else t.health,
+                health = if (showNs) null else t.status?.health,
+                statusLabel = if (showNs) null else t.status?.label,
                 muted = showNs,
                 deepSearchHint = showNs,
                 onDeepSearch = if (showNs) {
@@ -584,11 +647,13 @@ private fun DenseSensorGridPage(
                     effective.startsWith("n/s") -> "n/s"
                     else -> effective.substringBefore(" ")
                 }
+                val transStatus = if (unsupported) null else HealthEvaluator.forTransmissionLabel(label, effective)
                 DenseTile(
                     label = label,
                     value = displayValue,
                     unit = unit.take(8),
-                    health = null,
+                    health = transStatus?.health,
+                    statusLabel = transStatus?.label,
                     muted = unsupported && label != "Status",
                     deepSearchHint = unsupported && label != "Status",
                     onDeepSearch = if (unsupported && label != "Status") {
@@ -609,6 +674,7 @@ private fun DenseTile(
     value: String,
     unit: String,
     health: Health? = null,
+    statusLabel: String? = null,
     muted: Boolean = false,
     deepSearchHint: Boolean = false,
     onDeepSearch: (() -> Unit)? = null,
@@ -624,7 +690,7 @@ private fun DenseTile(
 
     Column(
         modifier = modifier
-            .height(64.dp)
+            .height(68.dp)
             .clip(RoundedCornerShape(10.dp))
             .background(Surface)
             .then(
@@ -642,11 +708,11 @@ private fun DenseTile(
                     Modifier
                 },
             )
-            .padding(horizontal = 7.dp, vertical = 5.dp),
+            .padding(horizontal = 7.dp, vertical = 4.dp),
         verticalArrangement = Arrangement.SpaceBetween,
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            if (health != null) {
+            if (health != null && health != Health.UNKNOWN) {
                 Box(
                     modifier = Modifier
                         .size(6.dp)
@@ -658,10 +724,9 @@ private fun DenseTile(
                     color = TextMuted,
                     fontSize = 9.sp,
                     fontWeight = FontWeight.Medium,
-                    maxLines = 2,
+                    maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     style = tightTextStyle(9.sp),
-                    lineHeight = 11.sp,
                 )
             } else {
                 Text(
@@ -669,10 +734,9 @@ private fun DenseTile(
                     color = TextMuted,
                     fontSize = 9.sp,
                     fontWeight = FontWeight.Medium,
-                    maxLines = 2,
+                    maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     style = tightTextStyle(9.sp),
-                    lineHeight = 11.sp,
                 )
             }
         }
@@ -696,8 +760,18 @@ private fun DenseTile(
                 )
             }
         }
-        if (deepSearchHint) {
-            Text("tap×3 deep", color = Accent, fontSize = 8.sp, maxLines = 1, style = tightTextStyle(8.sp))
+        when {
+            deepSearchHint -> Text("tap×3 deep", color = Accent, fontSize = 8.sp, maxLines = 1, style = tightTextStyle(8.sp))
+            !statusLabel.isNullOrBlank() && !muted -> Text(
+                text = statusLabel,
+                color = health?.color() ?: TextMuted,
+                fontSize = 8.sp,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                style = tightTextStyle(8.sp),
+            )
+            else -> Text(" ", fontSize = 8.sp, style = tightTextStyle(8.sp)) // reserve line
         }
     }
 }
@@ -706,7 +780,7 @@ private fun DenseTile(
 private fun EmptyTile(modifier: Modifier = Modifier, onClick: () -> Unit) {
     Box(
         modifier = modifier
-            .height(64.dp)
+            .height(68.dp)
             .clip(RoundedCornerShape(10.dp))
             .background(Surface)
             .clickable(onClick = onClick)
@@ -979,6 +1053,6 @@ private data class TileData(
     val label: String,
     val value: String,
     val unit: String,
-    val health: Health? = null,
+    val status: MetricStatus? = null,
     val pid: ObdPid? = null,
 )

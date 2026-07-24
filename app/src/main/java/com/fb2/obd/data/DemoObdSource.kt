@@ -66,14 +66,18 @@ class DemoObdSource(
                 stftPct = 2.0 * sin(t / 5.0),
                 ltftPct = null,
                 batteryVolts = 14.2 + 0.1 * sin(t / 7.0),
-                gear = gearEstimator.estimate(speed, rpm),
-                gearSource = if (gearEstimator.estimate(speed, rpm) != null) {
-                    GearSource.ESTIMATED
-                } else {
-                    GearSource.NONE
-                },
+                gear = null,
+                gearSource = GearSource.NONE,
+                gearConfidencePct = null,
                 unsupportedPids = setOf(0x67, 0x46, 0x07), // Coolant2, Ambient, LTFT
-            )
+            ).let { snap ->
+                val est = gearEstimator.estimateDetailed(speed, rpm)
+                snap.copy(
+                    gear = est?.gear,
+                    gearSource = if (est != null) GearSource.ESTIMATED else GearSource.NONE,
+                    gearConfidencePct = est?.confidencePct,
+                )
+            }
             emit(snapshot)
             t += 1.0
             delay(250L)

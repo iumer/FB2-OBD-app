@@ -4,6 +4,9 @@ package com.fb2.obd.obd
  * Computes engine + transmission health scores (0–100) from live snapshot and
  * optional Honda TCM fields. Missing TCM / core engine sensors are reported as
  * **insufficient data** — never as a false "100% healthy".
+ *
+ * Notes use plain diagnostic language (e.g. “Possible alternator issue”) rather
+ * than only “Voltage Low”.
  */
 object HealthScoreCalculator {
 
@@ -20,8 +23,15 @@ object HealthScoreCalculator {
         var trans = 100
         val tNotes = mutableListOf<String>()
 
-        fun deductE(pts: Int, note: String) { engine = (engine - pts).coerceAtLeast(0); eNotes += note }
-        fun deductT(pts: Int, note: String) { trans = (trans - pts).coerceAtLeast(0); tNotes += note }
+        fun deductE(pts: Int, note: String) {
+            engine = (engine - pts).coerceAtLeast(0)
+            eNotes += note
+        }
+
+        fun deductT(pts: Int, note: String) {
+            trans = (trans - pts).coerceAtLeast(0)
+            tNotes += note
+        }
 
         val hasRpm = snapshot.rpm != null
         val hasCoolant = snapshot.coolantC != null
@@ -33,50 +43,54 @@ object HealthScoreCalculator {
         if (!hasBattery) eNotes += "Battery voltage not available"
         if (snapshot.ltftPct == null) eNotes += "LTFT n/s on this ECU (common on FB2)"
 
-        when (HealthEvaluator.coolant(snapshot.coolantC)) {
-            Health.WARN -> deductE(8, "Coolant elevated")
-            Health.CRITICAL -> deductE(25, "Coolant critical")
-            Health.UNKNOWN -> {}
+        when (HealthEvaluator.coolant(snapshot.coolantC).health) {
+            Health.WARN -> deductE(6, "Coolant warm — watch temperature")
+            Health.ELEVATED -> deductE(14, "Engine running hot. Reduce load.")
+            Health.CRITICAL -> deductE(28, "Engine overheating. Reduce load / pull over safely.")
+            Health.COLD -> eNotes += "Engine still cold — open loop enrichment is normal"
             else -> {}
         }
+
         val running = (snapshot.rpm ?: 0.0) > 0
-        when (HealthEvaluator.battery(snapshot.batteryVolts, running)) {
-            Health.WARN -> deductE(6, "Charging voltage low/high")
-            Health.CRITICAL -> deductE(20, "Battery/charging critical")
-            Health.UNKNOWN -> {}
+        when (HealthEvaluator.battery(snapshot.batteryVolts, running).health) {
+            Health.WARN -> deductE(6, "Charging voltage low — check belt / battery health")
+            Health.ELEVATED -> deductE(10, "Charging voltage high — check regulator")
+            Health.CRITICAL -> deductE(22, "Possible alternator issue. Check charging system.")
             else -> {}
         }
-        when (HealthEvaluator.fuelTrim(snapshot.stftPct)) {
-            Health.WARN -> deductE(5, "STFT elevated")
-            Health.CRITICAL -> deductE(15, "STFT out of range")
-            Health.UNKNOWN -> {}
-            else -> {}
+
+        fun trimNote(which: String, status: MetricStatus) {
+            when (status.health) {
+                Health.WARN -> deductE(4, "$which ${status.label.lowercase()} — monitor")
+                Health.ELEVATED -> deductE(10, "$which ${status.label}. Possible vacuum leak or fuel issue.")
+                Health.CRITICAL -> deductE(18, "$which severely out of range. Possible vacuum leak / injector / sensor fault.")
+                else -> {}
+            }
         }
-        when (HealthEvaluator.fuelTrim(snapshot.ltftPct)) {
-            Health.WARN -> deductE(5, "LTFT elevated")
-            Health.CRITICAL -> deductE(15, "LTFT out of range")
-            Health.UNKNOWN -> {}
-            else -> {}
-        }
+        trimNote("STFT", HealthEvaluator.fuelTrim(snapshot.stftPct))
+        trimNote("LTFT", HealthEvaluator.fuelTrim(snapshot.ltftPct))
+
         if (storedDtcCount > 0) {
-            deductE((storedDtcCount * 8).coerceAtMost(30), "$storedDtcCount stored DTC(s)")
+            deductE((storedDtcCount * 8).coerceAtMost(30), "$storedDtcCount stored DTC(s) — open DIAG → Faults")
             deductT((storedDtcCount * 4).coerceAtMost(20), "DTCs present")
         }
 
         val hasAtf = atfC != null
         val hasSlip = tcSlipRpm != null
         val tcmAnswered = (tcmSupportedCount ?: 0) > 0 || hasAtf || hasSlip
-        // If caller probed TCM and got zero hits, or never got ATF/slip, score is unknown.
         val transmissionDataOk = tcmAnswered
 
-        when (HealthEvaluator.atfTemp(atfC)) {
-            Health.WARN -> deductT(10, "ATF temp warm/cold")
-            Health.CRITICAL -> deductT(30, "ATF temp critical")
-            Health.UNKNOWN -> {}
+        when (HealthEvaluator.atfTemp(atfC).health) {
+            Health.COLD -> tNotes += "ATF still cold / warming"
+            Health.WARN -> deductT(8, "ATF warm — avoid heavy towing until cooler")
+            Health.ELEVATED -> deductT(16, "ATF hot. Ease load; check cooler / fluid level.")
+            Health.CRITICAL -> deductT(30, "ATF overheating — risk of transmission damage.")
             else -> {}
         }
-        if (tcSlipRpm != null && tcSlipRpm > 250) {
-            deductT(12, "High torque-converter slip")
+        when (HealthEvaluator.tcSlip(tcSlipRpm).health) {
+            Health.WARN -> deductT(6, "Torque converter slipping more than usual")
+            Health.CRITICAL -> deductT(14, "High torque-converter slip")
+            else -> {}
         }
 
         if (!transmissionDataOk) {
@@ -84,8 +98,13 @@ object HealthScoreCalculator {
             tNotes += "Run Transmission or Honda probe; Mode 22 IDs may need remapping for this FB2"
         }
 
-        if (engineDataOk && eNotes.none { it.contains("elevated", true) || it.contains("critical", true) || it.contains("DTC", true) || it.contains("out of range", true) || it.contains("low/high", true) }) {
-            // Keep informational notes; add healthy only if we didn't already add only soft notes
+        val badEngine = eNotes.any {
+            it.contains("overheat", true) || it.contains("alternator", true) ||
+                it.contains("DTC", true) || it.contains("severely", true) ||
+                it.contains("hot", true) || it.contains("vacuum", true) ||
+                it.contains("Charging", true)
+        }
+        if (engineDataOk && !badEngine) {
             if (eNotes.none { it.contains("incomplete", true) }) {
                 eNotes += "Core engine parameters look OK from available sensors"
             }
@@ -93,7 +112,11 @@ object HealthScoreCalculator {
             eNotes += "Insufficient live sensors for a reliable engine score"
         }
 
-        if (transmissionDataOk && tNotes.none { it.contains("elevated", true) || it.contains("critical", true) || it.contains("High torque", true) || it.contains("DTC", true) }) {
+        if (transmissionDataOk && tNotes.none {
+                it.contains("hot", true) || it.contains("overheat", true) ||
+                    it.contains("slip", true) || it.contains("DTC", true)
+            }
+        ) {
             tNotes += "Available transmission sensors look OK"
         }
 
