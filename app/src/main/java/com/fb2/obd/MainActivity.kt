@@ -509,7 +509,18 @@ class MainActivity : ComponentActivity() {
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                 clipData = android.content.ClipData.newUri(contentResolver, displayName, uri)
             }
-            startActivity(Intent.createChooser(intent, "Share $displayName"))
+            packageManager.queryIntentActivities(intent, 0).forEach { ri ->
+                grantUriPermission(
+                    ri.activityInfo.packageName,
+                    uri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION,
+                )
+            }
+            val chooser = Intent.createChooser(intent, "Share $displayName").apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            startActivity(chooser)
+            toast("Opening share sheet…")
         } catch (e: Exception) {
             toast("Share failed: ${e.message ?: "no app"}")
         }
