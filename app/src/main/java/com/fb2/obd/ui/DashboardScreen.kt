@@ -1165,16 +1165,17 @@ private fun TopBar(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.horizontalScroll(rememberScrollState()),
         ) {
-            val (dot, text) = when (state.connection) {
-                ConnectionState.CONNECTED ->
-                    if (state.sourceIsLive) {
-                        GoodGreen to "LIVE"
-                    } else {
-                        WarnAmber to "DEMO"
-                    }
-                ConnectionState.CONNECTING -> Accent to "…"
-                ConnectionState.ERROR -> CritRed to "ERR"
-                ConnectionState.DISCONNECTED -> TextMuted to "OFF"
+            val (dot, text) = when {
+                state.reconnecting ||
+                    (state.connection == ConnectionState.CONNECTING && state.sourceIsLive) ->
+                    WarnAmber to "RETRY"
+                state.connection == ConnectionState.CONNECTED && state.sourceIsLive ->
+                    GoodGreen to "LIVE"
+                state.connection == ConnectionState.CONNECTED && !state.sourceIsLive ->
+                    WarnAmber to "DEMO"
+                state.connection == ConnectionState.CONNECTING -> Accent to "…"
+                state.connection == ConnectionState.ERROR -> CritRed to "ERR"
+                else -> TextMuted to "OFF"
             }
             Box(
                 modifier = Modifier
@@ -1188,14 +1189,20 @@ private fun TopBar(
             TopBarChip("DIAG", Accent, onDiagnosticsClick)
             TopBarChip("SETTINGS", TextMuted, onSettingsClick)
             // CONNECTED only for a real ELM adapter — Demo keeps CONNECT (+ yellow DEMO badge).
-            val liveConnected = state.connection == ConnectionState.CONNECTED && state.sourceIsLive
+            val liveConnected = state.connection == ConnectionState.CONNECTED &&
+                state.sourceIsLive && !state.reconnecting
             TopBarChip(
                 text = when {
                     liveConnected -> "CONNECTED"
-                    state.connection == ConnectionState.CONNECTING -> "…"
+                    state.reconnecting || state.connection == ConnectionState.CONNECTING -> "RETRY…"
+                    state.connection == ConnectionState.ERROR -> "RECONNECT"
                     else -> "CONNECT"
                 },
-                color = if (liveConnected) GoodGreen else Accent,
+                color = when {
+                    liveConnected -> GoodGreen
+                    state.connection == ConnectionState.ERROR -> CritRed
+                    else -> Accent
+                },
                 onClick = onConnectClick,
             )
         }

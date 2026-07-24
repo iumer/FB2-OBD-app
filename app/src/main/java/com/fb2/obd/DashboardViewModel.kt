@@ -36,6 +36,7 @@ import com.fb2.obd.obd.StandardPidCatalog
 import com.fb2.obd.obd.TripComputer
 import com.fb2.obd.obd.VehicleInfo
 import com.fb2.obd.obd.VehicleSnapshot
+import com.fb2.obd.obd.isEffectivelyBlank
 import com.fb2.obd.obd.withField
 import com.fb2.obd.perf.AccelResult
 import com.fb2.obd.perf.AccelerationTimer
@@ -60,6 +61,10 @@ data class DashboardUiState(
     val sourceIsLive: Boolean = false,
     /** MIL / readiness DTC count for the Dash tile (null = not read yet). */
     val dtcCount: Int? = null,
+    /** True while ELM RFCOMM is retrying after a drop — Dash keeps last-good values. */
+    val reconnecting: Boolean = false,
+    /** Last connection failure reason for the ERR chip / toast. */
+    val lastError: String? = null,
 )
 
 /** User-adjustable settings. */
@@ -180,6 +185,8 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
     private val voiceAlerter = VoiceAlerter(app)
     private var lastAtfForVoice: Double? = null
     private var lastSlipForVoice: Double? = null
+    private var lastLiveSnapshotMs: Long = 0L
+    private var staleWatchJob: Job? = null
 
     private val _hondaScan = MutableStateFlow<List<ModuleScanResult>>(emptyList())
     val hondaScan: StateFlow<List<ModuleScanResult>> = _hondaScan.asStateFlow()
@@ -515,6 +522,8 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
         }
         readinessJob?.cancel()
         readinessJob = null
+        staleWatchJob?.cancel()
+        staleWatchJob = null
         collectJob?.cancel()
         collectJob = null
         currentSource = null
@@ -527,6 +536,8 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
                 sourceName = "",
                 sourceIsLive = false,
                 dtcCount = null,
+                reconnecting = false,
+                lastError = null,
             )
         }
         ObdLogger.logDebug(ObdLogger.Dir.INFO, "Disconnected")
@@ -535,6 +546,7 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
 
     fun useSource(source: ObdSource) {
         readinessJob?.cancel()
+        staleWatchJob?.cancel()
         collectJob?.cancel()
         currentSource = source
         eventTracker.reset()
@@ -545,12 +557,22 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
                 sourceName = source.name,
                 sourceIsLive = source.isLive,
                 dtcCount = null,
+                reconnecting = false,
+                lastError = null,
             )
         }
         publishCarDash()
         collectJob = source.snapshots()
-            .onEach { snapshot ->
-                ObdLogger.logSnapshot(snapshot)
+            .onEach { incoming ->
+                lastLiveSnapshotMs = System.currentTimeMillis()
+                val prev = _uiState.value.snapshot
+                // Never wipe a live Dash with a blank reconnect frame.
+                val snapshot = if (incoming.isEffectivelyBlank() && !prev.isEffectivelyBlank()) {
+                    prev
+                } else {
+                    incoming
+                }
+                ObdLogger.logSnapshot(incoming)
                 val now = System.currentTimeMillis()
                 snapshot.speedKmh?.let { accelTimer.onSample(now, it) }
                 tripComputer.onSample(now, snapshot.speedKmh, snapshot.mafGps, null)
@@ -584,12 +606,17 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
                 val lockText = _transValues.value.entries
                     .firstOrNull { it.key.contains("lock", true) }
                     ?.value
-                eventTracker.onSnapshot(snapshot, _healthThresholds.value, lockText)
-                eventTracker.onDtcCount(_uiState.value.dtcCount)
+                // Event tracker sees the real incoming frame (not the sticky display).
+                if (!incoming.isEffectivelyBlank()) {
+                    eventTracker.onSnapshot(incoming, _healthThresholds.value, lockText)
+                    eventTracker.onDtcCount(_uiState.value.dtcCount)
+                }
                 _uiState.update {
                     it.copy(
                         snapshot = snapshot,
                         connection = ConnectionState.CONNECTED,
+                        reconnecting = false,
+                        lastError = null,
                     )
                 }
                 eventTracker.onConnection(
@@ -603,17 +630,58 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
                     logDashValues(snapshot)
                 }
             }
-            .catch {
-                ObdLogger.logDebug(ObdLogger.Dir.INFO, "Connection ERROR: ${it.message}")
+            .catch { err ->
+                val msg = err.message ?: err.javaClass.simpleName
+                ObdLogger.logDebug(ObdLogger.Dir.INFO, "Connection ERROR: $msg")
+                ObdLogger.logEvent("ELM", "Connection error: $msg")
                 eventTracker.onConnection(ConnectionState.ERROR, false, source.name)
-                _uiState.update { st -> st.copy(connection = ConnectionState.ERROR) }
+                // Keep last-good snapshot on screen — only flip the status chip.
+                _uiState.update { st ->
+                    st.copy(
+                        connection = ConnectionState.ERROR,
+                        reconnecting = false,
+                        lastError = msg,
+                    )
+                }
+                publishCarDash()
             }
             .launchIn(viewModelScope)
+
+        // If live frames stop arriving, mark reconnecting while the source retries.
+        if (source.isLive) {
+            lastLiveSnapshotMs = System.currentTimeMillis()
+            staleWatchJob = viewModelScope.launch {
+                while (isActive && currentSource === source) {
+                    delay(2_000L)
+                    val silentFor = System.currentTimeMillis() - lastLiveSnapshotMs
+                    val ui = _uiState.value
+                    if (ui.connection == ConnectionState.CONNECTED && silentFor > 8_000L) {
+                        ObdLogger.logDebug(
+                            ObdLogger.Dir.INFO,
+                            "No ELM frames for ${silentFor}ms — marking reconnecting",
+                        )
+                        _uiState.update {
+                            it.copy(
+                                reconnecting = true,
+                                connection = ConnectionState.CONNECTING,
+                            )
+                        }
+                        publishCarDash()
+                    }
+                }
+            }
+        }
 
         // Lightweight readiness poll for Dash DTC counter (Mode 01 PID 01).
         readinessJob = viewModelScope.launch {
             delay(800L)
             while (isActive && currentSource === source) {
+                if (_uiState.value.reconnecting ||
+                    _uiState.value.connection == ConnectionState.ERROR
+                ) {
+                    delay(2_000L)
+                    continue
+                }
                 runCatching {
                     val readiness = source.readReadiness()
                     _uiState.update { it.copy(dtcCount = readiness.dtcCount) }
@@ -884,6 +952,8 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
         }
         readinessJob?.cancel()
         readinessJob = null
+        staleWatchJob?.cancel()
+        staleWatchJob = null
         collectJob?.cancel()
         collectJob = null
         currentSource = null

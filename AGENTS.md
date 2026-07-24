@@ -89,5 +89,9 @@ non-obvious cloud specifics.
   including any `+` extras). It does **not** dump Fuel/Trip/Trans/Perf/etc.
   Saved CSVs are lean (`events` + `dashboard_snapshots` + `dash_tiles`) so Share
   works via FileProvider. Share opens the system chooser (WhatsApp / Drive / email).
+- **ELM idle drop:** cheap clones often hang mid-poll. The app uses short PID
+  timeouts (1.2s), skips repeatedly-failing PIDs, keeps last-good Dash values,
+  and retries RFCOMM forever with backoff (UI shows `RETRY`). A blank reconnect
+  frame must not wipe the Dash or fake `Engine Stop`.
 - MAF/MAP health is context-aware (idle / cruise / heavy or WOT); pass RPM,
   speed, and throttle into `HealthEvaluator.maf` / `map`.

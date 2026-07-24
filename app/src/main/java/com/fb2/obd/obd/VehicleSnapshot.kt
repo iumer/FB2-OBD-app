@@ -35,3 +35,9 @@ data class VehicleSnapshot(
         val EMPTY = VehicleSnapshot()
     }
 }
+
+/** True when a frame has no usable live sensors (typical blank reconnect frame). */
+fun VehicleSnapshot.isEffectivelyBlank(): Boolean =
+    rpm == null && speedKmh == null && coolantC == null && batteryVolts == null &&
+        mafGps == null && mapKpa == null && throttlePct == null && stftPct == null
+

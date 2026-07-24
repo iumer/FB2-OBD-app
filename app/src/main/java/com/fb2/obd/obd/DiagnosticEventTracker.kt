@@ -85,6 +85,12 @@ class DiagnosticEventTracker {
         thresholds: HealthThresholds,
         lockUpText: String? = null,
     ) {
+        // Ignore blank reconnect / disconnect frames so we don't fake Engine Stop.
+        if (snapshot.rpm == null && snapshot.coolantC == null && snapshot.batteryVolts == null &&
+            snapshot.mafGps == null && snapshot.speedKmh == null
+        ) {
+            return
+        }
         val rpm = snapshot.rpm ?: 0.0
         val speed = snapshot.speedKmh ?: 0.0
         val engineOn = rpm > 400.0
