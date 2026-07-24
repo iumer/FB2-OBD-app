@@ -35,6 +35,18 @@ import kotlin.math.cos
 import kotlin.math.roundToInt
 import kotlin.math.sin
 
+/** Matches [com.fb2.obd.service.FloatingDashOverlayService] HU-sized ring. */
+private object BubbleScale {
+    val collapsed = 96.dp
+    val center = 96.dp
+    val sat = 112.dp
+    val expanded = 460.dp
+    val radius = 160f
+    val centerText = 16.sp
+    val satText = 15.sp
+    val hint = 13.sp
+}
+
 /**
  * Compose stand-in for [com.fb2.obd.service.FloatingDashOverlayService] used in
  * Paparazzi car-HU reviews (real overlay is a WindowManager View).
@@ -72,7 +84,6 @@ fun FloatingDashBubblePreview(
             .padding(16.dp),
         contentAlignment = Alignment.CenterStart,
     ) {
-        // Fake CarPlay/maps backdrop so we can judge contrast on HU.
         Text(
             text = "CARPLAY / MAP LAYER",
             color = TextMuted.copy(alpha = 0.35f),
@@ -83,17 +94,16 @@ fun FloatingDashBubblePreview(
 
         Box(
             modifier = Modifier
-                .padding(start = 24.dp)
-                .size(if (expanded) 280.dp else 56.dp),
+                .padding(start = 16.dp)
+                .size(if (expanded) BubbleScale.expanded else BubbleScale.collapsed),
             contentAlignment = Alignment.Center,
         ) {
             if (expanded) {
-                val radiusPx = 96f
                 page.forEachIndexed { i, m ->
                     val angleDeg = -90.0 + i * (360.0 / FloatingDashMetrics.PAGE_SIZE)
                     val rad = Math.toRadians(angleDeg)
-                    val ox = (radiusPx * cos(rad)).roundToInt()
-                    val oy = (radiusPx * sin(rad)).roundToInt()
+                    val ox = (BubbleScale.radius * cos(rad)).roundToInt()
+                    val oy = (BubbleScale.radius * sin(rad)).roundToInt()
                     SatelliteBubble(
                         metric = m,
                         modifier = Modifier.offset(ox.dp, oy.dp),
@@ -102,22 +112,21 @@ fun FloatingDashBubblePreview(
                 Text(
                     text = "↕ scroll · $statusLine",
                     color = TextMuted,
-                    fontSize = 9.sp,
+                    fontSize = BubbleScale.hint,
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
-                        .padding(bottom = 4.dp),
+                        .padding(bottom = 6.dp),
                 )
             }
 
-            // Center floating button (always)
             val centerMetric = page.firstOrNull() ?: safe.first()
             Box(
                 modifier = Modifier
-                    .size(56.dp)
+                    .size(BubbleScale.center)
                     .clip(CircleShape)
                     .background(Surface.copy(alpha = 0.92f))
-                    .border(3.dp, rim, CircleShape),
+                    .border(4.dp, rim, CircleShape),
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
@@ -127,10 +136,10 @@ fun FloatingDashBubblePreview(
                         "${centerMetric.label.take(4).uppercase()}\n${centerMetric.value}"
                     },
                     color = TextPrimary,
-                    fontSize = 10.sp,
+                    fontSize = BubbleScale.centerText,
                     fontWeight = FontWeight.Bold,
                     textAlign = TextAlign.Center,
-                    lineHeight = 12.sp,
+                    lineHeight = 20.sp,
                     maxLines = 2,
                     overflow = TextOverflow.Clip,
                 )
@@ -147,15 +156,15 @@ private fun SatelliteBubble(
     val color = healthColor(metric.health)
     Box(
         modifier = modifier
-            .size(68.dp)
+            .size(BubbleScale.sat)
             .clip(CircleShape)
             .background(Surface.copy(alpha = 0.92f))
-            .border(2.dp, color, CircleShape),
+            .border(3.dp, color, CircleShape),
         contentAlignment = Alignment.Center,
     ) {
         Text(
             text = buildString {
-                append(metric.label.take(7).uppercase())
+                append(metric.label.take(8).uppercase())
                 append('\n')
                 append(metric.value)
                 if (metric.unit.isNotBlank()) {
@@ -164,10 +173,10 @@ private fun SatelliteBubble(
                 }
             },
             color = TextPrimary,
-            fontSize = 9.sp,
+            fontSize = BubbleScale.satText,
             fontWeight = FontWeight.Bold,
             textAlign = TextAlign.Center,
-            lineHeight = 11.sp,
+            lineHeight = 18.sp,
             maxLines = 3,
             overflow = TextOverflow.Clip,
         )

@@ -172,12 +172,12 @@ class FloatingDashOverlayService : Service() {
             }
             gravity = Gravity.CENTER
             setTextColor(Color.WHITE)
-            textSize = 10f
+            textSize = 16f
             typeface = Typeface.DEFAULT_BOLD
             textAlignment = View.TEXT_ALIGNMENT_CENTER
-            setPadding(dp(4), dp(8), dp(4), dp(8))
+            setPadding(dp(6), dp(10), dp(6), dp(10))
             background = circleDrawable(COLOR_ACCENT, fillAlpha = 230)
-            elevation = dp(6).toFloat()
+            elevation = dp(8).toFloat()
             text = "FB2\n…"
         }
 
@@ -187,12 +187,12 @@ class FloatingDashOverlayService : Service() {
                 layoutParams = FrameLayout.LayoutParams(satSize, satSize)
                 visibility = View.GONE
                 setTextColor(Color.WHITE)
-                textSize = 9f
+                textSize = 15f
                 typeface = Typeface.DEFAULT_BOLD
                 textAlignment = View.TEXT_ALIGNMENT_CENTER
-                setPadding(dp(4), dp(6), dp(4), dp(6))
+                setPadding(dp(6), dp(10), dp(6), dp(10))
                 background = circleDrawable(COLOR_ACCENT, fillAlpha = 210)
-                elevation = dp(4).toFloat()
+                elevation = dp(6).toFloat()
             }
             satellites += sat
             container.addView(sat)
@@ -208,10 +208,10 @@ class FloatingDashOverlayService : Service() {
             }
             visibility = View.GONE
             setTextColor(COLOR_MUTED)
-            textSize = 9f
+            textSize = 13f
             typeface = Typeface.DEFAULT_BOLD
-            setPadding(dp(8), dp(2), dp(8), dp(2))
-            setBackgroundColor(Color.argb(160, 11, 15, 20))
+            setPadding(dp(10), dp(4), dp(10), dp(4))
+            setBackgroundColor(Color.argb(180, 11, 15, 20))
         }
         container.addView(pageHint)
         container.addView(center)
@@ -407,7 +407,7 @@ class FloatingDashOverlayService : Service() {
                     }
                     val unit = m.unit.take(4)
                     sat.text = buildString {
-                        append(m.label.take(7).uppercase())
+                        append(m.label.take(8).uppercase())
                         append('\n')
                         append(m.value)
                         if (unit.isNotBlank()) {
@@ -566,7 +566,7 @@ class FloatingDashOverlayService : Service() {
         GradientDrawable().apply {
             shape = GradientDrawable.OVAL
             setColor(Color.argb(fillAlpha, 20, 27, 34))
-            setStroke((3 * resources.displayMetrics.density).roundToInt(), color)
+            setStroke((STROKE_DP * resources.displayMetrics.density).roundToInt(), color)
         }
 
     private enum class TouchMode { NONE, DRAG, PAGE }
@@ -578,13 +578,14 @@ class FloatingDashOverlayService : Service() {
         private const val CHANNEL_ID = "floating_dash"
         private const val NOTIFICATION_ID = 1002
 
-        private const val COLLAPSED_DP = 56
-        private const val CENTER_DP = 56
-        private const val SAT_DP = 68
-        private const val EXPANDED_DP = 280
-        private const val RADIUS_DP = 96
+        private const val COLLAPSED_DP = 96
+        private const val CENTER_DP = 96
+        private const val SAT_DP = 112
+        private const val EXPANDED_DP = 460
+        private const val RADIUS_DP = 160
         private const val AUTO_COLLAPSE_MS = 6_000L
         private const val LONG_PRESS_MS = 520L
+        private const val STROKE_DP = 4
 
         const val ACTION_STOP = "com.fb2.obd.action.STOP_FLOATING_DASH"
         const val ACTION_EXPAND = "com.fb2.obd.action.EXPAND_FLOATING_DASH"
