@@ -51,6 +51,16 @@ non-obvious cloud specifics.
   ECU limitation. Deep search still forces the PID and tries ECM headers.
 - **Demo simulation** intentionally marks Coolant2 / Ambient / LTFT as `n/s` so
   you can triple-tap → Yes → watch the library walk and recover a value without a car.
+- **User adapter (Daraz):** OBD mini **ELM327 Bluetooth 5.1 / V2.1** clone. These
+  are almost never genuine ELM chips. Typical limits vs our app:
+  - Fine for basic SAE Mode 01 live data (RPM/speed/coolant/MAF) on CAN cars.
+  - Often weak/broken on long commands, some AT cmds (`ATAL`/`ATPP`), multi-frame,
+    and multi-ECU / Mode 22 with `ATSH` — deep search may still fail even with
+    correct headers. That is adapter firmware, not necessarily app logic.
+  - Coolant2/Ambient/LTFT `n/s` on FB2 remains primarily **ECU unsupported**.
+  - Honda TCM/ABS/HVAC packs need real IDs + headers; a better adapter
+    (OBDLink MX+/CX, ELS27-class) helps once IDs are known, but won't invent
+    unsupported SAE PIDs.
 - “AI explanations” on the Faults screen are curated text in `DtcCatalog.explain`,
   not a live LLM.
 - `sdkmanager`/Gradle may print `SDK XML version 4 ... only understands up to 3`.
