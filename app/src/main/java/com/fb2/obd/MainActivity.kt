@@ -509,9 +509,9 @@ class MainActivity : ComponentActivity() {
     }
 
     /**
-     * Prefer the system share sheet when a target exists; on bare car HUs
-     * ("No apps can perform this action") save into Downloads/FB2-Diag +
-     * app Documents/exports and show the path.
+     * Always save into Downloads/FB2-Diag (file manager). Never open a bare
+     * Bluetooth-only share sheet — that just starts BT search on car HUs.
+     * Optional "Share…" only appears when a useful non-BT app exists.
      */
     private fun shareOrExportFile(
         file: File,
@@ -519,59 +519,90 @@ class MainActivity : ComponentActivity() {
         mime: String,
         subject: String = displayName,
     ) {
-        try {
-            val uri = FileProvider.getUriForFile(
-                this,
-                "${packageName}.fileprovider",
-                file,
-            )
-            val intent = Intent(Intent.ACTION_SEND).apply {
-                type = mime
-                putExtra(Intent.EXTRA_STREAM, uri)
-                putExtra(Intent.EXTRA_SUBJECT, subject)
-                putExtra(Intent.EXTRA_TEXT, "FB2 Diag log: $displayName")
-                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                clipData = android.content.ClipData.newUri(contentResolver, displayName, uri)
-            }
-            packageManager.queryIntentActivities(intent, 0).forEach { ri ->
-                grantUriPermission(
-                    ri.activityInfo.packageName,
-                    uri,
-                    Intent.FLAG_GRANT_READ_URI_PERMISSION,
-                )
-            }
-            if (LogExportHelper.hasShareTargets(this, intent)) {
-                val chooser = Intent.createChooser(intent, "Share $displayName").apply {
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                }
-                startActivity(chooser)
-                toast("Opening share sheet…")
-                return
-            }
-        } catch (_: android.content.ActivityNotFoundException) {
-            // Fall through to file export.
-        } catch (e: Exception) {
-            ObdLogger.logDebug(ObdLogger.Dir.INFO, "Share intent failed: ${e.message}")
-        }
-        exportFileFallback(file, displayName, mime)
+        exportFileToDownloads(file, displayName, mime, subject)
     }
 
-    private fun exportFileFallback(file: File, displayName: String, mime: String) {
+    private fun exportFileToDownloads(
+        file: File,
+        displayName: String,
+        mime: String,
+        subject: String,
+    ) {
         try {
             val result = LogExportHelper.exportFile(this, file, displayName, mime)
             val clip = result.absolutePath ?: result.displayPath
             LogExportHelper.copyToClipboard(this, "FB2 log path", clip)
-            android.app.AlertDialog.Builder(this)
-                .setTitle("Log saved (no share apps)")
+
+            var shareIntent: Intent? = null
+            runCatching {
+                val uri = FileProvider.getUriForFile(
+                    this,
+                    "${packageName}.fileprovider",
+                    file,
+                )
+                val intent = Intent(Intent.ACTION_SEND).apply {
+                    type = mime
+                    putExtra(Intent.EXTRA_STREAM, uri)
+                    putExtra(Intent.EXTRA_SUBJECT, subject)
+                    putExtra(Intent.EXTRA_TEXT, "FB2 Diag log: $displayName")
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    clipData = android.content.ClipData.newUri(contentResolver, displayName, uri)
+                }
+                if (LogExportHelper.hasUsefulShareTargets(this, intent)) {
+                    packageManager.queryIntentActivities(intent, 0).forEach { ri ->
+                        val pkg = ri.activityInfo.packageName
+                        if (LogExportHelper.isUsefulSharePackage(pkg)) {
+                            grantUriPermission(pkg, uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        }
+                    }
+                    shareIntent = intent
+                }
+            }
+
+            val builder = android.app.AlertDialog.Builder(this)
+                .setTitle("Log saved")
                 .setMessage(
-                    "This head unit has no WhatsApp / Files / email to share to.\n\n" +
-                        "Saved here:\n${result.displayPath}\n\n" +
-                        "Path copied to clipboard. Pull the file via USB " +
-                        "(Android/data/…/files/Documents/exports) or check Downloads/FB2-Diag.",
+                    "Saved for the file manager:\n\n${result.displayPath}\n\n" +
+                        "Open Files / Downloads → FB2-Diag on this unit, or pull via USB.\n" +
+                        "Path copied to clipboard.",
                 )
                 .setPositiveButton("OK", null)
-                .show()
-            toast("Saved to Downloads/FB2-Diag (path copied)")
+                .setNeutralButton("Open file") { _, _ ->
+                    val opened = LogExportHelper.openInFileManager(this, result, mime)
+                    if (!opened) toast("No file manager found — check Downloads/FB2-Diag")
+                }
+            if (shareIntent != null) {
+                val toShare = shareIntent!!
+                builder.setNegativeButton("Share…") { _, _ ->
+                    // Strip Bluetooth / Nearby from the chooser so HU never
+                    // lands on a BT search sheet when the user taps Share….
+                    @Suppress("DEPRECATION")
+                    val exclude = packageManager.queryIntentActivities(toShare, 0)
+                        .filter {
+                            !LogExportHelper.isUsefulSharePackage(
+                                it.activityInfo?.packageName.orEmpty(),
+                            )
+                        }
+                        .map {
+                            android.content.ComponentName(
+                                it.activityInfo.packageName,
+                                it.activityInfo.name,
+                            )
+                        }
+                        .toTypedArray()
+                    val chooser = Intent.createChooser(toShare, "Share $displayName").apply {
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        if (exclude.isNotEmpty() &&
+                            android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N
+                        ) {
+                            putExtra(Intent.EXTRA_EXCLUDE_COMPONENTS, exclude)
+                        }
+                    }
+                    startActivity(chooser)
+                }
+            }
+            builder.show()
+            toast("Saved to Downloads/FB2-Diag")
             ObdLogger.logDebug(ObdLogger.Dir.INFO, "Log exported: ${result.displayPath}")
         } catch (e: Exception) {
             toast("Save failed: ${e.message ?: "error"}")
