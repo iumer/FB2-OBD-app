@@ -40,11 +40,23 @@ class ObdLoggerTest {
     fun csv_hasHeaderAndRow() {
         ObdLogger.valueLoggingEnabled = true
         ObdLogger.logSnapshot(VehicleSnapshot(rpm = 900.0, coolantC = 88.0))
+        ObdLogger.logTabMap(
+            "Transmission",
+            mapOf(
+                "Transmission fluid temp" to "86",
+                "Current gear" to "3",
+                "Output shaft RPM" to "n/s",
+            ),
+        )
         val csv = ObdLogger.valuesCsv()
         assertTrue(csv.contains("time_ms,rpm,speed_kmh,coolant1_c"))
         assertTrue(csv.contains("900"))
         assertTrue(csv.contains("88"))
+        assertTrue(csv.contains("# tab_values"))
+        assertTrue(csv.contains("Transmission"))
+        assertTrue(csv.contains("Output shaft RPM"))
         assertTrue(csv.contains("# page_probes"))
+        assertTrue(csv.contains("# debug_log"))
     }
 
     @Test

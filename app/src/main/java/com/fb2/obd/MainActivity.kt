@@ -128,6 +128,7 @@ class MainActivity : ComponentActivity() {
                             ax = event.values[0]
                             ay = event.values[1]
                             az = event.values[2]
+                            viewModel.updatePhoneSensors(ax, ay, az)
                         }
 
                         override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) = Unit
@@ -266,7 +267,6 @@ class MainActivity : ComponentActivity() {
 
                     Screen.SETTINGS -> SettingsScreen(
                         settings = settings,
-                        onToggleValueLogging = viewModel::setValueLogging,
                         onToggleEstimatedGear = viewModel::setShowEstimatedGear,
                         nav = settingsNav,
                         onBack = { screen = Screen.DASHBOARD },

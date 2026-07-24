@@ -198,7 +198,7 @@ fun ValueLogScreen(
 
         if (rows.isEmpty()) {
             Text(
-                text = "No live rows yet. Tap LOG on the dashboard (or enable Record value log in Settings), then drive.",
+                text = "No live rows yet. Tap LOG on the dashboard to capture every tab + probes into one CSV, then drive.",
                 color = TextMuted,
                 fontSize = 13.sp,
             )

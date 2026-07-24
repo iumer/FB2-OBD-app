@@ -71,7 +71,6 @@ data class SettingsNav(
 @Composable
 fun SettingsScreen(
     settings: SettingsState,
-    onToggleValueLogging: (Boolean) -> Unit,
     onToggleEstimatedGear: (Boolean) -> Unit,
     nav: SettingsNav,
     onBack: () -> Unit,
@@ -103,11 +102,11 @@ fun SettingsScreen(
         )
 
         SectionLabel("Logging")
-        ToggleRow(
-            title = "Record value log",
-            subtitle = "Same as the dashboard LOG button. Start = new session; Stop = save a separate timestamped CSV.",
-            checked = settings.valueLogging,
-            onCheckedChange = onToggleValueLogging,
+        Text(
+            text = "Use LOG on the dashboard to capture every tab (Dash, Custom, Idle, Fuel, Trip, Trans, Perf, G-force, Health) plus probes into one CSV. Debug ELM TX/RX stays separate below.",
+            color = TextMuted,
+            fontSize = 12.sp,
+            modifier = Modifier.padding(bottom = 8.dp),
         )
         NavRow("Debug log (raw ELM327)", nav.onDebug)
         NavRow("Saved value logs (CSV)", nav.onValues)

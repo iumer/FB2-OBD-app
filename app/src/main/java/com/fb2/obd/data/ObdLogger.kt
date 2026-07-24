@@ -7,11 +7,12 @@ import java.util.Locale
 
 /**
  * In-memory logging for diagnostics:
- * - a **debug log** of raw ELM327 traffic (TX/RX/INFO lines),
- * - a **value log** of decoded dashboard snapshots (CSV),
- * - a **probe log** of one-shot page probes (custom / fuel / idle / transmission / Honda).
+ * - debug log (raw ELM TX/RX/INFO),
+ * - dashboard snapshot time series,
+ * - per-tab key/value samples (Custom / Idle / Fuel / Trip / Trans / Perf / …),
+ * - page probe results.
  *
- * Bounded ring buffers. Access is synchronized (BT IO thread + UI thread).
+ * Session export packs **everything** into one CSV-ish text file for Share.
  */
 object ObdLogger {
 
@@ -19,6 +20,12 @@ object ObdLogger {
 
     data class DebugLine(val timestampMs: Long, val dir: Dir, val text: String)
     data class ValueRow(val timestampMs: Long, val snapshot: VehicleSnapshot)
+    data class TabValueRow(
+        val timestampMs: Long,
+        val tab: String,
+        val key: String,
+        val value: String,
+    )
     data class ProbeRow(
         val timestampMs: Long,
         val page: String,
@@ -30,18 +37,23 @@ object ObdLogger {
         val raw: String?,
     )
 
-    private const val MAX_DEBUG = 1200
-    private const val MAX_VALUES = 2000
-    private const val MAX_PROBES = 4000
+    private const val MAX_DEBUG = 8000
+    private const val MAX_VALUES = 8000
+    private const val MAX_TAB = 24_000
+    private const val MAX_PROBES = 12_000
 
     private val debug = ArrayDeque<DebugLine>()
     private val values = ArrayDeque<ValueRow>()
+    private val tabValues = ArrayDeque<TabValueRow>()
     private val probes = ArrayDeque<ProbeRow>()
     private val lock = Any()
 
-    /** When true, decoded dashboard snapshots are appended to the value log. */
     @Volatile
     var valueLoggingEnabled: Boolean = false
+
+    /** Only include debug lines at/after this stamp in session export (0 = all). */
+    @Volatile
+    var sessionStartMs: Long = 0L
 
     private val timeFmt = SimpleDateFormat("HH:mm:ss.SSS", Locale.US)
 
@@ -62,10 +74,25 @@ object ObdLogger {
         }
     }
 
-    /**
-     * Log a page probe. Always written to the debug log (Share debug captures it)
-     * and to the probe CSV buffer (exported with the value log).
-     */
+    /** Log a whole tab of key→value pairs (n/s included). */
+    fun logTabMap(tab: String, map: Map<String, String>, nowMs: Long = System.currentTimeMillis()) {
+        if (!valueLoggingEnabled || map.isEmpty()) return
+        synchronized(lock) {
+            map.forEach { (k, v) ->
+                tabValues.addLast(TabValueRow(nowMs, tab, k, v))
+                while (tabValues.size > MAX_TAB) tabValues.removeFirst()
+            }
+        }
+    }
+
+    fun logTabKv(tab: String, key: String, value: String, nowMs: Long = System.currentTimeMillis()) {
+        if (!valueLoggingEnabled) return
+        synchronized(lock) {
+            tabValues.addLast(TabValueRow(nowMs, tab, key, value))
+            while (tabValues.size > MAX_TAB) tabValues.removeFirst()
+        }
+    }
+
     fun logProbe(page: String, results: List<PidProbeResult>, nowMs: Long = System.currentTimeMillis()) {
         if (results.isEmpty()) {
             logDebug(Dir.INFO, "PROBE [$page] (no results)")
@@ -93,6 +120,10 @@ object ObdLogger {
                     ),
                 )
                 while (probes.size > MAX_PROBES) probes.removeFirst()
+                if (valueLoggingEnabled) {
+                    tabValues.addLast(TabValueRow(nowMs, page, r.pid.label, valueText))
+                    while (tabValues.size > MAX_TAB) tabValues.removeFirst()
+                }
                 val line = "PROBE [$page] ${r.pid.request} ${r.pid.label} = $valueText" +
                     (r.raw?.let { " | raw=${it.take(60)}" } ?: "")
                 debug.addLast(
@@ -112,12 +143,15 @@ object ObdLogger {
 
     fun valueRows(): List<ValueRow> = synchronized(lock) { values.toList() }
 
+    fun tabValueRows(): List<TabValueRow> = synchronized(lock) { tabValues.toList() }
+
     fun probeRows(): List<ProbeRow> = synchronized(lock) { probes.toList() }
 
     fun clearDebug() = synchronized(lock) { debug.clear() }
 
     fun clearValues() = synchronized(lock) {
         values.clear()
+        tabValues.clear()
         probes.clear()
     }
 
@@ -125,7 +159,10 @@ object ObdLogger {
         debug.joinToString("\n") { "${timeFmt.format(it.timestampMs)} ${it.dir} ${it.text}" }
     }
 
-    /** Dashboard snapshots + page probe results as one shareable text/CSV blob. */
+    /**
+     * Full session export: dashboard time series + per-tab values + probes + debug.
+     * Designed so a shared file has every page's n/s and live readings.
+     */
     fun valuesCsv(): String = synchronized(lock) {
         val header = "time_ms,rpm,speed_kmh,coolant1_c,coolant2_c,intake_c,ambient_c," +
             "load_pct,throttle_pct,timing,maf_gps,map_kpa,stft_pct,ltft_pct,ecu_v,gear"
@@ -138,6 +175,13 @@ object ObdLogger {
             ).joinToString(",") { it?.toString() ?: "" }
         }
         val snapCsv = if (rows.isEmpty()) header else "$header\n$rows"
+
+        val tabHeader = "time_ms,tab,key,value"
+        val tabBody = tabValues.joinToString("\n") { t ->
+            listOf(t.timestampMs, csvEscape(t.tab), csvEscape(t.key), csvEscape(t.value))
+                .joinToString(",")
+        }
+        val tabCsv = if (tabBody.isEmpty()) tabHeader else "$tabHeader\n$tabBody"
 
         val probeHeader = "time_ms,page,pid_id,label,request,supported,value,raw"
         val probeBody = probes.joinToString("\n") { p ->
@@ -154,7 +198,35 @@ object ObdLogger {
         }
         val probeCsv = if (probeBody.isEmpty()) probeHeader else "$probeHeader\n$probeBody"
 
-        "# dashboard_snapshots\n$snapCsv\n\n# page_probes\n$probeCsv"
+        val start = sessionStartMs
+        val debugSlice = if (start > 0L) debug.filter { it.timestampMs >= start } else debug.toList()
+        val debugHeader = "time_ms,time,dir,text"
+        val debugBody = debugSlice.joinToString("\n") { d ->
+            listOf(
+                d.timestampMs,
+                csvEscape(timeFmt.format(d.timestampMs)),
+                d.dir.name,
+                csvEscape(d.text),
+            ).joinToString(",")
+        }
+        val debugCsv = if (debugBody.isEmpty()) debugHeader else "$debugHeader\n$debugBody"
+
+        buildString {
+            appendLine("# fb2_session_log")
+            appendLine("# sections: dashboard_snapshots | tab_values | page_probes | debug_log")
+            appendLine()
+            appendLine("# dashboard_snapshots")
+            appendLine(snapCsv)
+            appendLine()
+            appendLine("# tab_values")
+            appendLine(tabCsv)
+            appendLine()
+            appendLine("# page_probes")
+            appendLine(probeCsv)
+            appendLine()
+            appendLine("# debug_log")
+            append(debugCsv)
+        }
     }
 
     private fun csvEscape(s: String): String {
