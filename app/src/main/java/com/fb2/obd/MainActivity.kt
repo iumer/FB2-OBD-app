@@ -101,6 +101,7 @@ class MainActivity : ComponentActivity() {
                 val savedLogs by viewModel.savedLogs.collectAsState()
                 val deepSearch by viewModel.deepSearch.collectAsState()
                 val deepFoundValues by viewModel.deepFoundValues.collectAsState()
+                val healthThresholds by viewModel.healthThresholds.collectAsState()
 
                 var screen by remember { mutableStateOf(Screen.DASHBOARD) }
                 // Lives above the screen switch so Settings scroll is kept when opening a sub-page.
@@ -264,6 +265,9 @@ class MainActivity : ComponentActivity() {
                         onRefreshHealth = viewModel::recalcHealth,
                         deepFoundValues = deepFoundValues,
                         onDeepSearch = viewModel::requestDeepSearch,
+                        healthThresholds = healthThresholds,
+                        onThresholdFieldChange = viewModel::updateHealthThresholdField,
+                        onResetThresholds = viewModel::resetHealthThresholds,
                     )
 
                     Screen.SETTINGS -> SettingsScreen(

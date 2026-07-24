@@ -1,8 +1,11 @@
+@file:OptIn(ExperimentalFoundationApi::class)
+
 package com.fb2.obd.ui
 
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -51,10 +54,12 @@ import com.fb2.obd.DashboardUiState
 import com.fb2.obd.PerformanceState
 import com.fb2.obd.TripState
 import com.fb2.obd.data.ConnectionState
+import com.fb2.obd.obd.EditableMetric
 import com.fb2.obd.obd.GearSource
 import com.fb2.obd.obd.Health
 import com.fb2.obd.obd.HealthEvaluator
 import com.fb2.obd.obd.HealthScore
+import com.fb2.obd.obd.HealthThresholds
 import com.fb2.obd.obd.LiveSnapshotOverlay
 import com.fb2.obd.obd.MetricStatus
 import com.fb2.obd.obd.ObdPid
@@ -86,7 +91,6 @@ private val DashPageTitles = listOf(
  * Landscape diagnostic cluster optimized for dense sensor visibility:
  * compact RPM/Gear/Speed strip on top; swipeable live pages below.
  */
-@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun DashboardScreen(
     state: DashboardUiState,
@@ -123,11 +127,15 @@ fun DashboardScreen(
     onRefreshHealth: () -> Unit = {},
     deepFoundValues: Map<String, String> = emptyMap(),
     onDeepSearch: (label: String, pidId: String?) -> Unit = { _, _ -> },
+    healthThresholds: HealthThresholds = HealthThresholds.DEFAULT,
+    onThresholdFieldChange: (id: String, value: Double) -> Unit = { _, _ -> },
+    onResetThresholds: () -> Unit = {},
 ) {
     val s = state.snapshot
     val pagerState = rememberPagerState(pageCount = { DashPageTitles.size })
     val scope = rememberCoroutineScope()
     var pickerSlot by remember { mutableStateOf<Int?>(null) }
+    var editMetric by remember { mutableStateOf<EditableMetric?>(null) }
 
     LaunchedEffect(pagerState.currentPage) {
         when (pagerState.currentPage) {
@@ -164,6 +172,8 @@ fun DashboardScreen(
                 s.gearSource
             },
             gearConfidencePct = s.gearConfidencePct,
+            thresholds = healthThresholds,
+            onEditRpm = { editMetric = EditableMetric.RPM },
         )
 
         PageTabs(
@@ -188,8 +198,10 @@ fun DashboardScreen(
                         extraValues = extraValues,
                         deepFoundValues = deepFoundValues,
                         catalog = catalog,
+                        thresholds = healthThresholds,
                         onEmptySlotClick = { pickerSlot = it },
                         onDeepSearch = onDeepSearch,
+                        onEditThresholds = { editMetric = it },
                     )
                     1 -> DenseSensorGridPage(
                         title = "Custom sensors",
@@ -200,6 +212,8 @@ fun DashboardScreen(
                         secondaryAction = "Manage" to onManageCustom,
                         deepFoundValues = deepFoundValues,
                         onDeepSearch = onDeepSearch,
+                        thresholds = healthThresholds,
+                        onEditThresholds = { editMetric = it },
                     )
                     2 -> DenseSensorGridPage(
                         title = "Cold start / rough idle",
@@ -212,6 +226,8 @@ fun DashboardScreen(
                         action = "Probe" to onRefreshIdle,
                         deepFoundValues = deepFoundValues,
                         onDeepSearch = onDeepSearch,
+                        thresholds = healthThresholds,
+                        onEditThresholds = { editMetric = it },
                     )
                     3 -> DenseSensorGridPage(
                         title = "Fuel system",
@@ -220,6 +236,8 @@ fun DashboardScreen(
                         action = "Refresh" to onRefreshFuel,
                         deepFoundValues = deepFoundValues,
                         onDeepSearch = onDeepSearch,
+                        thresholds = healthThresholds,
+                        onEditThresholds = { editMetric = it },
                     )
                     4 -> TripScreen(
                         distanceKm = trip.distanceKm,
@@ -239,6 +257,8 @@ fun DashboardScreen(
                         action = "Probe" to onRefreshTrans,
                         deepFoundValues = deepFoundValues,
                         onDeepSearch = onDeepSearch,
+                        thresholds = healthThresholds,
+                        onEditThresholds = { editMetric = it },
                     )
                     6 -> PerformanceScreen(
                         state = performance,
@@ -276,6 +296,17 @@ fun DashboardScreen(
             onDismiss = { pickerSlot = null },
         )
     }
+
+    val metric = editMetric
+    if (metric != null) {
+        ThresholdEditorDialog(
+            metric = metric,
+            thresholds = healthThresholds,
+            onChangeField = onThresholdFieldChange,
+            onResetAll = onResetThresholds,
+            onDismiss = { editMetric = null },
+        )
+    }
 }
 
 /** Thin digital strip — fixed height; fonts sized so digits are never clipped. */
@@ -286,8 +317,10 @@ private fun CompactHeroStrip(
     gear: Int?,
     gearSource: GearSource,
     gearConfidencePct: Int? = null,
+    thresholds: HealthThresholds = HealthThresholds.DEFAULT,
+    onEditRpm: (() -> Unit)? = null,
 ) {
-    val rpmStatus = HealthEvaluator.rpm(rpm)
+    val rpmStatus = HealthEvaluator.rpm(rpm, thresholds)
     val speedStatus = HealthEvaluator.speed(speedKmh)
     Row(
         modifier = Modifier
@@ -310,7 +343,15 @@ private fun CompactHeroStrip(
                 rpmStatus.health.color()
             },
             valueColor = if (rpmStatus.health == Health.UNKNOWN) TextPrimary else rpmStatus.health.color(),
-            modifier = Modifier.weight(1f),
+            modifier = Modifier
+                .weight(1f)
+                .then(
+                    if (onEditRpm != null) {
+                        Modifier.combinedClickable(onClick = {}, onLongClick = onEditRpm)
+                    } else {
+                        Modifier
+                    },
+                ),
         )
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -442,34 +483,37 @@ private fun MetricsPage(
     extraValues: Map<String, String>,
     deepFoundValues: Map<String, String>,
     catalog: List<PidDefinition>,
+    thresholds: HealthThresholds,
     onEmptySlotClick: (Int) -> Unit,
     onDeepSearch: (label: String, pidId: String?) -> Unit,
+    onEditThresholds: (EditableMetric) -> Unit,
 ) {
     val engineRunning = (snapshot.rpm ?: 0.0) > 0.0
+    val t = thresholds
     val baseTiles = listOf(
         TileData(
             "Coolant 1", snapshot.coolantC.fmt(), "\u00B0C",
-            HealthEvaluator.coolant(snapshot.coolantC), ObdPid.COOLANT_TEMP,
+            HealthEvaluator.coolant(snapshot.coolantC, t), ObdPid.COOLANT_TEMP,
         ),
         TileData(
             "Coolant 2", snapshot.coolant2C.fmt(), "\u00B0C",
-            HealthEvaluator.coolant(snapshot.coolant2C), ObdPid.COOLANT_TEMP_2,
+            HealthEvaluator.coolant(snapshot.coolant2C, t), ObdPid.COOLANT_TEMP_2,
         ),
         TileData(
             "Battery", snapshot.batteryVolts.fmt(1), "V",
-            HealthEvaluator.battery(snapshot.batteryVolts, engineRunning), ObdPid.CONTROL_MODULE_VOLTAGE,
+            HealthEvaluator.battery(snapshot.batteryVolts, engineRunning, t), ObdPid.CONTROL_MODULE_VOLTAGE,
         ),
         TileData(
             "Intake", snapshot.intakeC.fmt(), "\u00B0C",
-            HealthEvaluator.intakeAir(snapshot.intakeC), ObdPid.INTAKE_TEMP,
+            HealthEvaluator.intakeAir(snapshot.intakeC, t), ObdPid.INTAKE_TEMP,
         ),
         TileData(
             "Ambient", snapshot.ambientC.fmt(), "\u00B0C",
-            HealthEvaluator.ambient(snapshot.ambientC), ObdPid.AMBIENT_TEMP,
+            HealthEvaluator.ambient(snapshot.ambientC, t), ObdPid.AMBIENT_TEMP,
         ),
         TileData(
             "Load", snapshot.engineLoadPct.fmt(), "%",
-            HealthEvaluator.engineLoad(snapshot.engineLoadPct), ObdPid.ENGINE_LOAD,
+            HealthEvaluator.engineLoad(snapshot.engineLoadPct, t), ObdPid.ENGINE_LOAD,
         ),
         TileData(
             "Throttle", snapshot.throttlePct.fmt(), "%",
@@ -477,23 +521,23 @@ private fun MetricsPage(
         ),
         TileData(
             "STFT", snapshot.stftPct.fmt(1), "%",
-            HealthEvaluator.fuelTrim(snapshot.stftPct), ObdPid.STFT_B1,
+            HealthEvaluator.fuelTrim(snapshot.stftPct, t), ObdPid.STFT_B1,
         ),
         TileData(
             "LTFT", snapshot.ltftPct.fmt(1), "%",
-            HealthEvaluator.fuelTrim(snapshot.ltftPct), ObdPid.LTFT_B1,
+            HealthEvaluator.fuelTrim(snapshot.ltftPct, t), ObdPid.LTFT_B1,
         ),
         TileData(
             "MAF", snapshot.mafGps.fmt(1), "g/s",
-            HealthEvaluator.maf(snapshot.mafGps, snapshot.rpm, snapshot.speedKmh), ObdPid.MAF,
+            HealthEvaluator.maf(snapshot.mafGps, snapshot.rpm, snapshot.speedKmh, t), ObdPid.MAF,
         ),
         TileData(
             "MAP", snapshot.mapKpa.fmt(), "kPa",
-            HealthEvaluator.map(snapshot.mapKpa, snapshot.throttlePct), ObdPid.INTAKE_MAP,
+            HealthEvaluator.map(snapshot.mapKpa, snapshot.throttlePct, t), ObdPid.INTAKE_MAP,
         ),
         TileData(
             "Timing", snapshot.timingAdvance.fmt(), "\u00B0",
-            HealthEvaluator.timing(snapshot.timingAdvance), ObdPid.TIMING_ADVANCE,
+            HealthEvaluator.timing(snapshot.timingAdvance, t), ObdPid.TIMING_ADVANCE,
         ),
     )
 
@@ -533,6 +577,9 @@ private fun MetricsPage(
                     { onDeepSearch(t.label, t.pid?.request) }
                 } else {
                     null
+                },
+                onEditThresholds = EditableMetric.fromTileLabel(t.label)?.let { m ->
+                    { onEditThresholds(m) }
                 },
                 modifier = Modifier.fillMaxWidth(),
             )
@@ -579,6 +626,8 @@ private fun DenseSensorGridPage(
     tip: String? = null,
     deepFoundValues: Map<String, String> = emptyMap(),
     onDeepSearch: (label: String, pidId: String?) -> Unit = { _, _ -> },
+    thresholds: HealthThresholds = HealthThresholds.DEFAULT,
+    onEditThresholds: (EditableMetric) -> Unit = {},
 ) {
     Column(modifier = Modifier.fillMaxSize()) {
         Row(
@@ -647,7 +696,65 @@ private fun DenseSensorGridPage(
                     effective.startsWith("n/s") -> "n/s"
                     else -> effective.substringBefore(" ")
                 }
-                val transStatus = if (unsupported) null else HealthEvaluator.forTransmissionLabel(label, effective)
+                val transStatus = if (unsupported) {
+                    null
+                } else {
+                    HealthEvaluator.forTransmissionLabel(label, effective, thresholds)
+                        ?: EditableMetric.fromTileLabel(label)?.let { metric ->
+                            // Custom / Idle / Fuel pages: colour by known metric if label matches.
+                            when (metric) {
+                                EditableMetric.COOLANT -> HealthEvaluator.coolant(
+                                    effective.substringBefore(" ").toDoubleOrNull(),
+                                    thresholds,
+                                )
+                                EditableMetric.BATTERY -> HealthEvaluator.battery(
+                                    effective.substringBefore(" ").toDoubleOrNull(),
+                                    true,
+                                    thresholds,
+                                )
+                                EditableMetric.FUEL_TRIM -> HealthEvaluator.fuelTrim(
+                                    effective.substringBefore(" ").toDoubleOrNull(),
+                                    thresholds,
+                                )
+                                EditableMetric.ENGINE_LOAD -> HealthEvaluator.engineLoad(
+                                    effective.substringBefore(" ").toDoubleOrNull(),
+                                    thresholds,
+                                )
+                                EditableMetric.INTAKE -> HealthEvaluator.intakeAir(
+                                    effective.substringBefore(" ").toDoubleOrNull(),
+                                    thresholds,
+                                )
+                                EditableMetric.MAF -> HealthEvaluator.maf(
+                                    effective.substringBefore(" ").toDoubleOrNull(),
+                                    null,
+                                    null,
+                                    thresholds,
+                                )
+                                EditableMetric.MAP -> HealthEvaluator.map(
+                                    effective.substringBefore(" ").toDoubleOrNull(),
+                                    null,
+                                    thresholds,
+                                )
+                                EditableMetric.TIMING -> HealthEvaluator.timing(
+                                    effective.substringBefore(" ").toDoubleOrNull(),
+                                    thresholds,
+                                )
+                                EditableMetric.RPM -> HealthEvaluator.rpm(
+                                    effective.substringBefore(" ").toDoubleOrNull(),
+                                    thresholds,
+                                )
+                                EditableMetric.ATF -> HealthEvaluator.atfTemp(
+                                    effective.substringBefore(" ").toDoubleOrNull(),
+                                    thresholds,
+                                )
+                                EditableMetric.TC_SLIP -> HealthEvaluator.tcSlip(
+                                    effective.substringBefore(" ").toDoubleOrNull(),
+                                    thresholds,
+                                )
+                                else -> null
+                            }
+                        }
+                }
                 DenseTile(
                     label = label,
                     value = displayValue,
@@ -660,6 +767,9 @@ private fun DenseSensorGridPage(
                         { onDeepSearch(label, null) }
                     } else {
                         null
+                    },
+                    onEditThresholds = EditableMetric.fromTileLabel(label)?.let { m ->
+                        { onEditThresholds(m) }
                     },
                     modifier = Modifier.fillMaxWidth(),
                 )
@@ -678,6 +788,7 @@ private fun DenseTile(
     muted: Boolean = false,
     deepSearchHint: Boolean = false,
     onDeepSearch: (() -> Unit)? = null,
+    onEditThresholds: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     val valueColor = when {
@@ -693,19 +804,19 @@ private fun DenseTile(
             .height(68.dp)
             .clip(RoundedCornerShape(10.dp))
             .background(Surface)
-            .then(
-                if (onDeepSearch != null) {
-                    Modifier.clickable {
-                        val now = System.currentTimeMillis()
-                        taps = if (now - lastTapMs < 700L) taps + 1 else 1
-                        lastTapMs = now
-                        if (taps >= 3) {
-                            taps = 0
-                            onDeepSearch()
-                        }
+            .combinedClickable(
+                onClick = {
+                    if (onDeepSearch == null) return@combinedClickable
+                    val now = System.currentTimeMillis()
+                    taps = if (now - lastTapMs < 700L) taps + 1 else 1
+                    lastTapMs = now
+                    if (taps >= 3) {
+                        taps = 0
+                        onDeepSearch()
                     }
-                } else {
-                    Modifier
+                },
+                onLongClick = {
+                    onEditThresholds?.invoke()
                 },
             )
             .padding(horizontal = 7.dp, vertical = 4.dp),
