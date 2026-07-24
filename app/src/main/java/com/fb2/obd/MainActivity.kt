@@ -53,26 +53,21 @@ import com.fb2.obd.ui.DashboardScreen
 import com.fb2.obd.ui.DebugLogScreen
 import com.fb2.obd.ui.DeepSearchDialogs
 import com.fb2.obd.ui.DiagnosticsDepthScreen
+import com.fb2.obd.ui.DiagnosticsHubScreen
+import com.fb2.obd.ui.DiagnosticsNav
 import com.fb2.obd.ui.FaultsScreen
-import com.fb2.obd.ui.FuelPageScreen
-import com.fb2.obd.ui.GForceScreen
-import com.fb2.obd.ui.HealthScoresScreen
 import com.fb2.obd.ui.HiddenHondaMenuScreen
-import com.fb2.obd.ui.IdleDiagnosticsScreen
 import com.fb2.obd.ui.MaintenanceScreen
-import com.fb2.obd.ui.PerformanceScreen
 import com.fb2.obd.ui.SettingsNav
 import com.fb2.obd.ui.SettingsScreen
-import com.fb2.obd.ui.TransmissionDashScreen
-import com.fb2.obd.ui.TripScreen
 import com.fb2.obd.ui.ValueLogScreen
 import com.fb2.obd.ui.VehicleInfoScreen
 import com.fb2.obd.ui.theme.FB2Theme
 import kotlinx.coroutines.delay
 
 private enum class Screen {
-    DASHBOARD, SETTINGS, FAULTS, PERFORMANCE, DEBUG_LOG, VALUE_LOG,
-    CUSTOM, FUEL, IDLE, TRIP, VEHICLE, DEEP_DIAG, TRANS, HEALTH, MAINTENANCE, HONDA, GFORCE,
+    DASHBOARD, SETTINGS, DIAG_HUB, FAULTS, DEBUG_LOG, VALUE_LOG,
+    CUSTOM, VEHICLE, DEEP_DIAG, MAINTENANCE, HONDA,
 }
 
 class MainActivity : ComponentActivity() {
@@ -170,45 +165,30 @@ class MainActivity : ComponentActivity() {
                 BackHandler {
                     when (screen) {
                         Screen.DASHBOARD -> showExitConfirm = true
-                        Screen.SETTINGS -> screen = Screen.DASHBOARD
-                        else -> screen = Screen.SETTINGS
+                        Screen.SETTINGS, Screen.DIAG_HUB, Screen.CUSTOM -> screen = Screen.DASHBOARD
+                        Screen.DEBUG_LOG, Screen.VALUE_LOG -> screen = Screen.SETTINGS
+                        Screen.FAULTS, Screen.DEEP_DIAG, Screen.VEHICLE, Screen.HONDA, Screen.MAINTENANCE ->
+                            screen = Screen.DIAG_HUB
                     }
                 }
 
                 val settingsNav = SettingsNav(
-                    onFaults = { screen = Screen.FAULTS },
-                    onPerformance = { screen = Screen.PERFORMANCE },
-                    onCustom = { screen = Screen.CUSTOM },
-                    onFuel = {
-                        viewModel.refreshFuelPage()
-                        screen = Screen.FUEL
-                    },
-                    onIdle = {
-                        viewModel.refreshIdleDiagnostics()
-                        screen = Screen.IDLE
-                    },
-                    onTrip = { screen = Screen.TRIP },
-                    onVehicle = {
-                        viewModel.readVehicleInfo()
-                        screen = Screen.VEHICLE
-                    },
-                    onDeepDiag = { screen = Screen.DEEP_DIAG },
-                    onTrans = {
-                        viewModel.refreshTransmission()
-                        screen = Screen.TRANS
-                    },
-                    onHealth = {
-                        viewModel.recalcHealth()
-                        screen = Screen.HEALTH
-                    },
-                    onMaintenance = { screen = Screen.MAINTENANCE },
-                    onHonda = { screen = Screen.HONDA },
-                    onGForce = { screen = Screen.GFORCE },
                     onDebug = { screen = Screen.DEBUG_LOG },
                     onValues = {
                         viewModel.refreshSavedLogs()
                         screen = Screen.VALUE_LOG
                     },
+                )
+
+                val diagnosticsNav = DiagnosticsNav(
+                    onFaults = { screen = Screen.FAULTS },
+                    onDeepDiag = { screen = Screen.DEEP_DIAG },
+                    onVehicle = {
+                        viewModel.readVehicleInfo()
+                        screen = Screen.VEHICLE
+                    },
+                    onHonda = { screen = Screen.HONDA },
+                    onMaintenance = { screen = Screen.MAINTENANCE },
                 )
 
                 when (screen) {
@@ -231,6 +211,7 @@ class MainActivity : ComponentActivity() {
                             }
                         },
                         onSettingsClick = { screen = Screen.SETTINGS },
+                        onDiagnosticsClick = { screen = Screen.DIAG_HUB },
                         onToggleLogging = {
                             if (settings.valueLogging) {
                                 val saved = viewModel.stopValueLogging()
@@ -265,10 +246,20 @@ class MainActivity : ComponentActivity() {
                         idleValues = idleDiag.values,
                         idleTips = idleDiag.tips,
                         transValues = transValues,
+                        trip = trip,
+                        performance = performance,
+                        health = health,
+                        gForceAx = ax,
+                        gForceAy = ay,
+                        gForceAz = az,
                         onRefreshCustom = viewModel::probeCustomSelected,
                         onRefreshIdle = viewModel::refreshIdleDiagnostics,
                         onRefreshFuel = viewModel::refreshFuelPage,
                         onRefreshTrans = viewModel::refreshTransmission,
+                        onManageCustom = { screen = Screen.CUSTOM },
+                        onResetTrip = viewModel::resetTrip,
+                        onResetPerformance = viewModel::resetPerformance,
+                        onRefreshHealth = viewModel::recalcHealth,
                         deepFoundValues = deepFoundValues,
                         onDeepSearch = viewModel::requestDeepSearch,
                     )
@@ -283,6 +274,12 @@ class MainActivity : ComponentActivity() {
                         scrollState = settingsScrollState,
                     )
 
+                    Screen.DIAG_HUB -> DiagnosticsHubScreen(
+                        nav = diagnosticsNav,
+                        onBack = { screen = Screen.DASHBOARD },
+                        modifier = Modifier.fillMaxSize(),
+                    )
+
                     Screen.CUSTOM -> CustomSensorsScreen(
                         catalog = viewModel.pidCatalog,
                         selectedIds = custom.selectedIds,
@@ -292,35 +289,7 @@ class MainActivity : ComponentActivity() {
                         onFilter = viewModel::setCustomFilter,
                         onToggle = viewModel::toggleCustomPid,
                         onProbeSelected = viewModel::probeCustomSelected,
-                        onBack = { screen = Screen.SETTINGS },
-                        modifier = Modifier.fillMaxSize(),
-                    )
-
-                    Screen.FUEL -> FuelPageScreen(
-                        values = fuelValues,
-                        onRefresh = viewModel::refreshFuelPage,
-                        onBack = { screen = Screen.SETTINGS },
-                        modifier = Modifier.fillMaxSize(),
-                    )
-
-                    Screen.IDLE -> IdleDiagnosticsScreen(
-                        values = idleDiag.values,
-                        tips = idleDiag.tips,
-                        loading = idleDiag.loading,
-                        onRefresh = viewModel::refreshIdleDiagnostics,
-                        onBack = { screen = Screen.SETTINGS },
-                        modifier = Modifier.fillMaxSize(),
-                    )
-
-                    Screen.TRIP -> TripScreen(
-                        distanceKm = trip.distanceKm,
-                        kmPerL = trip.kmPerLiter,
-                        lPer100 = trip.litersPer100,
-                        cost = trip.cost,
-                        idleSec = trip.idleSeconds,
-                        fuelPrice = trip.fuelPrice,
-                        onReset = viewModel::resetTrip,
-                        onBack = { screen = Screen.SETTINGS },
+                        onBack = { screen = Screen.DASHBOARD },
                         modifier = Modifier.fillMaxSize(),
                     )
 
@@ -328,7 +297,7 @@ class MainActivity : ComponentActivity() {
                         info = vehicleInfo,
                         loading = vehicleInfoLoading,
                         onRefresh = viewModel::readVehicleInfo,
-                        onBack = { screen = Screen.SETTINGS },
+                        onBack = { screen = Screen.DIAG_HUB },
                         modifier = Modifier.fillMaxSize(),
                     )
 
@@ -339,28 +308,13 @@ class MainActivity : ComponentActivity() {
                         mode06 = deepDiag.mode06,
                         loading = deepDiag.loading,
                         onScan = viewModel::scanDeepDiagnostics,
-                        onBack = { screen = Screen.SETTINGS },
-                        modifier = Modifier.fillMaxSize(),
-                    )
-
-                    Screen.TRANS -> TransmissionDashScreen(
-                        values = transValues,
-                        health = health,
-                        onRefresh = viewModel::refreshTransmission,
-                        onBack = { screen = Screen.SETTINGS },
-                        modifier = Modifier.fillMaxSize(),
-                    )
-
-                    Screen.HEALTH -> HealthScoresScreen(
-                        score = health,
-                        onRefresh = viewModel::recalcHealth,
-                        onBack = { screen = Screen.SETTINGS },
+                        onBack = { screen = Screen.DIAG_HUB },
                         modifier = Modifier.fillMaxSize(),
                     )
 
                     Screen.MAINTENANCE -> MaintenanceScreen(
                         entries = maintenance,
-                        onBack = { screen = Screen.SETTINGS },
+                        onBack = { screen = Screen.DIAG_HUB },
                         modifier = Modifier.fillMaxSize(),
                     )
 
@@ -368,15 +322,7 @@ class MainActivity : ComponentActivity() {
                         results = hondaScan,
                         loading = hondaScanning,
                         onScan = viewModel::scanHondaModules,
-                        onBack = { screen = Screen.SETTINGS },
-                        modifier = Modifier.fillMaxSize(),
-                    )
-
-                    Screen.GFORCE -> GForceScreen(
-                        ax = ax,
-                        ay = ay,
-                        az = az,
-                        onBack = { screen = Screen.SETTINGS },
+                        onBack = { screen = Screen.DIAG_HUB },
                         modifier = Modifier.fillMaxSize(),
                     )
 
@@ -384,16 +330,8 @@ class MainActivity : ComponentActivity() {
                         state = faults,
                         onRead = { viewModel.readFaults() },
                         onClear = { viewModel.clearFaults() },
-                        onBack = { screen = Screen.SETTINGS },
+                        onBack = { screen = Screen.DIAG_HUB },
                         modifier = Modifier.fillMaxSize(),
-                    )
-
-                    Screen.PERFORMANCE -> PerformanceScreen(
-                        state = performance,
-                        onReset = { viewModel.resetPerformance() },
-                        onBack = { screen = Screen.SETTINGS },
-                        modifier = Modifier.fillMaxSize(),
-                        phase = performance.phase,
                     )
 
                     Screen.DEBUG_LOG -> {
