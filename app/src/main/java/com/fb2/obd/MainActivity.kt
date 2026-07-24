@@ -39,12 +39,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
+import androidx.core.content.FileProvider
 import com.fb2.obd.ui.theme.Accent
 import com.fb2.obd.ui.theme.Background
 import com.fb2.obd.ui.theme.TextPrimary
 import com.fb2.obd.data.DemoObdSource
 import com.fb2.obd.data.Elm327BluetoothSource
 import com.fb2.obd.data.ObdLogger
+import com.fb2.obd.data.SavedLogFile
 import com.fb2.obd.obd.LiveSnapshotOverlay
 import com.fb2.obd.ui.BtDeviceUi
 import com.fb2.obd.ui.ConnectDialog
@@ -63,6 +65,7 @@ import com.fb2.obd.ui.SettingsScreen
 import com.fb2.obd.ui.ValueLogScreen
 import com.fb2.obd.ui.VehicleInfoScreen
 import com.fb2.obd.ui.theme.FB2Theme
+import java.io.File
 import kotlinx.coroutines.delay
 
 private enum class Screen {
@@ -356,19 +359,16 @@ class MainActivity : ComponentActivity() {
                         val rows = remember(tick) { ObdLogger.valueRows() }
                         ValueLogScreen(
                             rows = rows,
-                            onShare = { shareText("FB2 Diag value log (CSV)", ObdLogger.valuesCsv()) },
+                            onShare = {
+                                shareCsvContent("FB2-Diag-current.csv", ObdLogger.valuesCsv())
+                            },
                             onClear = { ObdLogger.clearValues(); tick++ },
                             onBack = { screen = Screen.SETTINGS },
                             modifier = Modifier.fillMaxSize(),
                             savedFiles = savedLogs,
                             loggingActive = settings.valueLogging,
                             onShareFile = { file ->
-                                val body = viewModel.readSavedLog(file.fileName)
-                                if (body != null) {
-                                    shareText(file.fileName, body)
-                                } else {
-                                    toast("Could not read ${file.fileName}")
-                                }
+                                shareSavedLogFile(file)
                             },
                             onDeleteFile = { file ->
                                 viewModel.deleteSavedLog(file.fileName)
@@ -431,12 +431,62 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun shareText(subject: String, text: String) {
-        val intent = Intent(Intent.ACTION_SEND).apply {
-            type = "text/plain"
-            putExtra(Intent.EXTRA_SUBJECT, subject)
-            putExtra(Intent.EXTRA_TEXT, text)
+        try {
+            val intent = Intent(Intent.ACTION_SEND).apply {
+                type = "text/plain"
+                putExtra(Intent.EXTRA_SUBJECT, subject)
+                putExtra(Intent.EXTRA_TEXT, text)
+            }
+            startActivity(Intent.createChooser(intent, subject))
+        } catch (e: Exception) {
+            toast("Share failed: ${e.message ?: "no app"}")
         }
-        startActivity(Intent.createChooser(intent, subject))
+    }
+
+    /** Share a saved session CSV as a real file (WhatsApp / Drive / email). */
+    private fun shareSavedLogFile(file: SavedLogFile) {
+        val disk = File(file.absolutePath)
+        if (!disk.isFile) {
+            toast("Could not find ${file.fileName}")
+            return
+        }
+        shareFileUri(disk, file.fileName)
+    }
+
+    /**
+     * Write [csv] to cache and open the system share sheet.
+     * Avoids Intent size limits that break EXTRA_TEXT for larger logs.
+     */
+    private fun shareCsvContent(fileName: String, csv: String) {
+        try {
+            val dir = File(cacheDir, "share").also { it.mkdirs() }
+            val out = File(dir, fileName)
+            out.writeText(csv)
+            shareFileUri(out, fileName)
+        } catch (e: Exception) {
+            toast("Share failed: ${e.message ?: "write error"}")
+        }
+    }
+
+    private fun shareFileUri(file: File, displayName: String) {
+        try {
+            val uri = FileProvider.getUriForFile(
+                this,
+                "${packageName}.fileprovider",
+                file,
+            )
+            val intent = Intent(Intent.ACTION_SEND).apply {
+                type = "text/csv"
+                putExtra(Intent.EXTRA_STREAM, uri)
+                putExtra(Intent.EXTRA_SUBJECT, displayName)
+                putExtra(Intent.EXTRA_TEXT, "FB2 Diag log: $displayName")
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                clipData = android.content.ClipData.newUri(contentResolver, displayName, uri)
+            }
+            startActivity(Intent.createChooser(intent, "Share $displayName"))
+        } catch (e: Exception) {
+            toast("Share failed: ${e.message ?: "no app"}")
+        }
     }
 
     private fun toast(message: String) {

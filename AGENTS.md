@@ -85,5 +85,9 @@ non-obvious cloud specifics.
 - **Event logging** (`DiagnosticEventTracker` → `ObdLogger.logEvent`) always
   records zone/gear/ELM/DTC/fuel-loop transitions into the `# events` CSV
   section — independent of the continuous value LOG toggle.
+- **Value LOG** captures **main Dash only** (hero RPM/Speed/Gear + Dash tiles
+  including any `+` extras). It does **not** dump Fuel/Trip/Trans/Perf/etc.
+  Saved CSVs are lean (`events` + `dashboard_snapshots` + `dash_tiles`) so Share
+  works via FileProvider. Share opens the system chooser (WhatsApp / Drive / email).
 - MAF/MAP health is context-aware (idle / cruise / heavy or WOT); pass RPM,
   speed, and throttle into `HealthEvaluator.maf` / `map`.

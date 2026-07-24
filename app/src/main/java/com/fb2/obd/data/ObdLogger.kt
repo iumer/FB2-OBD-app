@@ -7,13 +7,12 @@ import java.util.Locale
 
 /**
  * In-memory logging for diagnostics:
- * - debug log (raw ELM TX/RX/INFO),
+ * - debug log (raw ELM TX/RX/INFO) — separate screen / share,
  * - event log (important state transitions — always on),
- * - dashboard snapshot time series,
- * - per-tab key/value samples (Custom / Idle / Fuel / Trip / Trans / Perf / …),
- * - page probe results.
+ * - main Dash snapshot time series + dash tile extras (LOG toggle).
  *
- * Session export packs **everything** into one CSV-ish text file for Share.
+ * Value-log session export is intentionally lean (events + main Dash only)
+ * so short drives stay shareable via WhatsApp / email.
  */
 object ObdLogger {
 
@@ -140,10 +139,7 @@ object ObdLogger {
                     ),
                 )
                 while (probes.size > MAX_PROBES) probes.removeFirst()
-                if (valueLoggingEnabled) {
-                    tabValues.addLast(TabValueRow(nowMs, page, r.pid.label, valueText))
-                    while (tabValues.size > MAX_TAB) tabValues.removeFirst()
-                }
+                // Do not copy probe pages into value-log tab_values — LOG is Dash-only.
                 val line = "PROBE [$page] ${r.pid.request} ${r.pid.label} = $valueText" +
                     (r.raw?.let { " | raw=${it.take(60)}" } ?: "")
                 debug.addLast(
@@ -185,8 +181,8 @@ object ObdLogger {
     }
 
     /**
-     * Full session export: dashboard time series + per-tab values + probes + debug.
-     * Designed so a shared file has every page's n/s and live readings.
+     * Lean session export for Share: events + main Dash snapshots + Dash extras.
+     * Probes / ELM debug stay on the Debug log screen (not packed into value CSVs).
      */
     fun valuesCsv(): String = synchronized(lock) {
         val header = "time_ms,rpm,speed_kmh,coolant1_c,coolant2_c,intake_c,ambient_c," +
@@ -207,44 +203,19 @@ object ObdLogger {
         }
         val eventCsv = if (eventBody.isEmpty()) eventHeader else "$eventHeader\n$eventBody"
 
+        // Only Dash tile rows (extras / deep-found) — never Fuel/Trans/Perf dumps.
+        val dashTabs = tabValues.filter { it.tab.equals("Dash", ignoreCase = true) }
         val tabHeader = "time_ms,tab,key,value"
-        val tabBody = tabValues.joinToString("\n") { t ->
+        val tabBody = dashTabs.joinToString("\n") { t ->
             listOf(t.timestampMs, csvEscape(t.tab), csvEscape(t.key), csvEscape(t.value))
                 .joinToString(",")
         }
         val tabCsv = if (tabBody.isEmpty()) tabHeader else "$tabHeader\n$tabBody"
 
-        val probeHeader = "time_ms,page,pid_id,label,request,supported,value,raw"
-        val probeBody = probes.joinToString("\n") { p ->
-            listOf(
-                p.timestampMs,
-                csvEscape(p.page),
-                csvEscape(p.pidId),
-                csvEscape(p.label),
-                csvEscape(p.request),
-                p.supported,
-                csvEscape(p.value),
-                csvEscape(p.raw.orEmpty()),
-            ).joinToString(",")
-        }
-        val probeCsv = if (probeBody.isEmpty()) probeHeader else "$probeHeader\n$probeBody"
-
-        val start = sessionStartMs
-        val debugSlice = if (start > 0L) debug.filter { it.timestampMs >= start } else debug.toList()
-        val debugHeader = "time_ms,time,dir,text"
-        val debugBody = debugSlice.joinToString("\n") { d ->
-            listOf(
-                d.timestampMs,
-                csvEscape(timeFmt.format(d.timestampMs)),
-                d.dir.name,
-                csvEscape(d.text),
-            ).joinToString(",")
-        }
-        val debugCsv = if (debugBody.isEmpty()) debugHeader else "$debugHeader\n$debugBody"
-
         buildString {
             appendLine("# fb2_session_log")
-            appendLine("# sections: events | dashboard_snapshots | tab_values | page_probes | debug_log")
+            appendLine("# sections: events | dashboard_snapshots | dash_tiles")
+            appendLine("# note: main Dash only (hero + tiles + any + extras). Fuel/Trans/etc. not included.")
             appendLine()
             appendLine("# events")
             appendLine(eventCsv)
@@ -252,14 +223,8 @@ object ObdLogger {
             appendLine("# dashboard_snapshots")
             appendLine(snapCsv)
             appendLine()
-            appendLine("# tab_values")
+            appendLine("# dash_tiles")
             appendLine(tabCsv)
-            appendLine()
-            appendLine("# page_probes")
-            appendLine(probeCsv)
-            appendLine()
-            appendLine("# debug_log")
-            append(debugCsv)
         }
     }
 
