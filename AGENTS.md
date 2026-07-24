@@ -39,8 +39,12 @@ non-obvious cloud specifics.
   keep FB2 Diag running (or recent) so `VehicleLiveStore` has live Dash data.
   **Important:** Android Auto “Unknown sources” does **not** apply to Car App
   Library apps. Sideloaded APKs usually **will not** appear in Customize launcher
-  on a real car. For a real head unit, install via Play **Internal testing** /
-  **Internal app sharing**. For desk testing use Google’s Desktop Head Unit (DHU).
+  on a real car. Practical options:
+  - **DHU** (Desktop Head Unit) — official, sideload OK, no Play needed for desk QA.
+  - **Play Internal testing / Internal app sharing** — official path for a **real HU**
+    without waiting for full car-quality review (still uses Play infra).
+  - **Phone-only / mirroring (Fermata etc.)** — no true CAL projection; lab-only.
+  - Root / AAWireless / AAAD — fragile unofficial paths; not a shippable CAL strategy.
   CONNECT from AA starts Demo if not live; pick real ELM on the phone.
 
 ### Notes / gotchas
@@ -90,8 +94,17 @@ non-obvious cloud specifics.
   Saved CSVs are lean (`events` + `dashboard_snapshots` + `dash_tiles`) so Share
   works via FileProvider. Share opens the system chooser (WhatsApp / Drive / email).
 - **ELM idle drop:** cheap clones often hang mid-poll. The app uses short PID
-  timeouts (1.2s), skips repeatedly-failing PIDs, keeps last-good Dash values,
-  and retries RFCOMM forever with backoff (UI shows `RETRY`). A blank reconnect
-  frame must not wipe the Dash or fake `Engine Stop`.
-- MAF/MAP health is context-aware (idle / cruise / heavy or WOT); pass RPM,
-  speed, and throttle into `HealthEvaluator.maf` / `map`.
+  timeouts (~650 ms poll / ~450 ms probe), skips repeatedly-failing PIDs, keeps
+  last-good Dash values, and retries RFCOMM forever with backoff (UI shows
+  `RETRY`). A blank reconnect frame must not wipe the Dash or fake `Engine Stop`.
+  **Battery** prefers `ATRV` (adapter rail voltage, Torque-style) every cycle even
+  during `UNABLE` — do not gate ATRV on ECU bus health.
+- **Screen off / background:** real ELM sessions start
+  `ObdMonitorForegroundService` (`connectedDevice` FGS + sticky notification +
+  `PARTIAL_WAKE_LOCK`). Demo mode must not start it. Voice alerts use AudioFocus +
+  `USAGE_ASSISTANCE_NAVIGATION_GUIDANCE` and prefer car BT audio when available.
+- MAF/MAP health is context-aware (idle / coast / cruise / heavy); pass RPM,
+  speed, and throttle into `HealthEvaluator.maf` / `map`. MAF threshold schema is
+  currently **3** (`HealthThresholdStore`) — old harsh idle bands are force-migrated.
+- **Deep analysis** (`DeepSensorSearch`): restore → ATRV/local first → bus ping →
+  only then ATSP/ATSH strategies. Do not thrash protocols while the ECU link is down.
