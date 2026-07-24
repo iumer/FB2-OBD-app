@@ -73,6 +73,7 @@ fun SettingsScreen(
     settings: SettingsState,
     onToggleEstimatedGear: (Boolean) -> Unit,
     onToggleVoiceAlerts: (Boolean) -> Unit = {},
+    onCheckSoundAlert: () -> Unit = {},
     nav: SettingsNav,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
@@ -105,10 +106,11 @@ fun SettingsScreen(
         SectionLabel("Alerts")
         ToggleRow(
             title = "Voice alerts",
-            subtitle = "Speak when a coloured metric hits critical (or coolant/ATF hot). Uses the phone’s offline text-to-speech.",
+            subtitle = "Alarm tone + spoken warning when a metric hits critical (battery also warns on orange/weak). Uses offline TTS plus a loud beep.",
             checked = settings.voiceAlerts,
             onCheckedChange = onToggleVoiceAlerts,
         )
+        NavRow("Check sound alert", onCheckSoundAlert)
 
         SectionLabel("Logging")
         Text(
