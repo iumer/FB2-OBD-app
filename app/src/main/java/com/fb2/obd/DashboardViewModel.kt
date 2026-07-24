@@ -12,6 +12,8 @@ import com.fb2.obd.data.ObdSource
 import com.fb2.obd.data.SavedLogFile
 import com.fb2.obd.data.SessionLogStore
 import com.fb2.obd.obd.ColdStartIdleCatalog
+import com.fb2.obd.obd.DeepSearchReport
+import com.fb2.obd.obd.DeepSensorSearch
 import com.fb2.obd.obd.Dtc
 import com.fb2.obd.obd.FreezeFrame
 import com.fb2.obd.obd.HealthScore
@@ -103,6 +105,16 @@ data class IdleDiagState(
     val tips: List<String> = emptyList(),
 )
 
+/** UI state for the double-tap deep sensor search flow. */
+data class DeepSearchUiState(
+    val active: Boolean = false,
+    val confirmLabel: String? = null,
+    val confirmPidId: String? = null,
+    val running: Boolean = false,
+    val progress: String = "",
+    val report: DeepSearchReport? = null,
+)
+
 /**
  * Collects snapshots from the active [ObdSource] and exposes them as UI state.
  */
@@ -169,8 +181,71 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
     val savedLogs: StateFlow<List<SavedLogFile>> = _savedLogs.asStateFlow()
     private var sessionStartedMs: Long = 0L
 
+    private val _deepSearch = MutableStateFlow(DeepSearchUiState())
+    val deepSearch: StateFlow<DeepSearchUiState> = _deepSearch.asStateFlow()
+
+    /** Values recovered by deep search, keyed by tile label / pid id. */
+    private val _deepFoundValues = MutableStateFlow<Map<String, String>>(emptyMap())
+    val deepFoundValues: StateFlow<Map<String, String>> = _deepFoundValues.asStateFlow()
+
     val pidCatalog: List<PidDefinition> =
         StandardPidCatalog.all + HondaPidCatalog.allPids
+
+    fun requestDeepSearch(label: String, pidId: String? = null) {
+        _deepSearch.value = DeepSearchUiState(
+            active = true,
+            confirmLabel = label,
+            confirmPidId = pidId,
+        )
+    }
+
+    fun cancelDeepSearch() {
+        _deepSearch.value = DeepSearchUiState()
+    }
+
+    fun confirmDeepSearch() {
+        val label = _deepSearch.value.confirmLabel ?: return
+        val pidId = _deepSearch.value.confirmPidId
+        val source = currentSource ?: run {
+            _deepSearch.value = DeepSearchUiState(
+                active = true,
+                report = DeepSearchReport(
+                    targetLabel = label,
+                    targetId = pidId ?: label,
+                    attempts = 0,
+                    notes = listOf("Not connected — connect an ELM327 (or Demo) first."),
+                ),
+            )
+            return
+        }
+        val pid = pidId?.let { id -> pidCatalog.find { it.id.equals(id, true) || it.request.equals(id, true) } }
+            ?: pidCatalog.find { it.label.equals(label, true) }
+        viewModelScope.launch {
+            _deepSearch.update {
+                it.copy(running = true, progress = "Starting deep search…", report = null, confirmLabel = label)
+            }
+            val report = DeepSensorSearch.run(
+                source = source,
+                label = label,
+                pid = pid,
+                requestHint = pidId,
+            ) { i, total, title ->
+                _deepSearch.update { st ->
+                    st.copy(progress = "Trying $i / $total — $title")
+                }
+            }
+            if (report.success) {
+                val hit = report.hit!!
+                val text = "%.2f %s".format(hit.value, hit.strategy.unit).trim()
+                _deepFoundValues.update {
+                    it + (label to text) + (report.targetId to text)
+                }
+            }
+            _deepSearch.update {
+                it.copy(running = false, progress = "", report = report, confirmLabel = null)
+            }
+        }
+    }
 
     fun setDashExtraPid(slot: Int, pid: PidDefinition) {
         _dashExtraPidIds.update { cur ->

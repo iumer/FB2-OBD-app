@@ -51,6 +51,7 @@ import com.fb2.obd.ui.ConnectDialog
 import com.fb2.obd.ui.CustomSensorsScreen
 import com.fb2.obd.ui.DashboardScreen
 import com.fb2.obd.ui.DebugLogScreen
+import com.fb2.obd.ui.DeepSearchDialogs
 import com.fb2.obd.ui.DiagnosticsDepthScreen
 import com.fb2.obd.ui.FaultsScreen
 import com.fb2.obd.ui.FuelPageScreen
@@ -103,6 +104,8 @@ class MainActivity : ComponentActivity() {
                 val dashExtraPidIds by viewModel.dashExtraPidIds.collectAsState()
                 val dashExtraValues by viewModel.dashExtraValues.collectAsState()
                 val savedLogs by viewModel.savedLogs.collectAsState()
+                val deepSearch by viewModel.deepSearch.collectAsState()
+                val deepFoundValues by viewModel.deepFoundValues.collectAsState()
 
                 var screen by remember { mutableStateOf(Screen.DASHBOARD) }
                 // Lives above the screen switch so Settings scroll is kept when opening a sub-page.
@@ -266,6 +269,8 @@ class MainActivity : ComponentActivity() {
                         onRefreshIdle = viewModel::refreshIdleDiagnostics,
                         onRefreshFuel = viewModel::refreshFuelPage,
                         onRefreshTrans = viewModel::refreshTransmission,
+                        deepFoundValues = deepFoundValues,
+                        onDeepSearch = viewModel::requestDeepSearch,
                     )
 
                     Screen.SETTINGS -> SettingsScreen(
@@ -470,6 +475,12 @@ class MainActivity : ComponentActivity() {
                         containerColor = Background,
                     )
                 }
+
+                DeepSearchDialogs(
+                    state = deepSearch,
+                    onConfirm = viewModel::confirmDeepSearch,
+                    onDismiss = viewModel::cancelDeepSearch,
+                )
             }
         }
     }

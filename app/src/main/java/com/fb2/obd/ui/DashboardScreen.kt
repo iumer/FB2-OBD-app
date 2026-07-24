@@ -29,6 +29,8 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -96,6 +98,8 @@ fun DashboardScreen(
     onRefreshIdle: () -> Unit = {},
     onRefreshFuel: () -> Unit = {},
     onRefreshTrans: () -> Unit = {},
+    deepFoundValues: Map<String, String> = emptyMap(),
+    onDeepSearch: (label: String, pidId: String?) -> Unit = { _, _ -> },
 ) {
     val s = state.snapshot
     val pagerState = rememberPagerState(pageCount = { DashPageTitles.size })
@@ -154,8 +158,10 @@ fun DashboardScreen(
                     snapshot = s,
                     extraPidIds = extraPidIds,
                     extraValues = extraValues,
+                    deepFoundValues = deepFoundValues,
                     catalog = catalog,
                     onEmptySlotClick = { pickerSlot = it },
+                    onDeepSearch = onDeepSearch,
                 )
                 1 -> DenseSensorGridPage(
                     title = "Custom sensors",
@@ -163,6 +169,8 @@ fun DashboardScreen(
                         listOf("Tip" to "Add in Settings → Custom")
                     },
                     action = "Probe" to onRefreshCustom,
+                    deepFoundValues = deepFoundValues,
+                    onDeepSearch = onDeepSearch,
                 )
                 2 -> DenseSensorGridPage(
                     title = "Cold start / rough idle",
@@ -174,18 +182,24 @@ fun DashboardScreen(
                             .forEach { add(it.key to it.value) }
                     }.ifEmpty { listOf("Status" to "Probing…") },
                     action = "Probe" to onRefreshIdle,
+                    deepFoundValues = deepFoundValues,
+                    onDeepSearch = onDeepSearch,
                 )
                 3 -> DenseSensorGridPage(
                     title = "Fuel system",
                     rows = fuelValues.entries.map { it.key to it.value }
                         .ifEmpty { listOf("Status" to "Probing…") },
                     action = "Refresh" to onRefreshFuel,
+                    deepFoundValues = deepFoundValues,
+                    onDeepSearch = onDeepSearch,
                 )
                 else -> DenseSensorGridPage(
                     title = "Transmission",
                     rows = transValues.entries.map { it.key to it.value }
                         .ifEmpty { listOf("Status" to "Probing…") },
                     action = "Probe" to onRefreshTrans,
+                    deepFoundValues = deepFoundValues,
+                    onDeepSearch = onDeepSearch,
                 )
             }
         }
@@ -307,8 +321,10 @@ private fun MetricsPage(
     snapshot: VehicleSnapshot,
     extraPidIds: List<String>,
     extraValues: Map<String, String>,
+    deepFoundValues: Map<String, String>,
     catalog: List<PidDefinition>,
     onEmptySlotClick: (Int) -> Unit,
+    onDeepSearch: (label: String, pidId: String?) -> Unit,
 ) {
     val engineRunning = (snapshot.rpm ?: 0.0) > 0.0
     val baseTiles = listOf(
@@ -338,26 +354,53 @@ private fun MetricsPage(
     ) {
         items(baseTiles) { t ->
             val unsupported = t.pid != null && t.pid.number in snapshot.unsupportedPids
+            val recovered = deepFoundValues[t.label]
+            val showNs = unsupported && recovered == null
+            val value = when {
+                recovered != null -> recovered.substringBefore(" ")
+                unsupported -> "n/s"
+                else -> t.value
+            }
+            val unit = when {
+                recovered != null -> recovered.substringAfter(" ", "")
+                unsupported -> ""
+                else -> t.unit
+            }
             DenseTile(
                 label = t.label,
-                value = if (unsupported) "n/s" else t.value,
-                unit = if (unsupported) "" else t.unit,
-                health = if (unsupported) null else t.health,
+                value = value,
+                unit = unit,
+                health = if (showNs) null else t.health,
+                muted = showNs,
+                deepSearchHint = showNs,
+                onDeepSearch = if (showNs) {
+                    { onDeepSearch(t.label, t.pid?.request) }
+                } else {
+                    null
+                },
                 modifier = Modifier.fillMaxWidth(),
             )
         }
         items(extras) { pid ->
-            val text = LiveSnapshotOverlay.formatLiveOrNs(
+            val recovered = deepFoundValues[pid.label] ?: deepFoundValues[pid.id]
+            val text = recovered ?: LiveSnapshotOverlay.formatLiveOrNs(
                 pid,
                 snapshot,
                 fallback = extraValues[pid.id],
             )
-            val unsupported = text.startsWith("n/s") || text == "—"
+            val unsupported = recovered == null && (text.startsWith("n/s") || text == "—")
             DenseTile(
                 label = pid.label.take(14),
                 value = text.substringBefore(" "),
-                unit = if (unsupported) "" else pid.unit,
+                unit = if (unsupported) "" else text.substringAfter(" ", pid.unit).ifBlank { pid.unit },
                 health = null,
+                muted = unsupported,
+                deepSearchHint = unsupported,
+                onDeepSearch = if (unsupported) {
+                    { onDeepSearch(pid.label, pid.id) }
+                } else {
+                    null
+                },
                 modifier = Modifier.fillMaxWidth(),
             )
         }
@@ -376,6 +419,8 @@ private fun DenseSensorGridPage(
     title: String,
     rows: List<Pair<String, String>>,
     action: Pair<String, () -> Unit>,
+    deepFoundValues: Map<String, String> = emptyMap(),
+    onDeepSearch: (label: String, pidId: String?) -> Unit = { _, _ -> },
 ) {
     Column(modifier = Modifier.fillMaxSize()) {
         Row(
@@ -404,21 +449,30 @@ private fun DenseSensorGridPage(
             contentPadding = PaddingValues(bottom = 4.dp),
         ) {
             items(rows) { (label, value) ->
-                val unsupported = value.startsWith("n/s") || value == "—" || value.startsWith("Tip")
-                val unit = value.substringAfter(" ", missingDelimiterValue = "")
-                    .takeIf { it.isNotBlank() && !value.startsWith("n/s") && label != "Tip" && label != "Status" }
+                val recovered = deepFoundValues[label]
+                val effective = recovered ?: value
+                val unsupported = recovered == null &&
+                    (value.startsWith("n/s") || value == "—" || value.startsWith("Tip"))
+                val unit = effective.substringAfter(" ", missingDelimiterValue = "")
+                    .takeIf { it.isNotBlank() && !effective.startsWith("n/s") && label != "Tip" && label != "Status" }
                     ?: ""
                 val displayValue = when {
-                    label == "Tip" || label == "Status" -> value.take(28)
-                    value.startsWith("n/s") -> "n/s"
-                    else -> value.substringBefore(" ")
+                    label == "Tip" || label == "Status" -> effective.take(28)
+                    effective.startsWith("n/s") -> "n/s"
+                    else -> effective.substringBefore(" ")
                 }
                 DenseTile(
                     label = label.take(16),
                     value = displayValue,
                     unit = unit.take(6),
                     health = null,
-                    muted = unsupported,
+                    muted = unsupported && label != "Tip" && label != "Status",
+                    deepSearchHint = unsupported && label != "Tip" && label != "Status",
+                    onDeepSearch = if (unsupported && label != "Tip" && label != "Status") {
+                        { onDeepSearch(label, null) }
+                    } else {
+                        null
+                    },
                     modifier = Modifier.fillMaxWidth(),
                 )
             }
@@ -433,6 +487,8 @@ private fun DenseTile(
     unit: String,
     health: Health? = null,
     muted: Boolean = false,
+    deepSearchHint: Boolean = false,
+    onDeepSearch: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     val valueColor = when {
@@ -440,11 +496,29 @@ private fun DenseTile(
         health == null || health == Health.UNKNOWN -> TextPrimary
         else -> health.color()
     }
+    var taps by remember { mutableIntStateOf(0) }
+    var lastTapMs by remember { mutableLongStateOf(0L) }
+
     Column(
         modifier = modifier
             .height(58.dp)
             .clip(RoundedCornerShape(10.dp))
             .background(Surface)
+            .then(
+                if (onDeepSearch != null) {
+                    Modifier.clickable {
+                        val now = System.currentTimeMillis()
+                        taps = if (now - lastTapMs < 500L) taps + 1 else 1
+                        lastTapMs = now
+                        if (taps >= 2) {
+                            taps = 0
+                            onDeepSearch()
+                        }
+                    }
+                } else {
+                    Modifier
+                },
+            )
             .padding(horizontal = 8.dp, vertical = 6.dp),
         verticalArrangement = Arrangement.Center,
     ) {
@@ -487,6 +561,9 @@ private fun DenseTile(
             if (unit.isNotEmpty()) {
                 Text(text = " $unit", color = TextMuted, fontSize = 10.sp, maxLines = 1)
             }
+        }
+        if (deepSearchHint) {
+            Text("tap×2 deep", color = Accent, fontSize = 8.sp, maxLines = 1)
         }
     }
 }
