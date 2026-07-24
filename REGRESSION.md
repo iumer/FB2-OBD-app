@@ -86,7 +86,8 @@ touches ELM, Dash health, deep search, logging, or share:
 7. **Value LOG Share** — stop a LOG session → share CSV via chooser.
 8. **Screen off alerts** — real ELM connected → sticky notification present; with voice alerts on, a critical condition still speaks after screen off.
 9. **Floating bubble (MIN)** — grant overlay permission → MIN → bubble appears; drag works; tap expands swipeable metrics with health colors; OPEN APP returns; CLOSE BUBBLE removes overlay. (On Dellson: verify over CarPlay if used.)
-10. **Android Auto** — phone UI / DHU only unless installed via Play Internal testing.
+10. **Car HU layout (automated)** — Paparazzi at 1024×600, 1280×720, 1920×720 in `CarHuSnapshotTest` / `CarHuBubbleSnapshotTest`.
+11. **Android Auto** — phone UI / DHU only unless installed via Play Internal testing.
 
 ---
 
