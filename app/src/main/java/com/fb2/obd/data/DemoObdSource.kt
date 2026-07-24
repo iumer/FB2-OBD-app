@@ -99,19 +99,32 @@ class DemoObdSource(
     }
 
     override suspend fun command(raw: String): String? {
-        val cmd = raw.trim().uppercase()
+        val cmd = raw.trim().uppercase().replace(" ", "")
         return when {
-            cmd == "ATI" -> "ELM327 v1.5"
-            cmd == "ATRV" -> "13.9V"
-            cmd == "ATDP" -> "AUTO, ISO 15765-4 (CAN 11/500)"
+            cmd.startsWith("AT") -> "OK"
             cmd == "0100" -> "41 00 BE 3E B8 11"
             cmd == "0101" -> "41 01 00 07 E5 E5"
             cmd == "0105" -> "41 05 7B"
+            cmd == "0107" -> "41 07 80" // LTFT ~0% — deep-search demo hit
             cmd == "010C" -> "41 0C 0B 20"
+            cmd == "0142" -> "41 42 36 B0" // ~14.0 V
+            cmd == "0146" -> "41 46 4E" // ambient 38°C — deep-search demo hit
+            cmd == "0167" -> "41 67 03 7B 78" // coolant sensors — deep-search demo hit
             cmd == "0902" -> "49 02 01 4A 48 4D 46 42 32 31 32 33 34 35 36 37 38 39"
             cmd == "0904" -> "49 04 01 R18A2-DEMO-CAL"
             cmd.startsWith("09") -> "NO DATA"
-            cmd.startsWith("22") -> "NO DATA"
+            cmd.startsWith("22") -> {
+                val id = cmd.take(6)
+                val v = demoMode22[id] ?: return "NO DATA"
+                val pid = id.removePrefix("22")
+                val data = if (v >= 256) {
+                    "%04X".format(v.toInt().coerceIn(0, 0xFFFF))
+                } else {
+                    "%02X".format(v.toInt().coerceIn(0, 255))
+                }
+                // Spaced hex: 62 AABB CC…
+                ("62$pid$data").chunked(2).joinToString(" ")
+            }
             cmd == "03" || cmd == "07" || cmd == "0A" -> "43 00"
             cmd == "05" || cmd == "06" -> "NO DATA"
             cmd.startsWith("01") -> "41 ${cmd.drop(2)} 00 00"
