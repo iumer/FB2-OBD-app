@@ -40,7 +40,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.PlatformTextStyle
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -114,6 +117,7 @@ fun DashboardScreen(
     onRefreshTrans: () -> Unit = {},
     onManageCustom: () -> Unit = {},
     onResetTrip: () -> Unit = {},
+    onSetFuelPrice: (Double) -> Unit = {},
     onResetPerformance: () -> Unit = {},
     onRefreshHealth: () -> Unit = {},
     deepFoundValues: Map<String, String> = emptyMap(),
@@ -197,13 +201,12 @@ fun DashboardScreen(
                     )
                     2 -> DenseSensorGridPage(
                         title = "Cold start / rough idle",
-                        rows = buildList {
-                            idleTips.take(1).forEach { add("Tip" to it.take(48)) }
-                            idleValues.entries
-                                .filter { !it.key.matches(Regex("^[0-9A-Fa-f]{4,}$")) }
-                                .take(24)
-                                .forEach { add(it.key to it.value) }
-                        }.ifEmpty { listOf("Status" to "Probing…") },
+                        tip = idleTips.firstOrNull(),
+                        rows = idleValues.entries
+                            .filter { !it.key.matches(Regex("^[0-9A-Fa-f]{4,}$")) }
+                            .take(24)
+                            .map { it.key to it.value }
+                            .ifEmpty { listOf("Status" to "Probing…") },
                         action = "Probe" to onRefreshIdle,
                         deepFoundValues = deepFoundValues,
                         onDeepSearch = onDeepSearch,
@@ -219,11 +222,11 @@ fun DashboardScreen(
                     4 -> TripScreen(
                         distanceKm = trip.distanceKm,
                         kmPerL = trip.kmPerLiter,
-                        lPer100 = trip.litersPer100,
                         cost = trip.cost,
                         idleSec = trip.idleSeconds,
                         fuelPrice = trip.fuelPrice,
                         onReset = onResetTrip,
+                        onFuelPriceChange = onSetFuelPrice,
                         embedded = true,
                         modifier = Modifier.fillMaxSize(),
                     )
@@ -273,7 +276,7 @@ fun DashboardScreen(
     }
 }
 
-/** Thin digital strip — fixed height so pager swipes never collapse/expand the banner. */
+/** Thin digital strip — fixed height; fonts sized so digits are never clipped. */
 @Composable
 private fun CompactHeroStrip(
     rpm: Double?,
@@ -284,11 +287,11 @@ private fun CompactHeroStrip(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(top = 2.dp, bottom = 2.dp)
-            .height(52.dp)
+            .padding(top = 2.dp, bottom = 4.dp)
+            .height(60.dp)
             .clip(RoundedCornerShape(10.dp))
             .background(Surface)
-            .padding(horizontal = 10.dp, vertical = 4.dp),
+            .padding(horizontal = 10.dp, vertical = 6.dp),
         horizontalArrangement = Arrangement.SpaceEvenly,
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -300,13 +303,19 @@ private fun CompactHeroStrip(
                 .widthIn(min = 48.dp)
                 .fillMaxHeight(),
         ) {
-            Text("GEAR", color = TextMuted, fontSize = 9.sp, fontWeight = FontWeight.Medium)
+            Text(
+                "GEAR",
+                color = TextMuted,
+                fontSize = 9.sp,
+                fontWeight = FontWeight.Medium,
+                style = tightTextStyle(9.sp),
+            )
             Text(
                 text = if (gearSource == GearSource.NONE) "–" else (gear?.toString() ?: "–"),
                 color = Accent,
-                fontSize = 22.sp,
+                fontSize = 20.sp,
                 fontWeight = FontWeight.Bold,
-                lineHeight = 24.sp,
+                style = tightTextStyle(20.sp),
             )
             // Always reserve badge line height (ECU / EST / blank) so layout never jumps.
             val badge = when (gearSource) {
@@ -319,7 +328,7 @@ private fun CompactHeroStrip(
                 color = badge.second,
                 fontSize = 8.sp,
                 fontWeight = FontWeight.Bold,
-                lineHeight = 10.sp,
+                style = tightTextStyle(8.sp),
             )
         }
         HeroDigit(label = "SPEED", value = speedKmh.fmt(), unit = "km/h", accent = GoodGreen, modifier = Modifier.weight(1f))
@@ -334,26 +343,44 @@ private fun HeroDigit(
     accent: Color,
     modifier: Modifier = Modifier,
 ) {
-    Column(modifier = modifier, horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(label, color = accent, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+    Column(
+        modifier = modifier.fillMaxHeight(),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        Text(label, color = accent, fontSize = 9.sp, fontWeight = FontWeight.Bold, style = tightTextStyle(9.sp))
         Row(verticalAlignment = Alignment.Bottom) {
             Text(
                 text = value,
                 color = TextPrimary,
-                fontSize = 22.sp,
+                fontSize = 20.sp,
                 fontWeight = FontWeight.Bold,
+                style = tightTextStyle(20.sp),
+                maxLines = 1,
             )
             if (unit.isNotEmpty()) {
                 Text(
                     text = " $unit",
                     color = TextMuted,
                     fontSize = 10.sp,
-                    modifier = Modifier.padding(bottom = 2.dp),
+                    style = tightTextStyle(10.sp),
+                    modifier = Modifier.padding(bottom = 1.dp),
                 )
             }
         }
     }
 }
+
+/** Avoid Android font padding clipping bottoms of bold digits in short rows. */
+private fun tightTextStyle(size: androidx.compose.ui.unit.TextUnit) = TextStyle(
+    fontSize = size,
+    lineHeight = size,
+    platformStyle = PlatformTextStyle(includeFontPadding = false),
+    lineHeightStyle = LineHeightStyle(
+        alignment = LineHeightStyle.Alignment.Center,
+        trim = LineHeightStyle.Trim.Both,
+    ),
+)
 
 @Composable
 private fun PageTabs(titles: List<String>, current: Int, onSelect: (Int) -> Unit) {
@@ -486,6 +513,7 @@ private fun DenseSensorGridPage(
     rows: List<Pair<String, String>>,
     action: Pair<String, () -> Unit>,
     secondaryAction: Pair<String, () -> Unit>? = null,
+    tip: String? = null,
     deepFoundValues: Map<String, String> = emptyMap(),
     onDeepSearch: (label: String, pidId: String?) -> Unit = { _, _ -> },
 ) {
@@ -522,6 +550,20 @@ private fun DenseSensorGridPage(
                     .padding(horizontal = 10.dp, vertical = 5.dp),
             )
         }
+        if (!tip.isNullOrBlank()) {
+            Text(
+                text = "Tip: $tip",
+                color = WarnAmber,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Medium,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 6.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(Surface)
+                    .padding(horizontal = 10.dp, vertical = 8.dp),
+            )
+        }
         LazyVerticalGrid(
             columns = GridCells.Fixed(4),
             modifier = Modifier.fillMaxSize(),
@@ -533,23 +575,23 @@ private fun DenseSensorGridPage(
                 val recovered = deepFoundValues[label]
                 val effective = recovered ?: value
                 val unsupported = recovered == null &&
-                    (value.startsWith("n/s") || value == "—" || value.startsWith("Tip"))
+                    (value.startsWith("n/s") || value == "—" || value == "Probing…")
                 val unit = effective.substringAfter(" ", missingDelimiterValue = "")
-                    .takeIf { it.isNotBlank() && !effective.startsWith("n/s") && label != "Tip" && label != "Status" }
+                    .takeIf { it.isNotBlank() && !effective.startsWith("n/s") && label != "Status" }
                     ?: ""
                 val displayValue = when {
-                    label == "Tip" || label == "Status" -> effective.take(28)
+                    label == "Status" -> effective
                     effective.startsWith("n/s") -> "n/s"
                     else -> effective.substringBefore(" ")
                 }
                 DenseTile(
-                    label = label.take(16),
+                    label = label,
                     value = displayValue,
-                    unit = unit.take(6),
+                    unit = unit.take(8),
                     health = null,
-                    muted = unsupported && label != "Tip" && label != "Status",
-                    deepSearchHint = unsupported && label != "Tip" && label != "Status",
-                    onDeepSearch = if (unsupported && label != "Tip" && label != "Status") {
+                    muted = unsupported && label != "Status",
+                    deepSearchHint = unsupported && label != "Status",
+                    onDeepSearch = if (unsupported && label != "Status") {
                         { onDeepSearch(label, null) }
                     } else {
                         null
@@ -582,7 +624,7 @@ private fun DenseTile(
 
     Column(
         modifier = modifier
-            .height(58.dp)
+            .height(64.dp)
             .clip(RoundedCornerShape(10.dp))
             .background(Surface)
             .then(
@@ -600,8 +642,8 @@ private fun DenseTile(
                     Modifier
                 },
             )
-            .padding(horizontal = 8.dp, vertical = 6.dp),
-        verticalArrangement = Arrangement.Center,
+            .padding(horizontal = 7.dp, vertical = 5.dp),
+        verticalArrangement = Arrangement.SpaceBetween,
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             if (health != null) {
@@ -614,19 +656,23 @@ private fun DenseTile(
                 Text(
                     text = " $label",
                     color = TextMuted,
-                    fontSize = 10.sp,
+                    fontSize = 9.sp,
                     fontWeight = FontWeight.Medium,
-                    maxLines = 1,
+                    maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
+                    style = tightTextStyle(9.sp),
+                    lineHeight = 11.sp,
                 )
             } else {
                 Text(
                     text = label,
                     color = TextMuted,
-                    fontSize = 10.sp,
+                    fontSize = 9.sp,
                     fontWeight = FontWeight.Medium,
-                    maxLines = 1,
+                    maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
+                    style = tightTextStyle(9.sp),
+                    lineHeight = 11.sp,
                 )
             }
         }
@@ -634,17 +680,24 @@ private fun DenseTile(
             Text(
                 text = value,
                 color = valueColor,
-                fontSize = 18.sp,
+                fontSize = 15.sp,
                 fontWeight = FontWeight.Bold,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
+                style = tightTextStyle(15.sp),
             )
             if (unit.isNotEmpty()) {
-                Text(text = " $unit", color = TextMuted, fontSize = 10.sp, maxLines = 1)
+                Text(
+                    text = " $unit",
+                    color = TextMuted,
+                    fontSize = 9.sp,
+                    maxLines = 1,
+                    style = tightTextStyle(9.sp),
+                )
             }
         }
         if (deepSearchHint) {
-            Text("tap×3 deep", color = Accent, fontSize = 8.sp, maxLines = 1)
+            Text("tap×3 deep", color = Accent, fontSize = 8.sp, maxLines = 1, style = tightTextStyle(8.sp))
         }
     }
 }
@@ -653,14 +706,14 @@ private fun DenseTile(
 private fun EmptyTile(modifier: Modifier = Modifier, onClick: () -> Unit) {
     Box(
         modifier = modifier
-            .height(58.dp)
+            .height(64.dp)
             .clip(RoundedCornerShape(10.dp))
             .background(Surface)
             .clickable(onClick = onClick)
             .padding(4.dp),
         contentAlignment = Alignment.Center,
     ) {
-        Text(text = "+", color = Accent, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+        Text(text = "+", color = Accent, fontSize = 18.sp, fontWeight = FontWeight.Bold)
         Text(
             text = "add",
             color = TextMuted,
@@ -721,15 +774,21 @@ private fun SensorPickerDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(title, color = TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold) },
+        title = { Text(title, color = TextPrimary, fontSize = 15.sp, fontWeight = FontWeight.Bold) },
         text = {
-            Column(modifier = Modifier.fillMaxHeight(0.75f).verticalScroll(rememberScrollState())) {
+            Column(modifier = Modifier.fillMaxHeight(0.82f).verticalScroll(rememberScrollState())) {
+                Text(
+                    text = "Scroll for all categories (Engine, Fuel, Air, Electrical…)",
+                    color = TextMuted,
+                    fontSize = 11.sp,
+                    modifier = Modifier.padding(bottom = 6.dp),
+                )
                 // Back row inside the same list
                 if (category != null) {
                     Text(
                         text = if (subProfile != null) "← Subcategories" else "← Categories",
                         color = Accent,
-                        fontSize = 13.sp,
+                        fontSize = 12.sp,
                         fontWeight = FontWeight.Bold,
                         modifier = Modifier
                             .fillMaxWidth()
@@ -740,7 +799,7 @@ private fun SensorPickerDialog(
                                     category = null
                                 }
                             }
-                            .padding(vertical = 10.dp),
+                            .padding(vertical = 6.dp),
                     )
                 }
 
@@ -821,21 +880,20 @@ private fun PickerRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .padding(bottom = 4.dp)
             .clip(RoundedCornerShape(8.dp))
             .clickable(onClick = onClick)
             .background(Surface)
-            .padding(horizontal = 12.dp, vertical = 10.dp)
-            .padding(bottom = 4.dp),
+            .padding(horizontal = 10.dp, vertical = 6.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(modifier = Modifier.weight(1f)) {
-            Text(title, color = TextPrimary, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
-            Text(subtitle, color = TextMuted, fontSize = 11.sp)
+            Text(title, color = TextPrimary, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(subtitle, color = TextMuted, fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
-        Text(trailing, color = Accent, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+        Text(trailing, color = Accent, fontSize = 14.sp, fontWeight = FontWeight.Bold)
     }
-    Box(modifier = Modifier.height(6.dp))
 }
 
 @Composable

@@ -230,11 +230,11 @@ fun FuelPageScreen(
 fun TripScreen(
     distanceKm: Double,
     kmPerL: Double?,
-    lPer100: Double?,
     cost: Double,
     idleSec: Double,
     fuelPrice: Double,
     onReset: () -> Unit,
+    onFuelPriceChange: (Double) -> Unit = {},
     onBack: () -> Unit = {},
     modifier: Modifier = Modifier,
     embedded: Boolean = false,
@@ -261,10 +261,56 @@ fun TripScreen(
         }
         CardRow("Distance", "%.1f km".format(distanceKm))
         CardRow("Economy", kmPerL?.let { "%.1f km/L".format(it) } ?: "—")
-        CardRow("Consumption", lPer100?.let { "%.1f L/100km".format(it) } ?: "—")
-        CardRow("Trip cost", "%.0f (price %.0f/L)".format(cost, fuelPrice), GoodGreen)
+        CardRow("Trip cost", "%.0f PKR".format(cost), GoodGreen)
         CardRow("Idle time", "%.0f s".format(idleSec))
-        Text("Economy uses fuel-rate PID when available, else MAF estimate.", color = TextMuted, fontSize = 12.sp)
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 8.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(Surface)
+                .padding(horizontal = 14.dp, vertical = 10.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text("Fuel price", color = TextPrimary, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                Text("PKR per liter (edit for trip cost)", color = TextMuted, fontSize = 11.sp)
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = "−10",
+                    color = Accent,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable { onFuelPriceChange((fuelPrice - 10.0).coerceAtLeast(50.0)) }
+                        .background(Background)
+                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                )
+                Text(
+                    text = "%.0f".format(fuelPrice),
+                    color = Accent,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(horizontal = 10.dp),
+                )
+                Text(
+                    text = "+10",
+                    color = Accent,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable { onFuelPriceChange((fuelPrice + 10.0).coerceAtMost(1000.0)) }
+                        .background(Background)
+                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                )
+            }
+        }
+        Text("Economy uses fuel-rate PID when available, else MAF estimate. Units: km, km/h, km/L.", color = TextMuted, fontSize = 12.sp)
     }
 }
 
