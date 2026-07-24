@@ -41,6 +41,8 @@ Requires JDK 17 and the Android SDK (see `AGENTS.md` for the cloud setup).
 ./gradlew assembleDebug       # build APK -> app/build/outputs/apk/debug/app-debug.apk
 ```
 
+After code changes, follow [`REGRESSION.md`](REGRESSION.md) (full automated suite +
+issue inventory + manual car checks).
 Sideload `app-debug.apk` onto your phone (`adb install -r app-debug.apk` or copy
 it over). The app launches straight into the dashboard on the **Demo** source;
 wiring the paired ELM327 device into `Elm327BluetoothSource` switches it to live
