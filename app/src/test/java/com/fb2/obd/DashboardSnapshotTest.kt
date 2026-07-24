@@ -31,8 +31,8 @@ class DashboardSnapshotTest {
         val snapshot = VehicleSnapshot(
             rpm = rpm,
             speedKmh = speed,
-            coolantC = 92.0,
-            coolant2C = 89.0,
+            coolantC = 85.0,
+            coolant2C = 82.0,
             intakeC = 34.0,
             ambientC = 28.0,
             engineLoadPct = 47.0,
@@ -43,6 +43,7 @@ class DashboardSnapshotTest {
             stftPct = 2.3,
             ltftPct = 3.5,
             batteryVolts = 14.2,
+            fuelSystemStatus = "CLOSED LOOP",
             gear = GearEstimator().estimate(speed, rpm),
             gearSource = GearSource.ESTIMATED,
             // Mirror the real FB2: these PIDs aren't supported by the ECU.
@@ -53,10 +54,21 @@ class DashboardSnapshotTest {
             connection = ConnectionState.CONNECTED,
             sourceName = "ELM327 (Bluetooth)",
             sourceIsLive = true,
+            dtcCount = 0,
         )
         paparazzi.snapshot {
             FB2Theme {
-                DashboardScreen(state = state)
+                DashboardScreen(
+                    state = state,
+                    dtcCount = 0,
+                    health = com.fb2.obd.obd.HealthScore(
+                        enginePct = 94,
+                        transmissionPct = null,
+                        engineDataOk = true,
+                        transmissionDataOk = false,
+                        engineNotes = listOf("Core engine parameters look OK"),
+                    ),
+                )
             }
         }
     }
@@ -68,18 +80,19 @@ class DashboardSnapshotTest {
         val snapshot = VehicleSnapshot(
             rpm = rpm,
             speedKmh = speed,
-            coolantC = 112.0,   // overheating -> red
-            coolant2C = 109.0,  // post-thermostat also hot -> red
+            coolantC = 105.0,   // overheating -> red (>103)
+            coolant2C = 104.0,
             intakeC = 51.0,
             ambientC = 39.0,
             engineLoadPct = 88.0,
             throttlePct = 74.0,
-            timingAdvance = 6.0,
+            timingAdvance = -2.0, // yellow retard band
             mafGps = 22.0,
             mapKpa = 92.0,
-            stftPct = -13.0,    // large trim -> red
+            stftPct = -13.0,    // large trim -> orange
             ltftPct = 8.5,      // elevated -> amber
-            batteryVolts = 12.1, // low charge -> red
+            batteryVolts = 12.5, // red alt weak while running
+            fuelSystemStatus = "OPEN LOOP",
             gear = GearEstimator().estimate(speed, rpm),
             gearSource = GearSource.ESTIMATED,
         )
@@ -87,10 +100,21 @@ class DashboardSnapshotTest {
             snapshot = snapshot,
             connection = ConnectionState.CONNECTED,
             sourceName = "Demo (simulated)",
+            dtcCount = 2,
         )
         paparazzi.snapshot {
             FB2Theme {
-                DashboardScreen(state = state)
+                DashboardScreen(
+                    state = state,
+                    dtcCount = 2,
+                    health = com.fb2.obd.obd.HealthScore(
+                        enginePct = 48,
+                        transmissionPct = 70,
+                        engineDataOk = true,
+                        transmissionDataOk = true,
+                        engineNotes = listOf("Engine overheating", "2 stored DTC(s)"),
+                    ),
+                )
             }
         }
     }
