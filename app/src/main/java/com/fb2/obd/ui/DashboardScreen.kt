@@ -83,18 +83,40 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
-/** Column count from available width — works in Paparazzi + real HU (not LocalConfiguration). */
+/** Column count — prefer wider tiles on car HUs (readable while driving). */
 private fun dashColumnsForWidth(maxWidth: Dp): Int = when {
-    maxWidth >= 1500.dp -> 6
-    maxWidth >= 1050.dp -> 5
-    maxWidth >= 750.dp -> 4
-    else -> 3
+    maxWidth >= 1700.dp -> 5
+    maxWidth >= 1200.dp -> 4
+    maxWidth >= 800.dp -> 3
+    else -> 2
 }
 
 private fun denseColumnsForWidth(maxWidth: Dp): Int = when {
-    maxWidth >= 1300.dp -> 4
-    maxWidth >= 850.dp -> 3
+    maxWidth >= 1400.dp -> 3
+    maxWidth >= 900.dp -> 2
     else -> 2
+}
+
+/** In-car type scale — sized for glanceability on a dash HU, not a phone. */
+private object DashType {
+    val tileH = 96.dp
+    val tileGap = 8.dp
+    val tileLabel = 13.sp
+    val tileValue = 24.sp
+    val tileUnit = 13.sp
+    val tileStatus = 12.sp
+    val tileHint = 11.sp
+
+    val heroH = 92.dp
+    val heroLabel = 13.sp
+    val heroValue = 36.sp
+    val heroUnit = 14.sp
+    val heroBadge = 12.sp
+
+    val tab = 15.sp
+    val topTitle = 20.sp
+    val topChip = 14.sp
+    val pageTitle = 14.sp
 }
 private fun Double?.fmt(digits: Int = 0): String = this?.let {
     if (digits == 0) it.roundToInt().toString() else "%.${digits}f".format(it)
@@ -367,11 +389,11 @@ private fun CompactHeroStrip(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(top = 2.dp, bottom = 4.dp)
-            .height(60.dp)
-            .clip(RoundedCornerShape(10.dp))
+            .padding(top = 2.dp, bottom = 6.dp)
+            .height(DashType.heroH)
+            .clip(RoundedCornerShape(12.dp))
             .background(Surface)
-            .padding(horizontal = 10.dp, vertical = 6.dp),
+            .padding(horizontal = 12.dp, vertical = 8.dp),
         horizontalArrangement = Arrangement.SpaceEvenly,
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -399,22 +421,22 @@ private fun CompactHeroStrip(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center,
             modifier = Modifier
-                .widthIn(min = 52.dp)
+                .widthIn(min = 72.dp)
                 .fillMaxHeight(),
         ) {
             Text(
                 "GEAR",
                 color = TextMuted,
-                fontSize = 9.sp,
-                fontWeight = FontWeight.Medium,
-                style = tightTextStyle(9.sp),
+                fontSize = DashType.heroLabel,
+                fontWeight = FontWeight.Bold,
+                style = tightTextStyle(DashType.heroLabel),
             )
             Text(
                 text = if (gearSource == GearSource.NONE) "–" else (gear?.toString() ?: "–"),
                 color = Accent,
-                fontSize = 20.sp,
+                fontSize = DashType.heroValue,
                 fontWeight = FontWeight.Bold,
-                style = tightTextStyle(20.sp),
+                style = tightTextStyle(DashType.heroValue),
             )
             val badge = when (gearSource) {
                 GearSource.ECU -> "ECU" to GoodGreen
@@ -427,9 +449,9 @@ private fun CompactHeroStrip(
             Text(
                 text = badge.first,
                 color = badge.second,
-                fontSize = 8.sp,
+                fontSize = DashType.heroBadge,
                 fontWeight = FontWeight.Bold,
-                style = tightTextStyle(8.sp),
+                style = tightTextStyle(DashType.heroBadge),
             )
         }
         HeroDigit(
@@ -457,23 +479,30 @@ private fun HeroDigit(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
-        Text(label, color = accent, fontSize = 9.sp, fontWeight = FontWeight.Bold, style = tightTextStyle(9.sp))
+        Text(
+            label,
+            color = accent,
+            fontSize = DashType.heroLabel,
+            fontWeight = FontWeight.Bold,
+            style = tightTextStyle(DashType.heroLabel),
+        )
         Row(verticalAlignment = Alignment.Bottom) {
             Text(
                 text = value,
                 color = valueColor,
-                fontSize = 20.sp,
+                fontSize = DashType.heroValue,
                 fontWeight = FontWeight.Bold,
-                style = tightTextStyle(20.sp),
+                style = tightTextStyle(DashType.heroValue),
                 maxLines = 1,
             )
             if (unit.isNotEmpty()) {
                 Text(
                     text = " $unit",
                     color = TextMuted,
-                    fontSize = 10.sp,
-                    style = tightTextStyle(10.sp),
-                    modifier = Modifier.padding(bottom = 1.dp),
+                    fontSize = DashType.heroUnit,
+                    fontWeight = FontWeight.Bold,
+                    style = tightTextStyle(DashType.heroUnit),
+                    modifier = Modifier.padding(bottom = 4.dp),
                 )
             }
         }
@@ -497,7 +526,7 @@ private fun PageTabs(titles: List<String>, current: Int, onSelect: (Int) -> Unit
         modifier = Modifier
             .fillMaxWidth()
             .horizontalScroll(rememberScrollState())
-            .padding(bottom = 4.dp),
+            .padding(bottom = 6.dp),
         horizontalArrangement = Arrangement.Start,
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -506,13 +535,13 @@ private fun PageTabs(titles: List<String>, current: Int, onSelect: (Int) -> Unit
             Text(
                 text = title,
                 color = if (selected) Accent else TextMuted,
-                fontSize = 11.sp,
-                fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                fontSize = DashType.tab,
+                fontWeight = if (selected) FontWeight.Bold else FontWeight.SemiBold,
                 modifier = Modifier
-                    .clip(RoundedCornerShape(8.dp))
+                    .clip(RoundedCornerShape(10.dp))
                     .clickable { onSelect(i) }
                     .background(if (selected) Surface else Background)
-                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
             )
         }
     }
@@ -620,8 +649,8 @@ private fun MetricsPage(
         LazyVerticalGrid(
             columns = GridCells.Fixed(columns),
             modifier = Modifier.fillMaxSize(),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
+            horizontalArrangement = Arrangement.spacedBy(DashType.tileGap),
+            verticalArrangement = Arrangement.spacedBy(DashType.tileGap),
             contentPadding = PaddingValues(bottom = 4.dp),
         ) {
         items(baseTiles) { t ->
@@ -749,39 +778,39 @@ private fun DenseSensorGridPage(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(title, color = TextMuted, fontSize = 11.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+            Text(title, color = TextMuted, fontSize = DashType.pageTitle, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
             if (secondaryAction != null) {
                 Text(
                     text = secondaryAction.first,
                     color = TextMuted,
-                    fontSize = 11.sp,
+                    fontSize = DashType.pageTitle,
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier
-                        .clip(RoundedCornerShape(8.dp))
+                        .clip(RoundedCornerShape(10.dp))
                         .clickable { secondaryAction.second() }
                         .background(Surface)
-                        .padding(horizontal = 10.dp, vertical = 5.dp)
+                        .padding(horizontal = 14.dp, vertical = 8.dp)
                         .padding(end = 6.dp),
                 )
             }
             Text(
                 text = action.first,
                 color = Accent,
-                fontSize = 11.sp,
+                fontSize = DashType.pageTitle,
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier
-                    .clip(RoundedCornerShape(8.dp))
+                    .clip(RoundedCornerShape(10.dp))
                     .clickable { action.second() }
                     .background(Surface)
-                    .padding(horizontal = 10.dp, vertical = 5.dp),
+                    .padding(horizontal = 14.dp, vertical = 8.dp),
             )
         }
         if (!tip.isNullOrBlank()) {
             Text(
                 text = "Tip: $tip",
                 color = WarnAmber,
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Medium,
+                fontSize = DashType.pageTitle,
+                fontWeight = FontWeight.SemiBold,
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(bottom = 6.dp)
@@ -795,8 +824,8 @@ private fun DenseSensorGridPage(
             LazyVerticalGrid(
                 columns = GridCells.Fixed(columns),
                 modifier = Modifier.fillMaxSize(),
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp),
+                horizontalArrangement = Arrangement.spacedBy(DashType.tileGap),
+                verticalArrangement = Arrangement.spacedBy(DashType.tileGap),
                 contentPadding = PaddingValues(bottom = 4.dp),
             ) {
             items(rows) { (label, value) ->
@@ -930,8 +959,8 @@ private fun DenseTile(
 
     Column(
         modifier = modifier
-            .height(68.dp)
-            .clip(RoundedCornerShape(10.dp))
+            .height(DashType.tileH)
+            .clip(RoundedCornerShape(12.dp))
             .background(Surface)
             .combinedClickable(
                 onClick = {
@@ -959,35 +988,35 @@ private fun DenseTile(
                     onEditThresholds?.invoke()
                 },
             )
-            .padding(horizontal = 7.dp, vertical = 4.dp),
+            .padding(horizontal = 10.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.SpaceBetween,
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             if (health != null && health != Health.UNKNOWN) {
                 Box(
                     modifier = Modifier
-                        .size(6.dp)
-                        .clip(RoundedCornerShape(3.dp))
+                        .size(9.dp)
+                        .clip(RoundedCornerShape(5.dp))
                         .background(health.color()),
                 )
                 Text(
                     text = " $label",
                     color = TextMuted,
-                    fontSize = 9.sp,
-                    fontWeight = FontWeight.Medium,
+                    fontSize = DashType.tileLabel,
+                    fontWeight = FontWeight.SemiBold,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
-                    style = tightTextStyle(9.sp),
+                    style = tightTextStyle(DashType.tileLabel),
                 )
             } else {
                 Text(
                     text = label,
                     color = TextMuted,
-                    fontSize = 9.sp,
-                    fontWeight = FontWeight.Medium,
+                    fontSize = DashType.tileLabel,
+                    fontWeight = FontWeight.SemiBold,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
-                    style = tightTextStyle(9.sp),
+                    style = tightTextStyle(DashType.tileLabel),
                 )
             }
         }
@@ -995,36 +1024,59 @@ private fun DenseTile(
             Text(
                 text = value,
                 color = valueColor,
-                fontSize = 15.sp,
+                fontSize = DashType.tileValue,
                 fontWeight = FontWeight.Bold,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-                style = tightTextStyle(15.sp),
+                style = tightTextStyle(DashType.tileValue),
             )
             if (unit.isNotEmpty()) {
                 Text(
                     text = " $unit",
                     color = TextMuted,
-                    fontSize = 9.sp,
+                    fontSize = DashType.tileUnit,
+                    fontWeight = FontWeight.Bold,
                     maxLines = 1,
-                    style = tightTextStyle(9.sp),
+                    style = tightTextStyle(DashType.tileUnit),
+                    modifier = Modifier.padding(bottom = 2.dp),
                 )
             }
         }
         when {
-            deepSearchHint -> Text("tap×3 deep · 2× change", color = Accent, fontSize = 8.sp, maxLines = 1, style = tightTextStyle(8.sp))
-            remappedHint -> Text("2× change", color = Accent, fontSize = 8.sp, maxLines = 1, style = tightTextStyle(8.sp))
+            deepSearchHint -> Text(
+                "tap×3 deep · 2× change",
+                color = Accent,
+                fontSize = DashType.tileHint,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                style = tightTextStyle(DashType.tileHint),
+            )
+            remappedHint -> Text(
+                "2× change",
+                color = Accent,
+                fontSize = DashType.tileHint,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                style = tightTextStyle(DashType.tileHint),
+            )
             !statusLabel.isNullOrBlank() && !muted -> Text(
                 text = statusLabel,
                 color = health?.color() ?: TextMuted,
-                fontSize = 8.sp,
+                fontSize = DashType.tileStatus,
                 fontWeight = FontWeight.Bold,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-                style = tightTextStyle(8.sp),
+                style = tightTextStyle(DashType.tileStatus),
             )
-            onRemap != null -> Text("2× change", color = TextMuted, fontSize = 8.sp, maxLines = 1, style = tightTextStyle(8.sp))
-            else -> Text(" ", fontSize = 8.sp, style = tightTextStyle(8.sp)) // reserve line
+            onRemap != null -> Text(
+                "2× change",
+                color = TextMuted,
+                fontSize = DashType.tileHint,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                style = tightTextStyle(DashType.tileHint),
+            )
+            else -> Text(" ", fontSize = DashType.tileHint, style = tightTextStyle(DashType.tileHint))
         }
     }
 }
@@ -1033,19 +1085,20 @@ private fun DenseTile(
 private fun EmptyTile(modifier: Modifier = Modifier, onClick: () -> Unit) {
     Box(
         modifier = modifier
-            .height(68.dp)
-            .clip(RoundedCornerShape(10.dp))
+            .height(DashType.tileH)
+            .clip(RoundedCornerShape(12.dp))
             .background(Surface)
             .clickable(onClick = onClick)
             .padding(4.dp),
         contentAlignment = Alignment.Center,
     ) {
-        Text(text = "+", color = Accent, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+        Text(text = "+", color = Accent, fontSize = 28.sp, fontWeight = FontWeight.Bold)
         Text(
             text = "add",
             color = TextMuted,
-            fontSize = 9.sp,
-            modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 2.dp),
+            fontSize = DashType.tileHint,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 6.dp),
         )
     }
 }
@@ -1279,10 +1332,10 @@ private fun PickerRow(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(modifier = Modifier.weight(1f)) {
-            Text(title, color = TextPrimary, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(subtitle, color = TextMuted, fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(title, color = TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(subtitle, color = TextMuted, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
-        Text(trailing, color = Accent, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+        Text(trailing, color = Accent, fontSize = 18.sp, fontWeight = FontWeight.Bold)
     }
 }
 
@@ -1291,14 +1344,14 @@ private fun TopBarChip(text: String, color: Color, onClick: () -> Unit) {
     Text(
         text = text,
         color = color,
-        fontSize = 11.sp,
+        fontSize = DashType.topChip,
         fontWeight = FontWeight.Bold,
         modifier = Modifier
-            .padding(start = 6.dp)
-            .clip(RoundedCornerShape(8.dp))
+            .padding(start = 8.dp)
+            .clip(RoundedCornerShape(10.dp))
             .clickable(onClick = onClick)
             .background(Surface)
-            .padding(horizontal = 8.dp, vertical = 6.dp),
+            .padding(horizontal = 12.dp, vertical = 9.dp),
     )
 }
 
@@ -1322,7 +1375,7 @@ private fun TopBar(
         Text(
             text = "FB2 DIAG",
             color = Accent,
-            fontSize = 15.sp,
+            fontSize = DashType.topTitle,
             fontWeight = FontWeight.Bold,
         )
         Row(
@@ -1343,11 +1396,16 @@ private fun TopBar(
             }
             Box(
                 modifier = Modifier
-                    .size(8.dp)
-                    .clip(RoundedCornerShape(4.dp))
+                    .size(10.dp)
+                    .clip(RoundedCornerShape(5.dp))
                     .background(dot),
             )
-            Text(text = " $text", color = TextMuted, fontSize = 11.sp)
+            Text(
+                text = " $text",
+                color = TextMuted,
+                fontSize = DashType.topChip,
+                fontWeight = FontWeight.Bold,
+            )
 
             TopBarChip(if (loggingActive) "STOP LOG" else "LOG", if (loggingActive) CritRed else Accent, onToggleLogging)
             TopBarChip("MIN", Accent, onMinimizeClick)
