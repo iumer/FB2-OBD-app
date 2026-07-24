@@ -130,9 +130,9 @@ fun ValueLogScreen(
 
         Text(
             text = if (loggingActive) {
-                "LOGGING LIVE — ${rows.size} rows in this session. Tap STOP LOG on the dashboard to save a CSV file."
+                "LOGGING LIVE — main Dash only (${rows.size} rows). Tap STOP LOG on the dashboard to save."
             } else {
-                "Current buffer: ${rows.size} rows. Each STOP LOG saves a separate timestamped CSV below."
+                "Current buffer: ${rows.size} rows. LOG captures hero + Dash tiles (including any + extras)."
             },
             color = if (loggingActive) GoodGreen else TextMuted,
             fontSize = 12.sp,
@@ -198,7 +198,7 @@ fun ValueLogScreen(
 
         if (rows.isEmpty()) {
             Text(
-                text = "No live rows yet. Tap LOG on the dashboard to capture every tab + probes into one CSV, then drive.",
+                text = "No live rows yet. Tap LOG on the dashboard to capture main Dash values (RPM, gear, speed, tiles + extras), then drive.",
                 color = TextMuted,
                 fontSize = 13.sp,
             )

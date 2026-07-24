@@ -51,7 +51,6 @@ import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import java.io.File
-import kotlin.math.sqrt
 
 /** UI state for the dashboard screen. */
 data class DashboardUiState(
@@ -297,8 +296,8 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
     private var collectJob: Job? = null
     private var loggingJob: Job? = null
     private var readinessJob: Job? = null
-    /** Throttle full multi-tab CSV samples so the buffer lasts a whole drive. */
-    private var lastTabLogMs: Long = 0L
+    /** Throttle Dash CSV samples (~1 Hz). */
+    private var lastDashLogMs: Long = 0L
     private var currentSource: ObdSource? = null
     /** Last TCM probe hit count — used so Health doesn't claim 100% with zero TCM data. */
     private var lastTcmSupportedCount: Int = 0
@@ -381,15 +380,14 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
         ObdLogger.sessionStartMs = sessionStartedMs
         ObdLogger.valueLoggingEnabled = true
         _settings.update { it.copy(valueLogging = true) }
-        ObdLogger.logDebug(ObdLogger.Dir.INFO, "VALUE LOG session start — full multi-tab capture")
-        lastTabLogMs = 0L
-        logLiveTabs(_uiState.value.snapshot, force = true)
-        // Periodically re-probe every live page so Transmission / Idle / Fuel / Custom
-        // keep writing tab_values even if the user never swipes to them.
+        ObdLogger.logDebug(ObdLogger.Dir.INFO, "VALUE LOG session start — main Dash only")
+        lastDashLogMs = 0L
+        logDashValues(_uiState.value.snapshot, force = true)
+        // Lightly refresh user-added Dash (+) tiles so extras stay current in the CSV.
         loggingJob = viewModelScope.launch {
             while (isActive && ObdLogger.valueLoggingEnabled) {
-                probeAllLivePagesForLog()
-                delay(8_000L)
+                refreshDashExtrasForLog()
+                delay(5_000L)
             }
         }
     }
@@ -403,12 +401,11 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
         loggingJob = null
         val wasOn = ObdLogger.valueLoggingEnabled
         // Final snapshot while logging is still enabled.
-        logLiveTabs(_uiState.value.snapshot, force = true)
+        logDashValues(_uiState.value.snapshot, force = true)
         ObdLogger.valueLoggingEnabled = false
         _settings.update { it.copy(valueLogging = false) }
         val empty = ObdLogger.valueRows().isEmpty() &&
-            ObdLogger.probeRows().isEmpty() &&
-            ObdLogger.tabValueRows().isEmpty()
+            ObdLogger.tabValueRows().none { it.tab.equals("Dash", true) }
         if (!wasOn && empty) {
             return null
         }
@@ -421,61 +418,45 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
         return saved
     }
 
-    private suspend fun probeAllLivePagesForLog() {
+    /** Re-probe only the sensors the user added with + on the main Dash. */
+    private suspend fun refreshDashExtrasForLog() {
         val source = currentSource ?: return
-        ObdLogger.logDebug(ObdLogger.Dir.INFO, "VALUE LOG multi-tab probe cycle")
-        // Custom
-        val selected = pidCatalog.filter { it.id in _custom.value.selectedIds }
-        if (selected.isNotEmpty()) {
-            val results = LiveSnapshotOverlay.apply(source.probePids(selected), _uiState.value.snapshot)
-            ObdLogger.logProbe("Custom", results)
-            _custom.update {
-                it.copy(liveValues = results.associate { r -> r.pid.id to LiveSnapshotOverlay.formatDisplay(r) })
-            }
-        }
-        // Idle
-        run {
-            val results = LiveSnapshotOverlay.apply(
-                source.probePids(ColdStartIdleCatalog.allPids),
-                _uiState.value.snapshot,
-            )
-            ObdLogger.logProbe("Cold start / rough idle", results)
-            _idleDiag.update {
-                it.copy(
-                    values = results.associate { r -> r.pid.label to LiveSnapshotOverlay.formatDisplay(r) },
-                    tips = ColdStartIdleCatalog.analyze(results),
-                )
-            }
-        }
-        // Fuel
-        run {
-            val defs = StandardPidCatalog.fuelPageDefaults() +
-                HondaPidCatalog.engine.pids.filter { it.label.contains("Injector", true) } +
-                HondaPidCatalog.engine.pids.filter { it.label.contains("Fuel", true) }
-            val results = LiveSnapshotOverlay.apply(
-                source.probePids(defs.distinctBy { it.id }),
-                _uiState.value.snapshot,
-            )
-            ObdLogger.logProbe("Fuel system", results)
-            _fuelValues.value = results.associate { r -> r.pid.label to LiveSnapshotOverlay.formatDisplay(r) }
-        }
-        // Transmission
-        run {
-            val results = source.probePids(HondaPidCatalog.transmission.pids)
-            ObdLogger.logProbe("Transmission", results)
-            lastTcmSupportedCount = results.count { it.supported }
-            _transValues.value = results.associate { r -> r.pid.label to LiveSnapshotOverlay.formatDisplay(r) }
-        }
-        logLiveTabs(_uiState.value.snapshot, force = true)
+        val ids = _dashExtraPidIds.value
+        if (ids.isEmpty()) return
+        val pids = ids.mapNotNull { id -> pidCatalog.find { it.id.equals(id, true) } }
+        if (pids.isEmpty()) return
+        val results = LiveSnapshotOverlay.apply(source.probePids(pids), _uiState.value.snapshot)
+        val live = results.associate { r -> r.pid.id to LiveSnapshotOverlay.formatDisplay(r) }
+        _dashExtraValues.update { it + live }
+        logDashValues(_uiState.value.snapshot, force = true)
     }
 
-    /** Write every dashboard tab's current values into the session (tab_values section). */
-    private fun logLiveTabs(snapshot: VehicleSnapshot, force: Boolean = false) {
+    /**
+     * Log main Dash only: hero (RPM/Speed/Gear) + built-in tiles + any + extras.
+     * Fuel / Trip / Trans / Perf / etc. are NOT written to the value CSV.
+     */
+    private fun logDashValues(snapshot: VehicleSnapshot, force: Boolean = false) {
         if (!ObdLogger.valueLoggingEnabled) return
         val now = System.currentTimeMillis()
-        // ~1 Hz tab samples (probes still write on their own cadence).
-        if (!force && now - lastTabLogMs < 1_000L) return
-        lastTabLogMs = now
+        if (!force && now - lastDashLogMs < 1_000L) return
+        lastDashLogMs = now
+
+        val health = _health.value
+        val dtc = _uiState.value.dtcCount
+        val extras = LinkedHashMap<String, String>()
+        _dashExtraPidIds.value.forEach { id ->
+            val pid = pidCatalog.find { it.id.equals(id, true) } ?: return@forEach
+            val text = _dashExtraValues.value[id]
+                ?: _deepFoundValues.value[pid.label]
+                ?: _deepFoundValues.value[id]
+                ?: LiveSnapshotOverlay.formatLiveOrNs(pid, snapshot)
+            extras[pid.label] = text
+        }
+        _deepFoundValues.value.forEach { (label, value) ->
+            // Recovered n/s tiles that belong to the main Dash layout.
+            if (label !in extras) extras["Deep:$label"] = value
+        }
+
         ObdLogger.logTabMap(
             "Dash",
             mapOf(
@@ -495,71 +476,10 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
                 "MAF" to (snapshot.mafGps?.toString() ?: "n/s"),
                 "MAP" to (snapshot.mapKpa?.toString() ?: "n/s"),
                 "Timing" to (snapshot.timingAdvance?.toString() ?: "n/s"),
-            ) + _dashExtraValues.value.mapKeys { "Extra:${it.key}" } +
-                _deepFoundValues.value.mapKeys { "Deep:${it.key}" },
-            now,
-        )
-        val customMap = _custom.value.selectedIds.associate { id ->
-            val pid = pidCatalog.find { it.id == id }
-            val label = pid?.label ?: id
-            val value = when {
-                _custom.value.liveValues[id] != null -> _custom.value.liveValues[id]!!
-                pid != null -> LiveSnapshotOverlay.formatLiveOrNs(pid, snapshot)
-                else -> "n/s"
-            }
-            label to value
-        }
-        ObdLogger.logTabMap("Custom", customMap, now)
-        ObdLogger.logTabMap("Idle", _idleDiag.value.values, now)
-        ObdLogger.logTabMap("Fuel", _fuelValues.value, now)
-        val trip = _trip.value
-        ObdLogger.logTabMap(
-            "Trip",
-            mapOf(
-                "DistanceKm" to "%.3f".format(trip.distanceKm),
-                "KmPerL" to (trip.kmPerLiter?.let { "%.2f".format(it) } ?: "n/s"),
-                "CostPkr" to "%.1f".format(trip.cost),
-                "IdleSec" to "%.0f".format(trip.idleSeconds),
-                "FuelPricePkrPerL" to "%.0f".format(trip.fuelPrice),
-            ),
-            now,
-        )
-        ObdLogger.logTabMap("Transmission", _transValues.value, now)
-        val perf = _performance.value
-        ObdLogger.logTabMap(
-            "Perf",
-            mapOf(
-                "Phase" to perf.phase.name,
-                "SpeedKmh" to (perf.currentSpeedKmh?.toString() ?: "n/s"),
-                "0-100" to (perf.current.zeroTo100Kmh?.toString() ?: "—"),
-                "0-160" to (perf.current.zeroTo160Kmh?.toString() ?: "—"),
-                "60-100" to (perf.current.sixtyTo100Kmh?.toString() ?: "—"),
-                "Best0-100" to (perf.best.zeroTo100Kmh?.toString() ?: "—"),
-            ),
-            now,
-        )
-        val g = sqrt((phoneAx * phoneAx + phoneAy * phoneAy + phoneAz * phoneAz).toDouble()) / 9.81
-        ObdLogger.logTabMap(
-            "G-force",
-            mapOf(
-                "TotalG" to "%.3f".format(g),
-                "Ax" to "%.3f".format(phoneAx),
-                "Ay" to "%.3f".format(phoneAy),
-                "Az" to "%.3f".format(phoneAz),
-            ),
-            now,
-        )
-        val health = _health.value
-        ObdLogger.logTabMap(
-            "Health",
-            mapOf(
-                "EnginePct" to (health?.enginePct?.toString() ?: "n/a"),
-                "EngineOk" to (health?.engineDataOk?.toString() ?: "false"),
-                "TransPct" to (health?.transmissionPct?.toString() ?: "n/a"),
-                "TransOk" to (health?.transmissionDataOk?.toString() ?: "false"),
-                "EngineNotes" to (health?.engineNotes?.joinToString("; ") ?: ""),
-                "TransNotes" to (health?.transmissionNotes?.joinToString("; ") ?: ""),
-            ),
+                "FuelLoop" to (snapshot.fuelSystemStatus ?: "n/s"),
+                "DTCs" to (dtc?.toString() ?: "n/s"),
+                "HealthPct" to (health?.vehiclePct?.toString() ?: "n/s"),
+            ) + extras,
             now,
         )
     }
@@ -678,9 +598,9 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
                     source.name,
                 )
                 publishCarDash()
-                // Sample all tabs into the session file (not only the visible swipe page).
+                // Sample main Dash only into the session CSV.
                 if (ObdLogger.valueLoggingEnabled) {
-                    logLiveTabs(snapshot)
+                    logDashValues(snapshot)
                 }
             }
             .catch {
