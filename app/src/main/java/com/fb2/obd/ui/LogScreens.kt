@@ -21,22 +21,26 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.fb2.obd.data.ObdLogger
+import com.fb2.obd.data.SavedLogFile
 import com.fb2.obd.ui.theme.Accent
 import com.fb2.obd.ui.theme.Background
+import com.fb2.obd.ui.theme.CritRed
 import com.fb2.obd.ui.theme.GoodGreen
 import com.fb2.obd.ui.theme.Surface
 import com.fb2.obd.ui.theme.TextMuted
 import com.fb2.obd.ui.theme.TextPrimary
 import java.text.SimpleDateFormat
+import java.util.Date
 import java.util.Locale
 
 private val TIME_FMT = SimpleDateFormat("HH:mm:ss.SSS", Locale.US)
+private val FILE_FMT = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US)
 
 @Composable
-private fun HeaderAction(text: String, onClick: () -> Unit) {
+private fun HeaderAction(text: String, onClick: () -> Unit, color: androidx.compose.ui.graphics.Color = Accent) {
     Text(
         text = text,
-        color = Accent,
+        color = color,
         fontSize = 14.sp,
         fontWeight = FontWeight.Bold,
         modifier = Modifier
@@ -106,6 +110,10 @@ fun ValueLogScreen(
     onClear: () -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
+    savedFiles: List<SavedLogFile> = emptyList(),
+    loggingActive: Boolean = false,
+    onShareFile: (SavedLogFile) -> Unit = {},
+    onDeleteFile: (SavedLogFile) -> Unit = {},
 ) {
     Column(
         modifier = modifier
@@ -115,21 +123,82 @@ fun ValueLogScreen(
     ) {
         ScreenHeader(title = "Value log", onBack = onBack) {
             Row {
-                HeaderAction("Share CSV", onShare)
-                HeaderAction("Clear", onClear)
+                HeaderAction("Share current", onShare)
+                HeaderAction("Clear current", onClear)
             }
         }
 
         Text(
-            text = "${rows.size} rows recorded",
-            color = TextMuted,
+            text = if (loggingActive) {
+                "LOGGING LIVE — ${rows.size} rows in this session. Tap STOP LOG on the dashboard to save a CSV file."
+            } else {
+                "Current buffer: ${rows.size} rows. Each STOP LOG saves a separate timestamped CSV below."
+            },
+            color = if (loggingActive) GoodGreen else TextMuted,
             fontSize = 12.sp,
             modifier = Modifier.padding(bottom = 8.dp),
         )
 
+        if (savedFiles.isNotEmpty()) {
+            Text(
+                text = "SAVED SESSIONS (${savedFiles.size})",
+                color = TextMuted,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(bottom = 6.dp),
+            )
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 10.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                savedFiles.take(30).forEach { file ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(Surface)
+                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(file.displayName, color = TextPrimary, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                            Text(
+                                text = "${FILE_FMT.format(Date(file.startedMs))} · ${file.sizeBytes / 1024} KB",
+                                color = TextMuted,
+                                fontSize = 11.sp,
+                            )
+                        }
+                        Text(
+                            text = "Share",
+                            color = Accent,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .clickable { onShareFile(file) }
+                                .padding(horizontal = 10.dp, vertical = 6.dp),
+                        )
+                        Text(
+                            text = "Del",
+                            color = CritRed,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .clickable { onDeleteFile(file) }
+                                .padding(horizontal = 10.dp, vertical = 6.dp),
+                        )
+                    }
+                }
+            }
+        }
+
         if (rows.isEmpty()) {
             Text(
-                text = "No rows yet. Enable \"Record value log\" in Settings, then drive.",
+                text = "No live rows yet. Tap LOG on the dashboard (or enable Record value log in Settings), then drive.",
                 color = TextMuted,
                 fontSize = 13.sp,
             )

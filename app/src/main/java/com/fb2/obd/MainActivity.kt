@@ -20,8 +20,12 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -32,7 +36,12 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
+import com.fb2.obd.ui.theme.Accent
+import com.fb2.obd.ui.theme.Background
+import com.fb2.obd.ui.theme.TextPrimary
 import com.fb2.obd.data.DemoObdSource
 import com.fb2.obd.data.Elm327BluetoothSource
 import com.fb2.obd.data.ObdLogger
@@ -93,11 +102,13 @@ class MainActivity : ComponentActivity() {
                 val maintenance by viewModel.maintenance.collectAsState()
                 val dashExtraPidIds by viewModel.dashExtraPidIds.collectAsState()
                 val dashExtraValues by viewModel.dashExtraValues.collectAsState()
+                val savedLogs by viewModel.savedLogs.collectAsState()
 
                 var screen by remember { mutableStateOf(Screen.DASHBOARD) }
                 // Lives above the screen switch so Settings scroll is kept when opening a sub-page.
                 val settingsScrollState = rememberScrollState()
                 var showConnect by remember { mutableStateOf(false) }
+                var showExitConfirm by remember { mutableStateOf(false) }
                 var devices by remember { mutableStateOf(emptyList<BtDeviceUi>()) }
                 var ax by remember { mutableFloatStateOf(0f) }
                 var ay by remember { mutableFloatStateOf(0f) }
@@ -153,6 +164,14 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
+                BackHandler {
+                    when (screen) {
+                        Screen.DASHBOARD -> showExitConfirm = true
+                        Screen.SETTINGS -> screen = Screen.DASHBOARD
+                        else -> screen = Screen.SETTINGS
+                    }
+                }
+
                 val settingsNav = SettingsNav(
                     onFaults = { screen = Screen.FAULTS },
                     onPerformance = { screen = Screen.PERFORMANCE },
@@ -183,7 +202,10 @@ class MainActivity : ComponentActivity() {
                     onHonda = { screen = Screen.HONDA },
                     onGForce = { screen = Screen.GFORCE },
                     onDebug = { screen = Screen.DEBUG_LOG },
-                    onValues = { screen = Screen.VALUE_LOG },
+                    onValues = {
+                        viewModel.refreshSavedLogs()
+                        screen = Screen.VALUE_LOG
+                    },
                 )
 
                 when (screen) {
@@ -191,6 +213,7 @@ class MainActivity : ComponentActivity() {
                         state = state,
                         modifier = Modifier.fillMaxSize(),
                         showEstimatedGear = settings.showEstimatedGear,
+                        loggingActive = settings.valueLogging,
                         onConnectClick = {
                             val needed = requiredBtPermissions().filter {
                                 ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
@@ -205,6 +228,18 @@ class MainActivity : ComponentActivity() {
                             }
                         },
                         onSettingsClick = { screen = Screen.SETTINGS },
+                        onToggleLogging = {
+                            if (settings.valueLogging) {
+                                val saved = viewModel.stopValueLogging()
+                                toast(
+                                    if (saved != null) "Log saved: ${saved.fileName}"
+                                    else "Logging stopped (empty session)",
+                                )
+                            } else {
+                                viewModel.startValueLogging()
+                                toast("Logging started")
+                            }
+                        },
                         catalog = viewModel.pidCatalog,
                         extraPidIds = dashExtraPidIds,
                         extraValues = dashExtraValues,
@@ -375,6 +410,21 @@ class MainActivity : ComponentActivity() {
                             onClear = { ObdLogger.clearValues(); tick++ },
                             onBack = { screen = Screen.SETTINGS },
                             modifier = Modifier.fillMaxSize(),
+                            savedFiles = savedLogs,
+                            loggingActive = settings.valueLogging,
+                            onShareFile = { file ->
+                                val body = viewModel.readSavedLog(file.fileName)
+                                if (body != null) {
+                                    shareText(file.fileName, body)
+                                } else {
+                                    toast("Could not read ${file.fileName}")
+                                }
+                            },
+                            onDeleteFile = { file ->
+                                viewModel.deleteSavedLog(file.fileName)
+                                toast("Deleted ${file.fileName}")
+                                tick++
+                            },
                         )
                     }
                 }
@@ -385,6 +435,39 @@ class MainActivity : ComponentActivity() {
                         onPickDevice = { connectTo(it); showConnect = false },
                         onPickDemo = { viewModel.useSource(DemoObdSource()); showConnect = false },
                         onDismiss = { showConnect = false },
+                    )
+                }
+
+                if (showExitConfirm) {
+                    AlertDialog(
+                        onDismissRequest = { showExitConfirm = false },
+                        title = {
+                            Text("Exit FB2 Diag?", color = TextPrimary, fontWeight = FontWeight.Bold)
+                        },
+                        text = {
+                            Text(
+                                text = "Disconnect the ELM adapter and close the app?",
+                                color = TextPrimary,
+                                fontSize = 14.sp,
+                            )
+                        },
+                        confirmButton = {
+                            TextButton(
+                                onClick = {
+                                    showExitConfirm = false
+                                    viewModel.disconnect()
+                                    finish()
+                                },
+                            ) {
+                                Text("Exit & disconnect", color = Accent, fontWeight = FontWeight.Bold)
+                            }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = { showExitConfirm = false }) {
+                                Text("Stay", color = TextPrimary)
+                            }
+                        },
+                        containerColor = Background,
                     )
                 }
             }

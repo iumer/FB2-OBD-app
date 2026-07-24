@@ -79,8 +79,10 @@ fun DashboardScreen(
     state: DashboardUiState,
     modifier: Modifier = Modifier,
     showEstimatedGear: Boolean = true,
+    loggingActive: Boolean = false,
     onConnectClick: () -> Unit = {},
     onSettingsClick: () -> Unit = {},
+    onToggleLogging: () -> Unit = {},
     catalog: List<PidDefinition> = StandardPidCatalog.all,
     extraPidIds: List<String> = emptyList(),
     extraValues: Map<String, String> = emptyMap(),
@@ -115,7 +117,13 @@ fun DashboardScreen(
             .background(Background)
             .padding(horizontal = 10.dp, vertical = 6.dp),
     ) {
-        TopBar(state, onConnectClick, onSettingsClick)
+        TopBar(
+            state = state,
+            loggingActive = loggingActive,
+            onConnectClick = onConnectClick,
+            onSettingsClick = onSettingsClick,
+            onToggleLogging = onToggleLogging,
+        )
 
         CompactHeroStrip(
             rpm = s.rpm,
@@ -675,9 +683,13 @@ private fun PickerRow(
 @Composable
 private fun TopBar(
     state: DashboardUiState,
+    loggingActive: Boolean,
     onConnectClick: () -> Unit,
     onSettingsClick: () -> Unit,
+    onToggleLogging: () -> Unit,
 ) {
+    val linked = state.connection == ConnectionState.CONNECTED ||
+        state.connection == ConnectionState.CONNECTING
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -712,12 +724,25 @@ private fun TopBar(
             Text(text = "  $text", color = TextMuted, fontSize = 11.sp)
 
             Text(
+                text = if (loggingActive) "STOP LOG" else "LOG",
+                color = if (loggingActive) CritRed else Accent,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier
+                    .padding(start = 8.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .clickable { onToggleLogging() }
+                    .background(Surface)
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
+            )
+
+            Text(
                 text = "SETTINGS",
                 color = TextMuted,
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier
-                    .padding(start = 10.dp)
+                    .padding(start = 8.dp)
                     .clip(RoundedCornerShape(8.dp))
                     .clickable { onSettingsClick() }
                     .background(Surface)
@@ -725,8 +750,12 @@ private fun TopBar(
             )
 
             Text(
-                text = "CONNECT",
-                color = Accent,
+                text = when {
+                    state.connection == ConnectionState.CONNECTED -> "CONNECTED"
+                    state.connection == ConnectionState.CONNECTING -> "CONNECTING"
+                    else -> "CONNECT"
+                },
+                color = if (linked && state.connection == ConnectionState.CONNECTED) GoodGreen else Accent,
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier
