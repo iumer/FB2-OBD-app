@@ -37,6 +37,7 @@ Keep these fixed. If a change might touch one of these areas, re-verify it.
 | I22 | Sensor picker has no text search | Fixed | Search box in `SensorPickerDialog` (label / PID / category) |
 | I23 | MIN toast shows but bubble missing on Home | Fixed | FGS + attach/READY before `moveTaskToBack`; clamp on-screen |
 | I24 | Dash text too small to read while driving on HU | Fixed | `DashType` larger hero/tiles; fewer wider columns |
+| I25 | Floating bubble ring too small on HU | Fixed | Center 96dp / satellites 112dp / ring ~460dp; larger text |
 
 When the user reports a **new** bug, add a new `Ixx` row here (Status: Open → Fixed)
 and add a matching automated or manual check in sections 2–3.
