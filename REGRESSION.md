@@ -17,7 +17,7 @@ Keep these fixed. If a change might touch one of these areas, re-verify it.
 | I02 | Auto-reconnect must not require pressing a button | Fixed | Background backoff reconnect; RECONNECT only for fresh adapter pick |
 | I03 | Battery shows n/s even though Torque shows volts | Fixed | ATRV every cycle even during `UNABLE`; sticky volts |
 | I04 | Deep analysis said “nothing found” for Battery | Fixed | Deep search: restore → ATRV retries → bus gate → ECU strategies |
-| I05 | MAF flagged CRITICAL while Torque shows normal | Fixed | Schema 3 R18 bands; coasting = `COAST OK`; PID `0110` confirmed correct |
+| I05 | MAF flagged CRITICAL while Torque shows normal | Fixed | Schema 3 R18 bands; coasting = `COAST OK`; PID `0110` SAE decode unit-tested |
 | I06 | Suspicion wrong PID/protocol for other sensors | Partially | Compare vs Torque trackLog; LTFT missing in **both** apps (ECU). Re-check if new mismatches appear |
 | I07 | Rough Idle page stuck on “Probing…” | Fixed | Live Dash prefill; Mode 01 first; skip Mode 22 if bus unhealthy; shorter probe timeout |
 | I08 | App very laggy / slow | Fixed | Timeouts ~650/450 ms; core-PID-only while recovering; less ATSP thrash |
@@ -30,7 +30,8 @@ Keep these fixed. If a change might touch one of these areas, re-verify it.
 | I15 | Health colours / long-press threshold editor | Fixed | `HealthThresholds` + store |
 | I16 | Fuel Open/Closed Loop on Dash | Fixed | PID `0103` |
 | I17 | Always-on event logging (`# events`) | Fixed | `DiagnosticEventTracker` |
-| I18 | Floating minimize bubble over CarPlay / other apps | Fixed | Radial ring: collapsed circle + up to 5 satellites; vertical page swipe; 6s auto-collapse |
+| I18 | Floating minimize bubble over CarPlay / other apps | Fixed | Radial ring + swipe pages + 6s auto-collapse; Exit stops overlay (`START_NOT_STICKY`) |
+| I19 | Exit left floating bubble on screen | Fixed | Exit confirm → `FloatingDashOverlayService.stop` + `finishAndRemoveTask` |
 
 When the user reports a **new** bug, add a new `Ixx` row here (Status: Open → Fixed)
 and add a matching automated or manual check in sections 2–3.
@@ -85,9 +86,10 @@ touches ELM, Dash health, deep search, logging, or share:
 6. **Debug log Share** — Settings → Debug log → Share → system chooser appears (toast “Opening share sheet…”).
 7. **Value LOG Share** — stop a LOG session → share CSV via chooser.
 8. **Screen off alerts** — real ELM connected → sticky notification present; with voice alerts on, a critical condition still speaks after screen off.
-9. **Floating bubble (MIN)** — grant overlay permission → MIN → collapsed circle appears; drag works; tap expands **radial ring** (up to 5 live values around center); vertical swipe pages next/previous groups; idle ~6s auto-collapses to circle; tap center collapses; hold opens app. (On Dellson: verify over CarPlay if used.)
-10. **Car HU layout (automated)** — Paparazzi at 1024×600, 1280×720, 1920×720 in `CarHuSnapshotTest` / `CarHuBubbleSnapshotTest` (collapsed + radial expanded).
+9. **Floating bubble (MIN)** — grant overlay permission → MIN → collapsed circle appears; drag works; tap expands **radial ring** (up to 5 live values around center); vertical swipe pages next/previous groups; idle ~6s auto-collapses to circle; tap center collapses; hold opens app. **Back → Exit & disconnect** must remove the bubble entirely. (On Dellson: verify over CarPlay if used.)
+10. **Car HU layout (automated)** — Paparazzi at 1024×600, 1280×720, 1920×720 in `CarHuSnapshotTest` / `CarHuBubbleSnapshotTest` (collapsed + radial expanded). Adaptive column counts for Dash/dense pages.
 11. **Android Auto** — phone UI / DHU only unless installed via Play Internal testing.
+12. **Morning regression trio** — Battery volts via ATRV (not n/s); Idle page shows values (not stuck Probing); MAF idle ~3–5 g/s = IDLE OK not CRITICAL.
 
 ---
 

@@ -423,7 +423,7 @@ class MainActivity : ComponentActivity() {
                         },
                         text = {
                             Text(
-                                text = "Disconnect the ELM adapter and close the app?",
+                                text = "Disconnect the ELM adapter, close the floating bubble, and quit the app?",
                                 color = TextPrimary,
                                 fontSize = 14.sp,
                             )
@@ -432,8 +432,11 @@ class MainActivity : ComponentActivity() {
                             TextButton(
                                 onClick = {
                                     showExitConfirm = false
+                                    // Full quit: tear down overlay first so the bubble cannot
+                                    // linger after finish() (service is independent of the Activity).
+                                    FloatingDashOverlayService.stop(this@MainActivity)
                                     viewModel.disconnect()
-                                    finish()
+                                    finishAndRemoveTask()
                                 },
                             ) {
                                 Text("Exit & disconnect", color = Accent, fontWeight = FontWeight.Bold)

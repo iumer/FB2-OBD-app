@@ -8,6 +8,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -48,6 +49,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.fb2.obd.DashboardUiState
@@ -78,6 +80,19 @@ import com.fb2.obd.ui.theme.WarnAmber
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
+/** Column count from available width — works in Paparazzi + real HU (not LocalConfiguration). */
+private fun dashColumnsForWidth(maxWidth: Dp): Int = when {
+    maxWidth >= 1500.dp -> 6
+    maxWidth >= 1050.dp -> 5
+    maxWidth >= 750.dp -> 4
+    else -> 3
+}
+
+private fun denseColumnsForWidth(maxWidth: Dp): Int = when {
+    maxWidth >= 1300.dp -> 4
+    maxWidth >= 850.dp -> 3
+    else -> 2
+}
 private fun Double?.fmt(digits: Int = 0): String = this?.let {
     if (digits == 0) it.roundToInt().toString() else "%.${digits}f".format(it)
 } ?: "--"
@@ -579,13 +594,15 @@ private fun MetricsPage(
     val extras = extraPidIds.mapNotNull { id -> catalog.find { it.id.equals(id, true) } }
     val emptySlots = (0 until 6).toList()
 
-    LazyVerticalGrid(
-        columns = GridCells.Fixed(6),
-        modifier = Modifier.fillMaxSize(),
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-        verticalArrangement = Arrangement.spacedBy(6.dp),
-        contentPadding = PaddingValues(bottom = 4.dp),
-    ) {
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        val columns = dashColumnsForWidth(maxWidth)
+        LazyVerticalGrid(
+            columns = GridCells.Fixed(columns),
+            modifier = Modifier.fillMaxSize(),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+            contentPadding = PaddingValues(bottom = 4.dp),
+        ) {
         items(baseTiles) { t ->
             val unsupported = t.pid != null && t.pid.number in snapshot.unsupportedPids
             val recovered = deepFoundValues[t.label]
@@ -653,6 +670,7 @@ private fun MetricsPage(
                 onClick = { onEmptySlotClick(extras.size + idx) },
             )
         }
+        }
     }
 }
 
@@ -717,13 +735,15 @@ private fun DenseSensorGridPage(
                     .padding(horizontal = 10.dp, vertical = 8.dp),
             )
         }
-        LazyVerticalGrid(
-            columns = GridCells.Fixed(4),
-            modifier = Modifier.fillMaxSize(),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
-            contentPadding = PaddingValues(bottom = 4.dp),
-        ) {
+        BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+            val columns = denseColumnsForWidth(maxWidth)
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(columns),
+                modifier = Modifier.fillMaxSize(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+                contentPadding = PaddingValues(bottom = 4.dp),
+            ) {
             items(rows) { (label, value) ->
                 val recovered = deepFoundValues[label]
                 val effective = recovered ?: value
@@ -822,6 +842,7 @@ private fun DenseSensorGridPage(
                     },
                     modifier = Modifier.fillMaxWidth(),
                 )
+            }
             }
         }
     }
