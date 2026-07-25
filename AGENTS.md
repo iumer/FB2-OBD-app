@@ -107,11 +107,12 @@ non-obvious cloud specifics.
   during `UNABLE` — do not gate ATRV on ECU bus health.
 - **Screen off / background:** real ELM sessions start
   `ObdMonitorForegroundService` (`connectedDevice` FGS + sticky notification +
-  `PARTIAL_WAKE_LOCK`). Demo mode must not start it. Voice alerts always play a
-  **ToneGenerator alarm beep** (STREAM_ALARM → notification → music) plus TTS
-  (`USAGE_ASSISTANCE_NAVIGATION_GUIDANCE`) when ready; prefer car BT when available.
-  Settings → **Check sound alert** plays the same battery-critical tone+phrase.
-  Battery orange (ELEVATED) speaks “Battery low”; red CRITICAL speaks “Battery critical”.
+  `PARTIAL_WAKE_LOCK`). Demo mode must not start it. Voice alerts play a short
+  beep + TTS. **Default is CarPlay/Z-Link safe:** no audio-focus duck (many HUs
+  duck Z-Link and never restore volume). Optional Settings → **Lower CarPlay
+  during alerts** re-enables MAY_DUCK. Never start BT SCO or rewrite STREAM_MUSIC
+  while A2DP is present. Settings → **Check sound alert** plays the test alarm.
+  Battery orange → “Battery low”; red CRITICAL → “Battery critical”.
 - **Floating Dash bubble:** Dash **MIN** chip starts `FloatingDashOverlayService`
   as a **foreground service** (`specialUse` + sticky notification) so the bubble
   survives going to Home / CarPlay. MainActivity waits for `ACTION_READY` (overlay

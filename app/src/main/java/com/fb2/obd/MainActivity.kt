@@ -315,9 +315,10 @@ class MainActivity : ComponentActivity() {
                         settings = settings,
                         onToggleEstimatedGear = viewModel::setShowEstimatedGear,
                         onToggleVoiceAlerts = viewModel::setVoiceAlerts,
+                        onToggleDuckMedia = viewModel::setDuckMediaDuringAlerts,
                         onCheckSoundAlert = {
                             viewModel.testSoundAlert()
-                            toast("Playing test alarm — listen for beep + “Battery critical”")
+                            toast("Playing test alarm — CarPlay volume should stay up afterward")
                         },
                         nav = settingsNav,
                         onBack = { screen = Screen.DASHBOARD },

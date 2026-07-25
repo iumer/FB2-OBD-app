@@ -76,6 +76,11 @@ data class SettingsState(
     val showEstimatedGear: Boolean = true,
     val fuelPricePerLiter: Double = 280.0,
     val voiceAlerts: Boolean = true,
+    /**
+     * When true, alerts request Android audio focus and briefly duck media.
+     * Default false — CarPlay/Z-Link on many HUs ducks and never restores volume.
+     */
+    val duckMediaDuringAlerts: Boolean = false,
 )
 
 /** Diagnostic trouble code state for the Faults screen. */
@@ -370,6 +375,7 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
         _maintenance.value = MaintenanceStore(File(filesDir, "maintenance.json")).load()
         _healthThresholds.value = thresholdStore.load()
         voiceAlerter.enabled = _settings.value.voiceAlerts
+        voiceAlerter.duckMediaDuringAlerts = _settings.value.duckMediaDuringAlerts
         voiceAlerter.start()
         VehicleLiveStore.onToggleLogging = {
             if (_settings.value.valueLogging) stopValueLogging() else startValueLogging()
@@ -566,6 +572,11 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
             voiceAlerter.start()
             voiceAlerter.speakTest("Voice alerts on")
         }
+    }
+
+    fun setDuckMediaDuringAlerts(enabled: Boolean) {
+        _settings.update { it.copy(duckMediaDuringAlerts = enabled) }
+        voiceAlerter.duckMediaDuringAlerts = enabled
     }
 
     /**

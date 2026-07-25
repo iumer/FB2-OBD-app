@@ -19,12 +19,12 @@ import java.util.concurrent.atomic.AtomicBoolean
 /**
  * Critical / hot-band alarms for the car HU.
  *
- * Always plays an audible **alarm tone** (STREAM_ALARM, with STREAM_MUSIC
- * fallback) so the cabin hears something even when TTS is missing, muted on
- * the nav stream, or still initializing. Also speaks the phrase via offline
- * Text-to-Speech when ready.
+ * Default behaviour is **CarPlay / Z-Link safe**: play a short beep + TTS
+ * *without* requesting audio focus, so media is not ducked. Many Android HUs
+ * duck Z-Link when focus is taken and never restore volume afterward.
  *
- * Same alert key is not repeated more often than [cooldownMs].
+ * Optional [duckMediaDuringAlerts] restores the old MAY_DUCK focus path for
+ * units that handle unduck correctly.
  */
 class VoiceAlerter(context: Context) : TextToSpeech.OnInitListener {
 
@@ -42,18 +42,32 @@ class VoiceAlerter(context: Context) : TextToSpeech.OnInitListener {
     @Volatile
     private var pendingPhrase: String? = null
 
-    private val speechAttrs: AudioAttributes = AudioAttributes.Builder()
+    /** Mix with media — avoids CarPlay duck that some HUs never undo. */
+    private val mixSpeechAttrs: AudioAttributes = AudioAttributes.Builder()
+        .setUsage(AudioAttributes.USAGE_ASSISTANCE_SONIFICATION)
+        .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+        .build()
+
+    /** Louder path when user opts into ducking media. */
+    private val duckSpeechAttrs: AudioAttributes = AudioAttributes.Builder()
         .setUsage(AudioAttributes.USAGE_ASSISTANCE_NAVIGATION_GUIDANCE)
         .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
         .build()
 
     private val alarmAttrs: AudioAttributes = AudioAttributes.Builder()
-        .setUsage(AudioAttributes.USAGE_ALARM)
+        .setUsage(AudioAttributes.USAGE_NOTIFICATION)
         .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
         .build()
 
     @Volatile
     var enabled: Boolean = true
+
+    /**
+     * When true, request transient duck focus (can leave CarPlay quiet on
+     * buggy HUs). Default false = play over media without ducking.
+     */
+    @Volatile
+    var duckMediaDuringAlerts: Boolean = false
 
     /** Minimum gap between repeats of the same alert. */
     var cooldownMs: Long = 45_000L
@@ -68,7 +82,6 @@ class VoiceAlerter(context: Context) : TextToSpeech.OnInitListener {
         if (status != TextToSpeech.SUCCESS) {
             ObdLogger.logDebug(ObdLogger.Dir.INFO, "Voice alerts: TTS init failed ($status)")
             ready.set(false)
-            // Tone path still works; keep pending so a later retry can speak.
             return
         }
         val result = engine.setLanguage(Locale.US)
@@ -76,7 +89,7 @@ class VoiceAlerter(context: Context) : TextToSpeech.OnInitListener {
             engine.language = Locale.getDefault()
         }
         engine.setSpeechRate(0.95f)
-        engine.setAudioAttributes(speechAttrs)
+        applyTtsAttributes(engine)
         engine.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
             override fun onStart(utteranceId: String?) {
                 speaking.set(true)
@@ -94,18 +107,14 @@ class VoiceAlerter(context: Context) : TextToSpeech.OnInitListener {
             }
         })
         ready.set(true)
-        ObdLogger.logDebug(ObdLogger.Dir.INFO, "Voice alerts: TTS ready")
+        ObdLogger.logDebug(ObdLogger.Dir.INFO, "Voice alerts: TTS ready (duckMedia=$duckMediaDuringAlerts)")
         val pending = pendingPhrase
         pendingPhrase = null
         if (pending != null) {
-            speakPhrase("pending", pending, System.currentTimeMillis(), playTone = false)
+            speakPhrase("pending", pending, playTone = false)
         }
     }
 
-    /**
-     * Evaluate snapshot and sound the highest-priority new/rearmed alert.
-     * Tone plays even when TTS is not ready yet.
-     */
     fun onSnapshot(
         snapshot: VehicleSnapshot,
         thresholds: HealthThresholds,
@@ -118,7 +127,6 @@ class VoiceAlerter(context: Context) : TextToSpeech.OnInitListener {
         val alerts = VoiceAlertRules.evaluate(snapshot, thresholds, atfC, tcSlipRpm)
         val activeKeys = alerts.map { it.key }.toSet()
 
-        // Clear latch when condition recovers so next critical re-announces immediately.
         lastHealth.keys.toList().forEach { key ->
             if (key !in activeKeys) {
                 lastHealth.remove(key)
@@ -135,10 +143,6 @@ class VoiceAlerter(context: Context) : TextToSpeech.OnInitListener {
         announce(candidate.key, candidate.phrase, now)
     }
 
-    /**
-     * Settings / toggle check — plays the same critical alarm tone + phrase
-     * used in production (defaults to battery critical).
-     */
     fun speakTest(phrase: String = "Battery critical") {
         start()
         announce("test", phrase, System.currentTimeMillis())
@@ -147,12 +151,15 @@ class VoiceAlerter(context: Context) : TextToSpeech.OnInitListener {
     private fun announce(key: String, phrase: String, nowMs: Long) {
         lastSpokenAt[key] = nowMs
         lastHealth[key] = phrase
-        ObdLogger.logDebug(ObdLogger.Dir.INFO, "VOICE ALERT: $phrase")
+        ObdLogger.logDebug(
+            ObdLogger.Dir.INFO,
+            "VOICE ALERT: $phrase (duckMedia=$duckMediaDuringAlerts a2dp=${hasA2dp()})",
+        )
         playAlarmTone()
-        speakPhrase(key, phrase, nowMs, playTone = false)
+        speakPhrase(key, phrase, playTone = false)
     }
 
-    private fun speakPhrase(key: String, phrase: String, @Suppress("UNUSED_PARAMETER") nowMs: Long, playTone: Boolean) {
+    private fun speakPhrase(key: String, phrase: String, playTone: Boolean) {
         if (playTone) playAlarmTone()
         val engine = tts
         if (!ready.get() || engine == null) {
@@ -160,6 +167,7 @@ class VoiceAlerter(context: Context) : TextToSpeech.OnInitListener {
             ObdLogger.logDebug(ObdLogger.Dir.INFO, "Voice alerts: TTS not ready — tone only, queued \"$phrase\"")
             return
         }
+        applyTtsAttributes(engine)
         prepareAudioForSpeak()
         speaking.set(true)
         val spoken = engine.speak(phrase, TextToSpeech.QUEUE_FLUSH, null, key)
@@ -167,40 +175,61 @@ class VoiceAlerter(context: Context) : TextToSpeech.OnInitListener {
             speaking.set(false)
             releaseAudioAfterSpeak()
             ObdLogger.logDebug(ObdLogger.Dir.INFO, "Voice alerts: TTS speak failed ($spoken)")
+        } else {
+            // Hard release if utterance callbacks never fire (common on OEM TTS).
+            mainHandler.postDelayed({
+                if (speaking.get()) {
+                    speaking.set(false)
+                    releaseAudioAfterSpeak()
+                }
+            }, 4_000)
         }
     }
 
+    private fun applyTtsAttributes(engine: TextToSpeech) {
+        engine.setAudioAttributes(if (duckMediaDuringAlerts) duckSpeechAttrs else mixSpeechAttrs)
+    }
+
     /**
-     * Loud beep on STREAM_ALARM (cabin-friendly). Falls back to STREAM_MUSIC
-     * when alarm volume is unavailable. Temporarily unmutes a zeroed stream.
+     * Short beep. Prefer ALARM / NOTIFICATION streams — never STREAM_MUSIC
+     * when A2DP/CarPlay is up (that fights Z-Link volume).
      */
     fun playAlarmTone() {
-        prepareAudioForAlarm()
-        val streams = intArrayOf(
-            AudioManager.STREAM_ALARM,
-            AudioManager.STREAM_NOTIFICATION,
-            AudioManager.STREAM_MUSIC,
-        )
+        if (duckMediaDuringAlerts) {
+            requestFocus(alarmAttrs)
+        }
+        // Never start SCO for a beep — SCO kills CarPlay media path.
+        val streams = if (hasA2dp()) {
+            intArrayOf(AudioManager.STREAM_ALARM, AudioManager.STREAM_NOTIFICATION)
+        } else {
+            intArrayOf(
+                AudioManager.STREAM_ALARM,
+                AudioManager.STREAM_NOTIFICATION,
+                AudioManager.STREAM_MUSIC,
+            )
+        }
         for (stream in streams) {
-            val restore = ensureAudible(stream)
+            // Never rewrite MUSIC volume — that is what CarPlay/Z-Link uses.
+            val restore = if (stream == AudioManager.STREAM_MUSIC) null else ensureAudible(stream)
             val ok = runCatching {
-                val tg = ToneGenerator(stream, 100)
-                // Distinct urgent pattern — ~1.2s.
-                tg.startTone(ToneGenerator.TONE_CDMA_EMERGENCY_RINGBACK, 1_200)
+                val tg = ToneGenerator(stream, 90)
+                tg.startTone(ToneGenerator.TONE_CDMA_ALERT_CALL_GUARD, 550)
                 mainHandler.postDelayed({
                     runCatching { tg.stopTone() }
                     runCatching { tg.release() }
                     restore?.invoke()
-                }, 1_400)
+                    if (!speaking.get()) releaseAudioAfterSpeak()
+                }, 700)
                 true
             }.getOrDefault(false)
             if (ok) {
-                ObdLogger.logDebug(ObdLogger.Dir.INFO, "Voice alerts: alarm tone on stream=$stream")
+                ObdLogger.logDebug(ObdLogger.Dir.INFO, "Voice alerts: tone on stream=$stream")
                 return
             }
             restore?.invoke()
         }
         ObdLogger.logDebug(ObdLogger.Dir.INFO, "Voice alerts: alarm tone failed on all streams")
+        if (!speaking.get()) releaseAudioAfterSpeak()
     }
 
     private fun ensureAudible(stream: Int): (() -> Unit)? {
@@ -223,34 +252,22 @@ class VoiceAlerter(context: Context) : TextToSpeech.OnInitListener {
         }.getOrNull()
     }
 
-    private fun prepareAudioForAlarm() {
-        val req = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK)
-            .setAudioAttributes(alarmAttrs)
-            .setOnAudioFocusChangeListener { /* keep tone going */ }
-            .setAcceptsDelayedFocusGain(false)
-            .build()
-        focusRequest = req
-        val result = audioManager.requestAudioFocus(req)
-        if (result != AudioManager.AUDIOFOCUS_REQUEST_GRANTED) {
-            ObdLogger.logDebug(ObdLogger.Dir.INFO, "Voice alerts: alarm focus not granted ($result)")
-        }
-        preferBluetoothRoute()
-        // Release focus shortly after the tone finishes (TTS may still hold its own).
-        mainHandler.postDelayed({
-            if (!speaking.get()) releaseAudioAfterSpeak()
-        }, 1_600)
-    }
-
     private fun prepareAudioForSpeak() {
-        requestAudioFocus()
-        preferBluetoothRoute()
+        if (duckMediaDuringAlerts) {
+            requestFocus(duckSpeechAttrs)
+            // SCO only when user opted into duck AND there is no A2DP/CarPlay.
+            preferBluetoothScoIfNeeded()
+        }
     }
 
-    private fun requestAudioFocus() {
+    private fun requestFocus(attrs: AudioAttributes) {
+        // Drop any previous focus first so we don't stack requests.
+        releaseFocusOnly()
         val req = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK)
-            .setAudioAttributes(speechAttrs)
-            .setOnAudioFocusChangeListener { /* keep utterance going */ }
+            .setAudioAttributes(attrs)
+            .setOnAudioFocusChangeListener { /* keep alert going */ }
             .setAcceptsDelayedFocusGain(false)
+            .setWillPauseWhenDucked(false)
             .build()
         focusRequest = req
         val result = audioManager.requestAudioFocus(req)
@@ -259,19 +276,26 @@ class VoiceAlerter(context: Context) : TextToSpeech.OnInitListener {
         }
     }
 
-    /**
-     * Prefer car Bluetooth when A2DP or SCO is connected.
-     * A2DP: navigation usage usually routes via the media/BT path automatically.
-     * SCO-only kits: start SCO so TTS leaves the phone speaker.
-     */
-    private fun preferBluetoothRoute() {
+    private fun hasA2dp(): Boolean {
         val devices = audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
-        val hasA2dp = devices.any { it.type == AudioDeviceInfo.TYPE_BLUETOOTH_A2DP }
-        val hasScoDevice = devices.any { it.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO }
-        if (hasA2dp) {
-            ObdLogger.logDebug(ObdLogger.Dir.INFO, "Voice alerts: BT A2DP available")
+        return devices.any {
+            it.type == AudioDeviceInfo.TYPE_BLUETOOTH_A2DP ||
+                it.type == AudioDeviceInfo.TYPE_BLE_HEADSET ||
+                it.type == AudioDeviceInfo.TYPE_BLE_SPEAKER
+        }
+    }
+
+    /**
+     * SCO-only kits (no A2DP): start SCO so TTS leaves the phone speaker.
+     * Never touch SCO when A2DP/CarPlay is present — that is the Z-Link break.
+     */
+    private fun preferBluetoothScoIfNeeded() {
+        if (hasA2dp()) {
+            ObdLogger.logDebug(ObdLogger.Dir.INFO, "Voice alerts: A2DP/CarPlay present — skip SCO")
             return
         }
+        val devices = audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
+        val hasScoDevice = devices.any { it.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO }
         if (!hasScoDevice && !audioManager.isBluetoothScoAvailableOffCall) return
         if (scoStartedByUs || audioManager.isBluetoothScoOn) return
         runCatching {
@@ -286,11 +310,15 @@ class VoiceAlerter(context: Context) : TextToSpeech.OnInitListener {
         }
     }
 
-    private fun releaseAudioAfterSpeak() {
+    private fun releaseFocusOnly() {
         focusRequest?.let { req ->
-            audioManager.abandonAudioFocusRequest(req)
+            runCatching { audioManager.abandonAudioFocusRequest(req) }
         }
         focusRequest = null
+    }
+
+    private fun releaseAudioAfterSpeak() {
+        releaseFocusOnly()
         if (scoStartedByUs) {
             runCatching {
                 @Suppress("DEPRECATION")
@@ -298,6 +326,7 @@ class VoiceAlerter(context: Context) : TextToSpeech.OnInitListener {
                 audioManager.stopBluetoothSco()
             }
             scoStartedByUs = false
+            ObdLogger.logDebug(ObdLogger.Dir.INFO, "Voice alerts: BT SCO stopped")
         }
     }
 

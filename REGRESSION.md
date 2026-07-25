@@ -25,6 +25,7 @@ Keep these fixed. If a change might touch one of these areas, re-verify it.
 | I10 | Value LOG Share broken / truncated (large CSV as EXTRA_TEXT) | Fixed | FileProvider CSV share; same HU save fallback |
 | I11 | Voice alerts must keep working with screen off (real ELM) | Fixed | `ObdMonitorForegroundService` + wake lock + AudioFocus |
 | I27 | Battery red/orange on Dash but no audible alarm | Fixed | Alarm tone + TTS; battery ELEVATED → “Battery low”; Settings Check sound alert |
+| I28 | Alerts duck CarPlay/Z-Link and volume never restores | Fixed | Default no audio-focus duck; optional “Lower CarPlay during alerts”; no SCO/MUSIC while A2DP |
 | I12 | Android Auto sideload not showing on real HU | Documented | Needs Play Internal testing/sharing; DHU for desk — see `AGENTS.md` |
 | I13 | LOG should be main Dash only (not Fuel/Trip/Trans dumps) | Fixed | Lean CSV: events + dashboard_snapshots + dash_tiles |
 | I14 | Pakistan units (km, km/h, km/L) | Fixed | Product default |
