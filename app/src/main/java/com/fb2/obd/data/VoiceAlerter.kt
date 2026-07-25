@@ -12,6 +12,7 @@ import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import com.fb2.obd.obd.HealthThresholds
 import com.fb2.obd.obd.VehicleSnapshot
+import com.fb2.obd.obd.VoiceAlertDebouncer
 import com.fb2.obd.obd.VoiceAlertRules
 import java.util.Locale
 import java.util.concurrent.atomic.AtomicBoolean
@@ -25,6 +26,9 @@ import java.util.concurrent.atomic.AtomicBoolean
  *
  * Optional [duckMediaDuringAlerts] restores the old MAY_DUCK focus path for
  * units that handle unduck correctly.
+ *
+ * Spike filter: a condition must stay active for ~2.5s ([VoiceAlertDebouncer])
+ * before any sound — brief ELM glitches (e.g. timing) do not alarm.
  */
 class VoiceAlerter(context: Context) : TextToSpeech.OnInitListener {
 
@@ -37,6 +41,7 @@ class VoiceAlerter(context: Context) : TextToSpeech.OnInitListener {
     private val speaking = AtomicBoolean(false)
     private val lastSpokenAt = mutableMapOf<String, Long>()
     private val lastHealth = mutableMapOf<String, String>()
+    private val debouncer = VoiceAlertDebouncer()
     private var focusRequest: AudioFocusRequest? = null
     private var scoStartedByUs = false
     @Volatile
@@ -124,7 +129,9 @@ class VoiceAlerter(context: Context) : TextToSpeech.OnInitListener {
         if (!enabled) return
         start()
         val now = System.currentTimeMillis()
-        val alerts = VoiceAlertRules.evaluate(snapshot, thresholds, atfC, tcSlipRpm)
+        val raw = VoiceAlertRules.evaluate(snapshot, thresholds, atfC, tcSlipRpm)
+        // Require sustained out-of-band — ignore split-second spikes.
+        val alerts = debouncer.confirm(raw, now)
         val activeKeys = alerts.map { it.key }.toSet()
 
         lastHealth.keys.toList().forEach { key ->
@@ -143,6 +150,7 @@ class VoiceAlerter(context: Context) : TextToSpeech.OnInitListener {
         announce(candidate.key, candidate.phrase, now)
     }
 
+    /** Immediate — bypasses the spike hold (Settings check / toggle). */
     fun speakTest(phrase: String = "Battery critical") {
         start()
         announce("test", phrase, System.currentTimeMillis())
@@ -333,6 +341,7 @@ class VoiceAlerter(context: Context) : TextToSpeech.OnInitListener {
     fun shutdown() {
         ready.set(false)
         pendingPhrase = null
+        debouncer.reset()
         mainHandler.removeCallbacksAndMessages(null)
         tts?.stop()
         tts?.shutdown()

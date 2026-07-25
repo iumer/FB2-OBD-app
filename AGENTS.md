@@ -113,6 +113,9 @@ non-obvious cloud specifics.
   during alerts** re-enables MAY_DUCK. Never start BT SCO or rewrite STREAM_MUSIC
   while A2DP is present. Settings → **Check sound alert** plays the test alarm.
   Battery orange → “Battery low”; red CRITICAL → “Battery critical”.
+  Voice/sound alerts require the same condition for ~2.5s
+  (`VoiceAlertDebouncer`) before beeping — Dash tiles still update live.
+  Settings **Check sound alert** bypasses the hold.
 - **Floating Dash bubble:** Dash **MIN** chip starts `FloatingDashOverlayService`
   as a **foreground service** (`specialUse` + sticky notification) so the bubble
   survives going to Home / CarPlay. MainActivity waits for `ACTION_READY` (overlay
