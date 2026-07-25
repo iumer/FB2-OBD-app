@@ -39,14 +39,44 @@ class FloatingDashMetricsTest {
             showEstimatedGear = true,
         )
         val metrics = FloatingDashMetrics.from(state)
-        assertEquals("RPM", metrics[0].label)
-        // First radial page should lead with the high-signal ring set.
+        assertEquals("Coolant 1", metrics[0].label)
+        // Collapsed floating bubble always prefers coolant.
+        val collapsed = FloatingDashMetrics.collapsedMetric(metrics)
+        assertEquals("Coolant 1", collapsed.label)
+        assertEquals("88", collapsed.value)
+        // First radial page leads with coolant, then RPM (keeps redline colour).
         val page0 = FloatingDashMetrics.page(metrics, 0)
         assertEquals(5, page0.size)
-        assertEquals(listOf("RPM", "Coolant 1", "MAP", "Battery", "Intake"), page0.map { it.label })
+        assertEquals(listOf("Coolant 1", "RPM", "MAP", "Battery", "Intake"), page0.map { it.label })
+        assertTrue(page0.any { it.label == "RPM" && it.health != null })
         assertTrue(metrics.any { it.label == "Speed" })
         assertTrue(metrics.any { it.label == "MAF" })
         assertTrue(metrics.size >= 10)
+    }
+
+    @Test
+    fun rpmHigh_marksCriticalHealthOnBubble() {
+        val state = CarDashBuilder.build(
+            snapshot = VehicleSnapshot(
+                rpm = 7200.0,
+                speedKmh = 120.0,
+                coolantC = 90.0,
+                batteryVolts = 14.2,
+            ),
+            thresholds = HealthThresholds.DEFAULT,
+            extraPidIds = emptyList(),
+            extraValues = emptyMap(),
+            deepFoundValues = emptyMap(),
+            catalog = StandardPidCatalog.all,
+            connection = ConnectionState.CONNECTED,
+            sourceIsLive = true,
+            sourceName = "ELM",
+            logging = false,
+            showEstimatedGear = true,
+        )
+        assertEquals("CRITICAL", state.rpmHealth)
+        val rpm = FloatingDashMetrics.from(state).first { it.label == "RPM" }
+        assertEquals("CRITICAL", rpm.health)
     }
 
     @Test

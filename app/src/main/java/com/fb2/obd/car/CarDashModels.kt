@@ -26,6 +26,9 @@ data class CarDashState(
     val speedKmh: String = "--",
     val gear: String = "–",
     val gearBadge: String = "",
+    /** [com.fb2.obd.obd.Health] name for RPM (redline / high) on the floating bubble. */
+    val rpmHealth: String? = null,
+    val rpmStatus: String? = null,
     val tiles: List<CarDashTile> = emptyList(),
     val connection: ConnectionState = ConnectionState.DISCONNECTED,
     val sourceIsLive: Boolean = false,
@@ -174,11 +177,14 @@ object CarDashBuilder {
             )
         }
 
+        val rpmStatus = HealthEvaluator.rpm(snapshot.rpm, t)
         return CarDashState(
             rpm = snapshot.rpm.fmt(),
             speedKmh = snapshot.speedKmh.fmt(),
             gear = gearText,
             gearBadge = badge,
+            rpmHealth = rpmStatus.health.name,
+            rpmStatus = rpmStatus.label,
             tiles = base + extras,
             connection = connection,
             sourceIsLive = sourceIsLive,

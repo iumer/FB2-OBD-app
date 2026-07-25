@@ -75,12 +75,21 @@ fun FloatingDashBubblePreview(
     val page = if (expanded) {
         FloatingDashMetrics.page(safe, pageIndex)
     } else {
-        val i = index.coerceIn(0, safe.lastIndex)
-        listOf(safe[i])
+        listOf(FloatingDashMetrics.collapsedMetric(safe))
     }
     val pages = FloatingDashMetrics.pageCount(safe)
-    val worst = FloatingDashMetrics.worstHealth(safe.mapNotNull { it.health })
-    val rim = healthColor(worst)
+    val collapsedPrimary = FloatingDashMetrics.collapsedMetric(safe)
+    val rim = healthColor(
+        if (expanded) {
+            FloatingDashMetrics.worstHealth(safe.mapNotNull { it.health })
+        } else {
+            collapsedPrimary.health
+                ?: FloatingDashMetrics.worstHealth(safe.mapNotNull { it.health })
+        },
+    )
+    // Keep [index] referenced so older call sites still compile.
+    @Suppress("UNUSED_VARIABLE")
+    val legacyIndex = index
 
     Box(
         modifier = modifier
@@ -125,7 +134,11 @@ fun FloatingDashBubblePreview(
                 )
             }
 
-            val centerMetric = page.firstOrNull() ?: safe.first()
+            val centerMetric = if (expanded) {
+                page.firstOrNull() ?: safe.first()
+            } else {
+                collapsedPrimary
+            }
             Box(
                 modifier = Modifier
                     .size(BubbleScale.center)
@@ -138,7 +151,13 @@ fun FloatingDashBubblePreview(
                     text = if (expanded) {
                         "FB2\n${pageIndex.coerceIn(0, pages - 1) + 1}/$pages"
                     } else {
-                        "${centerMetric.label.take(4).uppercase()}\n${centerMetric.value}"
+                        val label = when {
+                            centerMetric.label.contains("Coolant", ignoreCase = true) -> "COOL"
+                            else -> centerMetric.label.take(4).uppercase()
+                        }
+                        val unit = centerMetric.unit.trim().take(2)
+                        if (unit.isNotBlank()) "$label\n${centerMetric.value}$unit"
+                        else "$label\n${centerMetric.value}"
                     },
                     color = TextPrimary,
                     fontSize = BubbleScale.centerText,

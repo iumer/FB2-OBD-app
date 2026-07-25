@@ -19,26 +19,42 @@ object FloatingDashMetrics {
     )
 
     fun from(state: CarDashState): List<Metric> {
-        // Prefer high-signal sensors first for the radial ring (matches user examples).
+        // Coolant first — collapsed bubble + page 0 lead with temp while driving.
+        // RPM stays early so high/redline colour is one swipe away on the ring.
         val preferredOrder = listOf(
-            "RPM", "Coolant 1", "MAP", "Battery", "Intake",
+            "Coolant 1", "RPM", "MAP", "Battery", "Intake",
             "Speed", "Load", "Throttle", "STFT", "Timing",
             "MAF", "Fuel loop", "Gear", "DTCs", "Health",
             "Coolant 2", "Ambient", "LTFT",
         )
         val hero = listOf(
-            Metric("RPM", state.rpm, "", null, null),
+            Metric("RPM", state.rpm, "", state.rpmHealth, state.rpmStatus),
             Metric("Speed", state.speedKmh, "km/h", null, null),
             Metric("Gear", state.gear, state.gearBadge, null, null),
         )
         val tiles = state.tiles.map {
             Metric(it.label, it.value, it.unit, it.health, it.status)
         }
-        val combined = (hero + tiles).distinctBy { it.label.lowercase() }
+        // Prefer tile Coolant (has live health) over any duplicate hero entry.
+        val combined = (tiles + hero).distinctBy { it.label.lowercase() }
         return combined.sortedBy { m ->
             val idx = preferredOrder.indexOfFirst { it.equals(m.label, true) }
             if (idx >= 0) idx else 1000 + m.label.hashCode().and(0x7fff)
         }
+    }
+
+    /**
+     * Metric shown on the collapsed floating circle — always Coolant 1 when
+     * present (fallback Coolant 2 → first metric).
+     */
+    fun collapsedMetric(metrics: List<Metric>): Metric {
+        if (metrics.isEmpty()) {
+            return Metric("Dash", "--", "", null, "WAITING")
+        }
+        return metrics.firstOrNull { it.label.equals("Coolant 1", ignoreCase = true) }
+            ?: metrics.firstOrNull { it.label.equals("Coolant 2", ignoreCase = true) }
+            ?: metrics.firstOrNull { it.label.contains("Coolant", ignoreCase = true) }
+            ?: metrics.first()
     }
 
     fun pageCount(metrics: List<Metric>, pageSize: Int = PAGE_SIZE): Int =

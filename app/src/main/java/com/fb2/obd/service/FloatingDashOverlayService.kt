@@ -376,7 +376,7 @@ class FloatingDashOverlayService : Service() {
         val container = root ?: return
         val lp = params ?: return
 
-        val collapsed = dp(FloatingDashLayout.COLLAPSED_DP)
+        val collapsedSize = dp(FloatingDashLayout.COLLAPSED_DP)
         val expandedSize = dp(expandedDp())
         val satSize = dp(FloatingDashLayout.SAT_DP)
         val centerSize = dp(FloatingDashLayout.CENTER_DP)
@@ -386,8 +386,15 @@ class FloatingDashOverlayService : Service() {
             metrics = listOf(FloatingDashMetrics.Metric("Dash", "--", "", null, "WAITING"))
         }
         val page = FloatingDashMetrics.page(metrics, pageIndex)
-        val worst = FloatingDashMetrics.worstHealth(metrics.mapNotNull { it.health })
-        val rim = healthColor(worst)
+        val primary = FloatingDashMetrics.collapsedMetric(metrics)
+        // Collapsed rim follows coolant (what is shown). Expanded rim = worst of all.
+        val rimHealth = if (expanded) {
+            FloatingDashMetrics.worstHealth(metrics.mapNotNull { it.health })
+        } else {
+            primary.health
+                ?: FloatingDashMetrics.worstHealth(metrics.mapNotNull { it.health })
+        }
+        val rim = healthColor(rimHealth)
 
         center.layoutParams = FrameLayout.LayoutParams(centerSize, centerSize).apply {
             gravity = Gravity.CENTER
@@ -395,8 +402,16 @@ class FloatingDashOverlayService : Service() {
         center.text = if (expanded) {
             "FB2\n${pageIndex + 1}/${FloatingDashMetrics.pageCount(metrics)}"
         } else {
-            val first = page.firstOrNull() ?: metrics.first()
-            "${first.label.take(4).uppercase()}\n${first.value}"
+            val label = when {
+                primary.label.contains("Coolant", ignoreCase = true) -> "COOL"
+                else -> primary.label.take(4).uppercase()
+            }
+            val unit = primary.unit.trim().take(2)
+            if (unit.isNotBlank()) {
+                "$label\n${primary.value}$unit"
+            } else {
+                "$label\n${primary.value}"
+            }
         }
         center.background = circleDrawable(rim, fillAlpha = 235)
         center.visibility = View.VISIBLE
@@ -437,8 +452,8 @@ class FloatingDashOverlayService : Service() {
                 }
             }
         } else {
-            lp.width = collapsed
-            lp.height = collapsed
+            lp.width = collapsedSize
+            lp.height = collapsedSize
             pageHint?.visibility = View.GONE
             satellites.forEach { it.visibility = View.GONE }
         }
