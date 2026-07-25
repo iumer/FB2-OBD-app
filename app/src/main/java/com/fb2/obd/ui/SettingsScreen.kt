@@ -73,6 +73,7 @@ fun SettingsScreen(
     settings: SettingsState,
     onToggleEstimatedGear: (Boolean) -> Unit,
     onToggleVoiceAlerts: (Boolean) -> Unit = {},
+    onToggleDuckMedia: (Boolean) -> Unit = {},
     onCheckSoundAlert: () -> Unit = {},
     nav: SettingsNav,
     onBack: () -> Unit,
@@ -110,9 +111,15 @@ fun SettingsScreen(
             checked = settings.voiceAlerts,
             onCheckedChange = onToggleVoiceAlerts,
         )
+        ToggleRow(
+            title = "Lower CarPlay during alerts",
+            subtitle = "Off (recommended with Z-Link): play alert without ducking media. On: briefly lower CarPlay — some HUs never restore volume.",
+            checked = settings.duckMediaDuringAlerts,
+            onCheckedChange = onToggleDuckMedia,
+        )
         ActionRow(
             title = "Check sound alert",
-            subtitle = "Play battery-critical beep + voice now — verify you can hear it in the car.",
+            subtitle = "Play battery-critical beep + voice now — verify CarPlay volume stays up afterward.",
             actionLabel = "PLAY",
             onClick = onCheckSoundAlert,
         )
