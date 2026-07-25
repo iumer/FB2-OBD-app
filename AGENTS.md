@@ -121,9 +121,11 @@ non-obvious cloud specifics.
   survives going to Home / CarPlay. MainActivity waits for `ACTION_READY` (overlay
   attached) before `moveTaskToBack` — do not background first or OEMs may hide /
   defer the WindowManager view. Needs `SYSTEM_ALERT_WINDOW`.
-  Collapsed = one draggable circle. Expanded = center + up to **5 satellites**.
-  Vertical swipe pages metrics. Idle ~6s auto-collapses. **Long-press opens the
-  app and dismisses the bubble.** Exit & disconnect also stops the overlay.
+  Collapsed = one draggable circle showing **Coolant 1** (not RPM) with coolant
+  health colour. Expanded = center + up to **5 satellites** (Coolant, RPM with
+  redline colour, MAP, Battery, Intake…). Vertical swipe pages metrics. Idle ~6s
+  auto-collapses. **Long-press opens the app and dismisses the bubble.** Exit &
+  disconnect also stops the overlay.
   Bubble position is clamped to the current display (landscape app → portrait
   Home must not push it off-screen).
 - **Dash tile remap:** Double-tap any main-Dash tile to open the same sensor
