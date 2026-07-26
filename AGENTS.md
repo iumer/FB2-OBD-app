@@ -134,6 +134,12 @@ non-obvious cloud specifics.
   runs deep search on n/s tiles; long-press edits health thresholds.
 - **Sensor picker search:** Type ≥2 chars in the dialog search box to filter
   by label / request / category (skip category drill-down).
+- **HU sideload APK:** Use `scripts/package-hu-apk.sh` (or `dist/FB2-Diag-debug.apk`
+  / `dist/FB2-Diag-hu.apk`). Must be **v1+v2** signed — plain AGP debug/release
+  is often **v2-only**, which makes some car package installers hang on
+  “Installing…”. Prefer the ~7MB release-classpath APK over the bloated debug
+  APK. If install sticks: uninstall old `FB2 Diag`, reboot HU, copy APK via USB
+  (not a partial GitHub download), then install.
 - **Car HU readability:** Dash uses `DashType` (hero ~34sp, tile values ~22sp,
   88dp tiles, fewer/wider columns). Floating bubble sizes live in
   `FloatingDashLayout` (collapsed/center 92dp, sat 100dp, expanded max 400dp,
