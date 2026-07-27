@@ -74,7 +74,7 @@ class OpenAiClient(
                 val text = stream?.let { BufferedReader(InputStreamReader(it, StandardCharsets.UTF_8)).readText() }
                     ?: ""
                 if (code !in 200..299) {
-                    error("OpenAI HTTP $code: ${text.take(300)}")
+                    error(friendlyHttpError(code, text))
                 }
                 val json = JSONObject(text)
                 val content = json.getJSONArray("choices")
@@ -84,6 +84,15 @@ class OpenAiClient(
                     .trim()
                 require(content.isNotBlank()) { "OpenAI returned an empty report" }
                 Result(text = content, model = json.optString("model", model))
+            } catch (e: Exception) {
+                // Re-throw with a clean message when the failure is clearly offline/timeout.
+                val friendly = AiAnalysisErrors.friendlyMessage(e)
+                if (friendly == AiAnalysisErrors.NO_INTERNET ||
+                    friendly == AiAnalysisErrors.REQUEST_TIMEOUT
+                ) {
+                    error(friendly)
+                }
+                throw e
             } finally {
                 conn.disconnect()
             }
@@ -92,5 +101,15 @@ class OpenAiClient(
     companion object {
         const val DEFAULT_MODEL = "gpt-4o-mini"
         private const val API_URL = "https://api.openai.com/v1/chat/completions"
+
+        private fun friendlyHttpError(code: Int, body: String): String {
+            val snippet = body.trim().take(180)
+            return when (code) {
+                401, 403 -> "OpenAI API key was rejected. Check Settings → AI analysis."
+                429 -> "OpenAI rate limit reached. Wait a moment and try again."
+                in 500..599 -> "OpenAI server error ($code). Try again shortly."
+                else -> "OpenAI HTTP $code${if (snippet.isNotBlank()) ": $snippet" else ""}"
+            }
+        }
     }
 }
