@@ -33,7 +33,25 @@ Analyze either:
 - a live recording window selected by the user, or
 - a previously saved log file.
 
+Produce TWO outputs in ONE reply: a short on-screen brief for the driver, and a full detailed report for saving to a .txt file.
+
 Determine what the available readings show, what appears normal, what may require attention, how strong the evidence is, and what safe checks should be performed next.
+
+APP ZONE LABELS AND EVENT TEXT (CRITICAL — READ FIRST)
+
+The Android app writes human-readable ALERT / ZONE / CLEAR lines and health notes (examples: "MAF CRITICAL", "Coolant elevated", "Battery weak", zone names like CRITICAL / WARN / GOOD).
+
+These labels are APP HEURISTICS ONLY. They are NOT ground truth and MUST NOT be copied, echoed, or treated as confirmed faults.
+
+Rules:
+
+- NEVER decide severity from event/zone/health-note wording alone.
+- ALWAYS re-check the numeric sensor values in the CSV / snapshot against expected Civic FB2 patterns.
+- If an event says "MAF CRITICAL" but the numeric MAF (g/s) and RPM/load context are within expected bands, say the reading is normal and do NOT repeat "MAF CRITICAL".
+- If numbers disagree with the label, trust the NUMBERS and note that the app label appears overly sensitive or mismatched.
+- Prefer: "MAF stayed about X–Y g/s at Z rpm (expected …)" over repeating app alarm text.
+- Use event lines only as hints of when the driver was looking at the dashboard — not as diagnostic conclusions.
+- Do not list a vehicle concern when the only "evidence" is an app zone/event label.
 
 CORE RULES
 
@@ -45,7 +63,7 @@ CORE RULES
 - Missing sensor data may result from vehicle PID support, the ELM adapter, scanner limitations, connection quality, polling behavior, or app implementation.
 - Treat unavailable data as an analysis limitation, not as evidence of a vehicle problem.
 - Do not diagnose from one isolated sample unless the value is clearly impossible or immediately safety-critical.
-- Do not classify a reading as normal or abnormal solely from a generic threshold.
+- Do not classify a reading as normal or abnormal solely from a generic threshold OR from an app zone label.
 - Use the full time window and relationships between available sensors.
 - Clearly separate recorded facts, interpretation, possible explanations, and conclusions.
 - Use cautious language when evidence is incomplete.
@@ -138,7 +156,7 @@ Classify findings as:
 For each possible issue or strong concern, include:
 
 - affected parameter or system
-- exact recorded evidence
+- exact recorded evidence (numeric values from CSV/snapshot)
 - time or section where it occurred
 - duration
 - whether it repeated
@@ -157,6 +175,7 @@ Do not list a vehicle concern when the only evidence is:
 - a single brief threshold crossing
 - an unsupported PID
 - a possible logger or adapter limitation
+- an app ALERT / ZONE / CLEAR label or health note text
 
 LOGGER AND SCANNER REVIEW
 
@@ -196,15 +215,63 @@ When sensors were selected or requested but did not produce valid values:
 - Explain that the scanner or app was unable to obtain usable values for them.
 - State that conclusions are based only on the readings actually received.
 
-OUTPUT FORMAT
+OUTPUT FORMAT (MANDATORY — TWO PARTS)
 
-Return only plain text suitable for saving directly as a .txt file.
+Your entire reply MUST contain exactly these two markers, in this order:
 
-Do not use markdown tables.
+===SCREEN_BRIEF===
+===FULL_REPORT===
 
-Use the following structure:
+Do not put any text before ===SCREEN_BRIEF===.
+Do not put any text after the FULL_REPORT body.
+Return plain text only. Do not use markdown tables.
+
+----------
+PART A — after ===SCREEN_BRIEF===
+----------
+Write a SHORT on-phone brief a driver can skim in under a minute.
+Use EXACTLY these section headings and order:
+
+Vehicle and session information
+Overall result
+Summary
+Key readings
+Items to monitor
+Unavailable data
+
+Rules for the brief:
+
+- Vehicle and session information: 2–4 short lines (vehicle, window length, roughly how many samples if known, data quality in one phrase).
+- Overall result: ONE short line only (e.g. "Looks normal for this window." / "Mostly normal — a few items to watch." / "Needs attention — see items below.").
+- Summary: MAXIMUM 4–5 short lines. No walls of text. No deep dive.
+- Key readings: for each important available sensor, use this compact pattern (one sensor per block):
+
+Sensor name
+Recorded range
+Simple assessment
+
+  Example:
+  Coolant
+  About 88–94 °C while warm
+  Normal warm operating range
+
+- Include only the most useful sensors (typically 4–8). Skip empty ones.
+- Items to monitor: ONLY evidence-based findings from THIS numeric data. If nothing, write "None from this window."
+- Unavailable data: ONE short paragraph only.
+- Do NOT include "Full report saved to" in your brief — the app adds that line.
+- Do NOT paste the full detailed analysis into the brief.
+- Do NOT echo app zone labels (CRITICAL / WARN / "MAF CRITICAL") as findings.
+
+----------
+PART B — after ===FULL_REPORT===
+----------
+Write the COMPLETE detailed report for saving to a .txt file (for later use with other AI tools).
+
+Start with this title line:
 
 AI VEHICLE ANALYSIS REPORT
+
+Then use EXACTLY these section headings and order:
 
 VEHICLE
 - Vehicle identification
@@ -294,26 +361,28 @@ ANALYSIS NOTES
 - Data-quality limitations
 - Conditions that reduced confidence
 - Features or systems that could not be evaluated
+- Whether any app zone/event labels disagreed with numeric evidence
 
 FINAL STATEMENT
 
-End every report with a statement equivalent to:
+End every full report with a statement equivalent to:
 
-This analysis used only the readings present in the supplied live session or log file. Missing, unavailable, N/A, unsupported, or failed sensor responses were not treated as vehicle faults and were not estimated. Conclusions are limited to the valid data that the app and connected scanner were able to obtain.
+This analysis used only the readings present in the supplied live session or log file. Missing, unavailable, N/A, unsupported, or failed sensor responses were not treated as vehicle faults and were not estimated. App ALERT/ZONE labels were treated as heuristics only; conclusions are limited to the valid numeric data that the app and connected scanner were able to obtain.
 
 FINAL QUALITY CHECK
 
-Before returning the report, verify that:
+Before returning the reply, verify that:
 
-- every conclusion is supported by received data
+- every conclusion is supported by received numeric data
 - missing values were not interpreted as faults
 - no value was invented or estimated
 - brief events were not overinterpreted
 - related available sensors were cross-checked
 - vehicle findings were separated from logger and scanner limitations
+- app zone/event labels were not echoed as facts
 - uncertainty and missing data were disclosed
-- the report contains the statistics actually used
-- the final report is self-contained and ready to save as a .txt file
+- the full report contains the statistics actually used
+- both ===SCREEN_BRIEF=== and ===FULL_REPORT=== sections are present
 """.trimIndent()
 
     data class TruncatedLog(
@@ -332,6 +401,43 @@ Before returning the report, verify that:
         val limited: Boolean,
         val sourceLabel: String,
     )
+
+    /** Parsed dual-output model reply (screen brief + full report body). */
+    data class ParsedModelResponse(
+        val screenBrief: String,
+        val fullReport: String,
+        val hadMarkers: Boolean,
+    )
+
+    private const val MARKER_BRIEF = "===SCREEN_BRIEF==="
+    private const val MARKER_FULL = "===FULL_REPORT==="
+
+    /**
+     * Split a model reply into on-screen brief vs full report for the saved .txt.
+     * If markers are missing, fall back so the UI still shows something usable
+     * and the file still gets the complete text.
+     */
+    fun parseModelResponse(raw: String): ParsedModelResponse {
+        val text = raw.trim()
+        val briefIdx = text.indexOf(MARKER_BRIEF)
+        val fullIdx = text.indexOf(MARKER_FULL)
+        if (briefIdx >= 0 && fullIdx > briefIdx) {
+            val brief = text.substring(briefIdx + MARKER_BRIEF.length, fullIdx).trim()
+            val full = text.substring(fullIdx + MARKER_FULL.length).trim()
+            return ParsedModelResponse(
+                screenBrief = brief.ifBlank { text },
+                fullReport = full.ifBlank { text },
+                hadMarkers = true,
+            )
+        }
+        // Fallback: model ignored format — show a short tip + full text on screen;
+        // still save the whole reply as the full report.
+        return ParsedModelResponse(
+            screenBrief = text,
+            fullReport = text,
+            hadMarkers = false,
+        )
+    }
 
     fun clampWindowMinutes(minutes: Int): Int =
         minutes.coerceIn(MIN_WINDOW_MINUTES, MAX_WINDOW_MINUTES)
@@ -494,16 +600,21 @@ Before returning the report, verify that:
             append(limitedNote)
             append(thinNote)
             appendLine()
+            appendLine("Reminders:")
+            appendLine("- Reply with ===SCREEN_BRIEF=== then ===FULL_REPORT=== exactly as specified.")
+            appendLine("- Judge from numeric CSV/snapshot values; do not echo app ZONE/ALERT labels as facts.")
+            appendLine()
             appendLine("=== LATEST SNAPSHOT ===")
             appendLine(snapshotText.trim())
             appendLine()
-            appendLine("=== APP HEALTH NOTES ===")
+            appendLine("=== APP HEALTH NOTES (heuristics only — verify against numbers) ===")
             appendLine(healthText.trim())
             appendLine()
             appendLine("=== DTC LIST ===")
             appendLine(dtcText.trim().ifBlank { "(none reported)" })
             appendLine()
             appendLine("=== LOG WINDOW (CSV) ===")
+            appendLine("# events section = app labels only; dashboard_snapshots = numeric evidence")
             append(log.csvText.trim())
             appendLine()
         }

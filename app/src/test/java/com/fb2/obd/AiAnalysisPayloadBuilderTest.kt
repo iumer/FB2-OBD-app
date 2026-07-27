@@ -27,6 +27,56 @@ class AiAnalysisPayloadBuilderTest {
         assertTrue(p.contains("ANALYZED VALUES"))
         assertTrue(p.contains("Do not invent") || p.contains("do not invent"))
         assertTrue(p.contains(".txt"))
+        assertTrue(p.contains("===SCREEN_BRIEF==="))
+        assertTrue(p.contains("===FULL_REPORT==="))
+        assertTrue(p.contains("APP ZONE LABELS"))
+        assertTrue(p.contains("MAF CRITICAL"))
+        assertTrue(p.contains("Vehicle and session information"))
+        assertTrue(p.contains("Key readings"))
+    }
+
+    @Test
+    fun parseModelResponse_splitsBriefAndFull() {
+        val raw = """
+            ===SCREEN_BRIEF===
+            Vehicle and session information
+            Honda Civic FB2 — 5 min window
+            Overall result
+            Looks normal for this window.
+            Summary
+            Coolant stayed warm and stable.
+            Key readings
+            Coolant
+            88–94 °C
+            Normal
+            Items to monitor
+            None from this window.
+            Unavailable data
+            MAF column empty in this window.
+
+            ===FULL_REPORT===
+            AI VEHICLE ANALYSIS REPORT
+            VEHICLE
+            - Honda Civic FB2
+            ANALYZED VALUES
+            - Coolant min 88 max 94
+        """.trimIndent()
+        val parsed = AiAnalysisPayloadBuilder.parseModelResponse(raw)
+        assertTrue(parsed.hadMarkers)
+        assertTrue(parsed.screenBrief.contains("Vehicle and session information"))
+        assertTrue(parsed.screenBrief.contains("Looks normal"))
+        assertFalse(parsed.screenBrief.contains("AI VEHICLE ANALYSIS REPORT"))
+        assertTrue(parsed.fullReport.startsWith("AI VEHICLE ANALYSIS REPORT"))
+        assertTrue(parsed.fullReport.contains("ANALYZED VALUES"))
+    }
+
+    @Test
+    fun parseModelResponse_fallbackWithoutMarkers() {
+        val raw = "Plain reply without markers\nCoolant OK"
+        val parsed = AiAnalysisPayloadBuilder.parseModelResponse(raw)
+        assertFalse(parsed.hadMarkers)
+        assertEquals(raw, parsed.screenBrief)
+        assertEquals(raw, parsed.fullReport)
     }
 
     @Test

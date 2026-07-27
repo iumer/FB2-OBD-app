@@ -34,7 +34,6 @@ import com.fb2.obd.obd.AiAnalysisPayloadBuilder
 import com.fb2.obd.ui.theme.Accent
 import com.fb2.obd.ui.theme.Background
 import com.fb2.obd.ui.theme.CritRed
-import com.fb2.obd.ui.theme.GoodGreen
 import com.fb2.obd.ui.theme.Surface
 import com.fb2.obd.ui.theme.TextMuted
 import com.fb2.obd.ui.theme.TextPrimary
@@ -256,14 +255,7 @@ fun AiAnalyzeScreen(
             )
         }
 
-        state.savedReport?.let { saved ->
-            Text(
-                text = "Saved: ${saved.fileName}",
-                color = GoodGreen,
-                fontSize = 12.sp,
-                modifier = Modifier.padding(bottom = 6.dp),
-            )
-        }
+        // Filename is appended inside reportText ("Full report saved to:") — avoid a duplicate line.
 
         state.reportText?.let { report ->
             Row(
@@ -271,7 +263,7 @@ fun AiAnalyzeScreen(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text("AI report", color = TextPrimary, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                Text("AI brief", color = TextPrimary, fontSize = 14.sp, fontWeight = FontWeight.Bold)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
                         text = "CLEAR",
