@@ -54,6 +54,7 @@ fun AiAnalyzeScreen(
     onWindowMinutes: (Int) -> Unit,
     onSelectLog: (String?) -> Unit,
     onAnalyze: () -> Unit,
+    onClearReport: () -> Unit,
     onRefreshLogs: () -> Unit,
     onOpenSettings: () -> Unit,
     onBack: () -> Unit,
@@ -187,18 +188,51 @@ fun AiAnalyzeScreen(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(vertical = 8.dp)
-                .clip(RoundedCornerShape(12.dp))
-                .background(if (state.loading) Surface else Accent)
-                .clickable(enabled = !state.loading) { onAnalyze() }
-                .padding(vertical = 14.dp),
-            horizontalArrangement = Arrangement.Center,
+                .padding(vertical = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
+            Row(
+                modifier = Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(if (state.loading) Surface else Accent)
+                    .clickable(enabled = !state.loading) { onAnalyze() }
+                    .padding(vertical = 14.dp),
+                horizontalArrangement = Arrangement.Center,
+            ) {
+                Text(
+                    text = if (state.loading) "Analyzing…" else "Analyze",
+                    color = if (state.loading) TextMuted else Background,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold,
+                )
+            }
+            val canClear = !state.loading &&
+                (state.reportText != null || state.error != null || state.savedReport != null)
+            Row(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(Surface)
+                    .clickable(enabled = canClear) { onClearReport() }
+                    .padding(horizontal = 16.dp, vertical = 14.dp),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = "Clear",
+                    color = if (canClear) TextPrimary else TextMuted,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold,
+                )
+            }
+        }
+
+        if (state.loading) {
             Text(
-                text = if (state.loading) "Analyzing…" else "Analyze",
-                color = if (state.loading) TextMuted else Background,
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Bold,
+                text = "Generating a fresh report… previous results cleared.",
+                color = TextMuted,
+                fontSize = 12.sp,
+                modifier = Modifier.padding(bottom = 8.dp),
             )
         }
 
@@ -237,20 +271,33 @@ fun AiAnalyzeScreen(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text("AI report", color = TextPrimary, fontSize = 14.sp, fontWeight = FontWeight.Bold)
-                Text(
-                    text = "COPY",
-                    color = Accent,
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(8.dp))
-                        .clickable {
-                            val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                            cm.setPrimaryClip(ClipData.newPlainText("FB2 AI report", report))
-                        }
-                        .background(Surface)
-                        .padding(horizontal = 12.dp, vertical = 6.dp),
-                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = "CLEAR",
+                        color = TextMuted,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable { onClearReport() }
+                            .background(Surface)
+                            .padding(horizontal = 12.dp, vertical = 6.dp),
+                    )
+                    Text(
+                        text = "COPY",
+                        color = Accent,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable {
+                                val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                cm.setPrimaryClip(ClipData.newPlainText("FB2 AI report", report))
+                            }
+                            .background(Surface)
+                            .padding(horizontal = 12.dp, vertical = 6.dp),
+                    )
+                }
             }
             Text(
                 text = report,
