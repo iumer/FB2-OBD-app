@@ -29,20 +29,45 @@ class VoiceAlertRulesTest {
     }
 
     @Test
-    fun batteryLowWhileRunning_speaksBatteryCritical() {
+    fun batteryCriticalAboveIdle_speaksBatteryCritical() {
+        // Honda ELD: idle low voltage is not CRITICAL. Above-idle + very low = ALT WEAK.
         val alerts = VoiceAlertRules.evaluate(
-            VehicleSnapshot(rpm = 800.0, coolantC = 90.0, batteryVolts = 12.0),
+            VehicleSnapshot(rpm = 2000.0, coolantC = 90.0, batteryVolts = 12.0),
         )
         assertTrue(alerts.any { it.key == "battery" && it.phrase.equals("Battery critical", ignoreCase = true) })
     }
 
     @Test
-    fun batteryElevatedWhileRunning_speaksBatteryLow() {
-        // Orange WEAK CHARGE band (defaults: 12.8–13.2 V running) must also alarm.
+    fun batteryLowAtIdle_noVoice_eldSoft() {
+        // ELD often sits ~12.x–13.x at idle — UI colour only, no cabin voice.
         val alerts = VoiceAlertRules.evaluate(
-            VehicleSnapshot(rpm = 800.0, coolantC = 90.0, batteryVolts = 12.9),
+            VehicleSnapshot(rpm = 800.0, coolantC = 90.0, batteryVolts = 12.0),
         )
-        assertTrue(alerts.any { it.key == "battery_low" && it.phrase.equals("Battery low", ignoreCase = true) })
+        assertFalse(alerts.any { it.key.startsWith("battery") })
+    }
+
+    @Test
+    fun batteryElevated_noVoice() {
+        // Orange WEAK CHARGE is Dash colour only — no "Battery low" voice spam.
+        val alerts = VoiceAlertRules.evaluate(
+            VehicleSnapshot(rpm = 2000.0, coolantC = 90.0, batteryVolts = 12.9),
+        )
+        assertFalse(alerts.any { it.key == "battery_low" })
+        assertFalse(alerts.any { it.key == "battery" })
+    }
+
+    @Test
+    fun fuelTrimAndTiming_noVoice() {
+        val alerts = VoiceAlertRules.evaluate(
+            VehicleSnapshot(
+                rpm = 2000.0,
+                coolantC = 90.0,
+                batteryVolts = 14.2,
+                stftPct = 22.0,
+                timingAdvance = -10.0,
+            ),
+        )
+        assertFalse(alerts.any { it.key == "stft" || it.key == "timing" })
     }
 
     @Test

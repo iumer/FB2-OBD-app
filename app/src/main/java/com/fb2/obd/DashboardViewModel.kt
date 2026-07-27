@@ -21,6 +21,7 @@ import com.fb2.obd.data.VoiceAlerter
 import com.fb2.obd.obd.ColdStartIdleCatalog
 import com.fb2.obd.obd.DeepSearchReport
 import com.fb2.obd.obd.DeepSensorSearch
+import com.fb2.obd.obd.DiagnosticBrain
 import com.fb2.obd.obd.DiagnosticEventTracker
 import com.fb2.obd.obd.Dtc
 import com.fb2.obd.obd.FreezeFrame
@@ -29,6 +30,7 @@ import com.fb2.obd.obd.HealthScoreCalculator
 import com.fb2.obd.obd.HealthThresholds
 import com.fb2.obd.obd.HondaPidCatalog
 import com.fb2.obd.obd.LiveSnapshotOverlay
+import com.fb2.obd.obd.MetricStatus
 import com.fb2.obd.obd.Mode06Result
 import com.fb2.obd.obd.ModuleScanResult
 import com.fb2.obd.obd.O2TestResult
@@ -61,6 +63,8 @@ import java.io.File
 /** UI state for the dashboard screen. */
 data class DashboardUiState(
     val snapshot: VehicleSnapshot = VehicleSnapshot.EMPTY,
+    /** EMA-smoothed snapshot used for health/voice decisions (UI still shows [snapshot]). */
+    val decisionSnapshot: VehicleSnapshot = VehicleSnapshot.EMPTY,
     val connection: ConnectionState = ConnectionState.DISCONNECTED,
     val sourceName: String = "",
     val sourceIsLive: Boolean = false,
@@ -193,6 +197,7 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
     val healthThresholds: StateFlow<HealthThresholds> = _healthThresholds.asStateFlow()
 
     private val voiceAlerter = VoiceAlerter(app)
+    private val diagnosticBrain = DiagnosticBrain()
     private var lastAtfForVoice: Double? = null
     private var lastSlipForVoice: Double? = null
     private var lastLiveSnapshotMs: Long = 0L
@@ -420,6 +425,7 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
     /** Push the phone main Dash (tiles + hero) to Android Auto. */
     fun publishCarDash() {
         val ui = _uiState.value
+        val decision = ui.decisionSnapshot.takeUnless { it.isEffectivelyBlank() } ?: ui.snapshot
         VehicleLiveStore.publish(
             CarDashBuilder.build(
                 snapshot = ui.snapshot,
@@ -435,9 +441,15 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
                 showEstimatedGear = _settings.value.showEstimatedGear,
                 dtcCount = ui.dtcCount,
                 healthScore = _health.value,
+                healthSnapshot = decision,
+                latch = diagnosticBrain::latch,
             ),
         )
     }
+
+    /** Zone hysteresis shared by phone Dash + Android Auto tiles. */
+    fun latchHealth(key: String, status: MetricStatus): MetricStatus =
+        diagnosticBrain.latch(key, status)
 
     fun updateHealthThresholdField(id: String, value: Double) {
         val next = _healthThresholds.value.withField(id, value)
@@ -680,12 +692,15 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
             stopElmMonitor()
         }
         eventTracker.reset()
+        diagnosticBrain.reset()
+        voiceAlerter.resetHoldTimers()
         _faults.update { FaultsState() }
         _uiState.update {
             it.copy(
                 connection = ConnectionState.CONNECTING,
                 sourceName = source.name,
                 sourceIsLive = source.isLive,
+                decisionSnapshot = VehicleSnapshot.EMPTY,
                 dtcCount = null,
                 reconnecting = false,
                 lastError = null,
@@ -709,6 +724,8 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
                     incoming
                 }
                 ObdLogger.logSnapshot(incoming)
+                // Smooth noisy sensors for health/voice; UI still shows raw [snapshot].
+                val decision = diagnosticBrain.decisionSnapshot(snapshot)
                 val now = System.currentTimeMillis()
                 snapshot.speedKmh?.let { accelTimer.onSample(now, it) }
                 tripComputer.onSample(now, snapshot.speedKmh, snapshot.mafGps, null)
@@ -731,10 +748,10 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
                     )
                 }
                 _health.update {
-                    scoreHealth(snapshot = snapshot)
+                    scoreHealth(snapshot = decision)
                 }
                 voiceAlerter.onSnapshot(
-                    snapshot = snapshot,
+                    snapshot = decision,
                     thresholds = _healthThresholds.value,
                     atfC = lastAtfForVoice,
                     tcSlipRpm = lastSlipForVoice,
@@ -750,6 +767,7 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
                 _uiState.update {
                     it.copy(
                         snapshot = snapshot,
+                        decisionSnapshot = decision,
                         connection = ConnectionState.CONNECTED,
                         reconnecting = false,
                         lastError = null,
@@ -1146,9 +1164,11 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun recalcHealth() {
+        val ui = _uiState.value
+        val decision = ui.decisionSnapshot.takeUnless { it.isEffectivelyBlank() } ?: ui.snapshot
         _health.update {
             HealthScoreCalculator.compute(
-                _uiState.value.snapshot,
+                decision,
                 _faults.value.stored.size,
                 tcmSupportedCount = lastTcmSupportedCount,
                 thresholds = _healthThresholds.value,

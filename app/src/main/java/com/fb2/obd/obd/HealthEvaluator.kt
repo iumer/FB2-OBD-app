@@ -44,24 +44,36 @@ object HealthEvaluator {
         volts: Double?,
         engineRunning: Boolean = true,
         t: HealthThresholds = HealthThresholds.DEFAULT,
-    ): MetricStatus = when {
-        volts == null -> MetricStatus.NS
-        engineRunning -> when {
+        rpm: Double? = null,
+    ): MetricStatus {
+        if (volts == null) return MetricStatus.NS
+        if (!engineRunning) {
+            return when {
+                volts >= t.battRestGoodAbove -> MetricStatus(Health.GOOD, "RESTING OK")
+                volts >= t.battRestWarnAbove -> MetricStatus(Health.WARN, "WEAK REST")
+                volts >= t.battRestElevatedAbove -> MetricStatus(Health.ELEVATED, "LOW REST")
+                else -> MetricStatus(Health.CRITICAL, "FLAT")
+            }
+        }
+        // Honda ELD intentionally lowers charge voltage at idle / light load.
+        // Only treat as alternator-weak when RPM is clearly above idle.
+        val aboveIdle = (rpm ?: 0.0) > (t.rpmIdleHigh + 150.0)
+        return when {
             volts > t.battRunCriticalAbove -> MetricStatus(Health.CRITICAL, "OVERCHARGE")
             volts >= t.battRunGoodMin && volts <= t.battRunGoodMax ->
                 MetricStatus(Health.GOOD, "CHARGING OK")
+            volts > t.battRunGoodMax && volts <= t.battRunCriticalAbove ->
+                MetricStatus(Health.WARN, "HIGH CHARGE")
             volts >= t.battRunWarnMin && volts < t.battRunGoodMin ->
-                MetricStatus(Health.WARN, "LOW CHARGE")
+                if (aboveIdle) MetricStatus(Health.WARN, "LOW CHARGE")
+                else MetricStatus(Health.GOOD, "ELD IDLE")
             volts >= t.battRunElevatedMin && volts < t.battRunWarnMin ->
-                MetricStatus(Health.ELEVATED, "WEAK CHARGE")
-            volts < t.battRunElevatedMin -> MetricStatus(Health.CRITICAL, "ALT WEAK")
-            else -> MetricStatus(Health.WARN, "HIGH CHARGE")
-        }
-        else -> when {
-            volts >= t.battRestGoodAbove -> MetricStatus(Health.GOOD, "RESTING OK")
-            volts >= t.battRestWarnAbove -> MetricStatus(Health.WARN, "WEAK REST")
-            volts >= t.battRestElevatedAbove -> MetricStatus(Health.ELEVATED, "LOW REST")
-            else -> MetricStatus(Health.CRITICAL, "FLAT")
+                if (aboveIdle) MetricStatus(Health.ELEVATED, "WEAK CHARGE")
+                else MetricStatus(Health.WARN, "ELD LOW")
+            volts < t.battRunElevatedMin ->
+                if (aboveIdle) MetricStatus(Health.CRITICAL, "ALT WEAK")
+                else MetricStatus(Health.ELEVATED, "IDLE LOW")
+            else -> MetricStatus(Health.WARN, "CHECK")
         }
     }
 
@@ -155,23 +167,38 @@ object HealthEvaluator {
         val spd = speedKmh ?: 0.0
         val idle = spd < 2.0 && (rpm ?: 0.0) in 500.0..1200.0
         val wot = thr >= t.mapWotThrottleMin
+        val heavy = !idle && !wot && thr >= 45.0
+        val medium = !idle && !wot && thr >= 25.0
+        // MAP follows throttle — warn only on physically implausible vacuum/pressure.
         return when {
             idle -> when {
-                kpa in t.mapIdleGoodMin..t.mapIdleGoodMax -> MetricStatus(Health.GOOD, "IDLE OK")
+                kpa in t.mapIdleGoodMin..t.mapIdleGoodMax -> MetricStatus(Health.GOOD, "IDLE")
                 kpa < 20 -> MetricStatus(Health.WARN, "LOW VAC?")
                 kpa > t.mapIdleGoodMax + 10 -> MetricStatus(Health.WARN, "HIGH IDLE")
-                else -> MetricStatus(Health.WARN, "CHECK")
+                else -> MetricStatus(Health.GOOD, "IDLE")
             }
             wot -> when {
-                kpa >= t.mapWotGoodMin -> MetricStatus(Health.GOOD, "WOT OK")
+                kpa >= t.mapWotGoodMin -> MetricStatus(Health.GOOD, "WOT")
                 kpa >= t.mapWarnMax - 10 -> MetricStatus(Health.WARN, "LOW WOT")
                 else -> MetricStatus(Health.WARN, "CHECK WOT")
             }
-            else -> when {
-                kpa in t.mapCruiseGoodMin..t.mapCruiseGoodMax -> MetricStatus(Health.GOOD, "CRUISE OK")
+            heavy -> when {
                 kpa < 20 -> MetricStatus(Health.WARN, "LOW VAC?")
-                kpa <= t.mapGoodMax -> MetricStatus(Health.GOOD, "NORMAL")
-                kpa <= t.mapWarnMax -> MetricStatus(Health.WARN, "RISING")
+                kpa > t.mapWarnMax + 15 -> MetricStatus(Health.WARN, "HIGH MAP")
+                else -> MetricStatus(Health.GOOD, "HEAVY LOAD")
+            }
+            medium -> when {
+                kpa < 20 -> MetricStatus(Health.WARN, "LOW VAC?")
+                kpa > t.mapWarnMax + 20 -> MetricStatus(Health.WARN, "HIGH MAP")
+                else -> MetricStatus(Health.GOOD, "MED LOAD")
+            }
+            else -> when {
+                kpa in t.mapCruiseGoodMin..t.mapCruiseGoodMax -> MetricStatus(Health.GOOD, "CRUISE")
+                kpa < 20 -> MetricStatus(Health.WARN, "LOW VAC?")
+                kpa <= t.mapGoodMax -> MetricStatus(Health.GOOD, "LIGHT LOAD")
+                // Rising MAP under light throttle is normal during tip-in — stay green
+                // unless pressure is physically wild for cruise.
+                kpa <= t.mapWarnMax + 15 -> MetricStatus(Health.GOOD, "LIGHT LOAD")
                 else -> MetricStatus(Health.WARN, "HIGH MAP")
             }
         }
@@ -245,14 +272,22 @@ object HealthEvaluator {
         else -> MetricStatus(Health.CRITICAL, "$count CODE(S)")
     }
 
+    /**
+     * OPEN ↔ CLOSED loop transitions are normal (cold, accel, decel, fuel cut).
+     * Never paint them as WARN — only FAULT variants elevate colour.
+     */
     fun fuelSystem(status: String?, coolantC: Double?): MetricStatus {
         if (status.isNullOrBlank()) return MetricStatus.NS
-        val closed = status.contains("CLOSED", ignoreCase = true)
-        val warm = (coolantC ?: 0.0) >= 70.0
+        val u = status.uppercase()
         return when {
-            closed -> MetricStatus(Health.GOOD, "CLOSED LOOP")
-            warm -> MetricStatus(Health.WARN, "OPEN LOOP")
-            else -> MetricStatus(Health.COLD, "OPEN (COLD)")
+            u.contains("FAULT") -> MetricStatus(Health.ELEVATED, status.take(12))
+            u.contains("CLOSED") -> MetricStatus(Health.GOOD, "CLOSED LOOP")
+            u.contains("OPEN") -> {
+                val warm = (coolantC ?: 0.0) >= 70.0
+                if (warm) MetricStatus(Health.GOOD, "OPEN LOOP")
+                else MetricStatus(Health.COLD, "OPEN (COLD)")
+            }
+            else -> MetricStatus(Health.GOOD, status.take(12))
         }
     }
 

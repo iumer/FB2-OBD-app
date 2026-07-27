@@ -310,6 +310,7 @@ class MainActivity : ComponentActivity() {
                         healthThresholds = healthThresholds,
                         onThresholdFieldChange = viewModel::updateHealthThresholdField,
                         onResetThresholds = viewModel::resetHealthThresholds,
+                        onLatchHealth = viewModel::latchHealth,
                     )
 
                     Screen.SETTINGS -> {

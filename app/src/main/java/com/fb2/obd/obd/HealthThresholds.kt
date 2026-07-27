@@ -12,13 +12,15 @@ data class HealthThresholds(
     /** Voice alert only above this (red tile starts earlier at elevatedMax). */
     val coolantVoiceAbove: Double = 110.0,
 
-    /** Engine running — green charging band. */
-    val battRunGoodMin: Double = 13.8,
+    /** Engine running — green charging band (Honda ELD often sits ~13.2–14.5). */
+    val battRunGoodMin: Double = 13.2,
     val battRunGoodMax: Double = 14.8,
-    val battRunWarnMin: Double = 13.2,
+    val battRunWarnMin: Double = 12.9,
     /** Orange band floor while running (below warn, above critical). */
-    val battRunElevatedMin: Double = 12.8,
+    val battRunElevatedMin: Double = 12.6,
     val battRunCriticalAbove: Double = 15.0,
+    /** Extra volts required to leave a worse band (hysteresis). */
+    val battHysteresisV: Double = 0.15,
 
     /** Engine off — resting battery. */
     val battRestGoodAbove: Double = 12.6,

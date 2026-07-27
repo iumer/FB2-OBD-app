@@ -90,6 +90,13 @@ non-obvious cloud specifics.
 - Colour bands / voice thresholds live in `HealthThresholds` (long-press editor).
   Coolant **voice** alerts only above `coolantVoiceAbove` (default 110°C), even
   though the red tile starts earlier (`> coolantElevatedMax`, default 103°C).
+- **Diagnostic brain (OEM-style):** `DiagnosticBrain` EMA-smooths noisy sensors
+  for health/voice decisions while the UI still shows raw values. Zone colours
+  use `AlertPolicy.latchHealth` hysteresis so bands do not flicker. Voice is
+  reserved for coolant / battery CRITICAL (above-idle ELD gate) / ATF / redline —
+  STFT/LTFT/MAP/timing/OPEN↔CLOSED LOOP stay UI-colour only. Per-key holds live
+  in `AlertPolicy.voiceHoldMs` (coolant ~4s, battery ~25s, trims ~20s).
+  `VoiceAlerter` also applies a ~45s cooldown after announcing the same key.
 - **Event logging** (`DiagnosticEventTracker` → `ObdLogger.logEvent`) always
   records zone/gear/ELM/DTC/fuel-loop transitions into the `# events` CSV
   section — independent of the continuous value LOG toggle.
@@ -115,11 +122,12 @@ non-obvious cloud specifics.
   beep + TTS. **Default is CarPlay/Z-Link safe:** no audio-focus duck (many HUs
   duck Z-Link and never restore volume). Optional Settings → **Lower CarPlay
   during alerts** re-enables MAY_DUCK. Never start BT SCO or rewrite STREAM_MUSIC
-  while A2DP is present. Settings → **Check sound alert** plays the test alarm.
-  Battery orange → “Battery low”; red CRITICAL → “Battery critical”.
-  Voice/sound alerts require the same condition for ~2.5s
-  (`VoiceAlertDebouncer`) before beeping — Dash tiles still update live.
-  Settings **Check sound alert** bypasses the hold.
+  while A2DP is present.   Settings → **Check sound alert** plays the test alarm.
+  Battery voice is **CRITICAL only** (above idle + sustained low volts) — orange
+  ELD dips stay silent. Voice/sound alerts require the condition for a per-key
+  hold (`AlertPolicy` / `VoiceAlertDebouncer`) before beeping — Dash tiles still
+  update live (with hysteresis latch). Settings **Check sound alert** bypasses
+  the hold.
 - **Floating Dash bubble:** Dash **MIN** chip starts `FloatingDashOverlayService`
   as a **foreground service** (`specialUse` + sticky notification) so the bubble
   survives going to Home / CarPlay. MainActivity waits for `ACTION_READY` (overlay

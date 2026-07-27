@@ -5,6 +5,7 @@ import com.fb2.obd.obd.GearSource
 import com.fb2.obd.obd.HealthEvaluator
 import com.fb2.obd.obd.HealthThresholds
 import com.fb2.obd.obd.LiveSnapshotOverlay
+import com.fb2.obd.obd.MetricStatus
 import com.fb2.obd.obd.ObdPid
 import com.fb2.obd.obd.PidDefinition
 import com.fb2.obd.obd.VehicleSnapshot
@@ -71,6 +72,9 @@ object CarDashBuilder {
         showEstimatedGear: Boolean,
         dtcCount: Int? = null,
         healthScore: com.fb2.obd.obd.HealthScore? = null,
+        /** Smoothed snapshot used only for zone decisions (UI still shows [snapshot]). */
+        healthSnapshot: VehicleSnapshot = snapshot,
+        latch: ((String, MetricStatus) -> MetricStatus)? = null,
     ): CarDashState {
         val gearSource = if (!showEstimatedGear && snapshot.gearSource == GearSource.ESTIMATED) {
             GearSource.NONE
@@ -84,38 +88,51 @@ object CarDashBuilder {
             GearSource.NONE -> ""
         }
 
-        val engineRunning = (snapshot.rpm ?: 0.0) > 0.0
+        val hs = healthSnapshot
+        val engineRunning = (hs.rpm ?: snapshot.rpm ?: 0.0) > 0.0
         val t = thresholds
         val vehiclePct = healthScore?.vehiclePct
+        fun L(key: String, status: MetricStatus) = latch?.invoke(key, status) ?: status
         val base = listOf(
             Triple("Coolant 1", snapshot.coolantC.fmt(), "\u00B0C") to
-                HealthEvaluator.coolant(snapshot.coolantC, t),
+                L("coolant1", HealthEvaluator.coolant(hs.coolantC, t)),
             Triple("Coolant 2", snapshot.coolant2C.fmt(), "\u00B0C") to
-                HealthEvaluator.coolant(snapshot.coolant2C, t),
+                L("coolant2", HealthEvaluator.coolant(hs.coolant2C, t)),
             Triple("Battery", snapshot.batteryVolts.fmt(1), "V") to
-                HealthEvaluator.battery(snapshot.batteryVolts, engineRunning, t),
+                L(
+                    "battery",
+                    HealthEvaluator.battery(hs.batteryVolts, engineRunning, t, rpm = hs.rpm ?: snapshot.rpm),
+                ),
             Triple("Intake", snapshot.intakeC.fmt(), "\u00B0C") to
-                HealthEvaluator.intakeAir(snapshot.intakeC, t),
+                L("intake", HealthEvaluator.intakeAir(hs.intakeC, t)),
             Triple("Ambient", snapshot.ambientC.fmt(), "\u00B0C") to
-                HealthEvaluator.ambient(snapshot.ambientC, t),
+                L("ambient", HealthEvaluator.ambient(hs.ambientC, t)),
             Triple("Load", snapshot.engineLoadPct.fmt(), "%") to
                 HealthEvaluator.engineLoad(snapshot.engineLoadPct, t),
             Triple("Throttle", snapshot.throttlePct.fmt(), "%") to
                 HealthEvaluator.throttle(snapshot.throttlePct),
             Triple("STFT", snapshot.stftPct.fmt(1), "%") to
-                HealthEvaluator.fuelTrim(snapshot.stftPct, t),
+                L("stft", HealthEvaluator.fuelTrim(hs.stftPct, t)),
             Triple("LTFT", snapshot.ltftPct.fmt(1), "%") to
-                HealthEvaluator.fuelTrim(snapshot.ltftPct, t),
+                L("ltft", HealthEvaluator.fuelTrim(hs.ltftPct, t)),
             Triple("MAF", snapshot.mafGps.fmt(1), "g/s") to
-                HealthEvaluator.maf(
-                    snapshot.mafGps, snapshot.rpm, snapshot.speedKmh, snapshot.throttlePct, t,
+                L(
+                    "maf",
+                    HealthEvaluator.maf(
+                        hs.mafGps, hs.rpm ?: snapshot.rpm, hs.speedKmh ?: snapshot.speedKmh,
+                        hs.throttlePct ?: snapshot.throttlePct, t,
+                    ),
                 ),
             Triple("MAP", snapshot.mapKpa.fmt(), "kPa") to
-                HealthEvaluator.map(
-                    snapshot.mapKpa, snapshot.throttlePct, snapshot.rpm, snapshot.speedKmh, t,
+                L(
+                    "map",
+                    HealthEvaluator.map(
+                        hs.mapKpa, hs.throttlePct ?: snapshot.throttlePct,
+                        hs.rpm ?: snapshot.rpm, hs.speedKmh ?: snapshot.speedKmh, t,
+                    ),
                 ),
             Triple("Timing", snapshot.timingAdvance.fmt(), "\u00B0") to
-                HealthEvaluator.timing(snapshot.timingAdvance, t),
+                L("timing", HealthEvaluator.timing(hs.timingAdvance, t)),
             Triple("Fuel loop", snapshot.fuelSystemStatus?.take(12) ?: "--", "") to
                 HealthEvaluator.fuelSystem(snapshot.fuelSystemStatus, snapshot.coolantC),
             Triple("DTCs", dtcCount?.toString() ?: "--", "") to

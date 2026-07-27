@@ -24,9 +24,9 @@ Keep these fixed. If a change might touch one of these areas, re-verify it.
 | I09 | Debug log Share does nothing | Fixed | FileProvider share; HU fallback → Downloads/FB2-Diag + path dialog |
 | I10 | Value LOG Share broken / truncated (large CSV as EXTRA_TEXT) | Fixed | FileProvider CSV share; same HU save fallback |
 | I11 | Voice alerts must keep working with screen off (real ELM) | Fixed | `ObdMonitorForegroundService` + wake lock + AudioFocus |
-| I27 | Battery red/orange on Dash but no audible alarm | Fixed | Alarm tone + TTS; battery ELEVATED → “Battery low”; Settings Check sound alert |
+| I27 | Battery red/orange on Dash but no audible alarm | Fixed | CRITICAL (above-idle ELD) → “Battery critical”; orange ELD dips silent; Settings Check sound alert |
 | I28 | Alerts duck CarPlay/Z-Link and volume never restores | Fixed | Default no audio-focus duck; optional “Lower CarPlay during alerts”; no SCO/MUSIC while A2DP |
-| I29 | Split-second threshold spikes trigger false alarms | Fixed | `VoiceAlertDebouncer` ~2.5s sustained hold before sound |
+| I29 | Split-second threshold spikes trigger false alarms | Fixed | Per-key `AlertPolicy` holds (coolant ~4s, battery ~25s) + EMA + hysteresis latch |
 | I30 | Satellite tap pinned wrong metric on collapsed bubble | Fixed | Satellite taps never change Coolant primary |
 | I31 | Want LOG on by default for real ELM | Fixed | Auto-start value logging on live ELM connect |
 | I32 | Hard to get logs off HU | Fixed | GitHub `logs/car-uploads/` sync + Upload button + Downloads mirror |
@@ -74,7 +74,8 @@ All three Gradle tasks must pass. Copy the APK into `dist/` so sideload artifact
 | `HealthEvaluatorTest` | Coolant/battery/trims/MAF/coast/ATF/DTC bands |
 | `HealthThresholdsTest` | Custom bands + **MAF schema migration** |
 | `VoiceAlertRulesTest` | Voice critical thresholds |
-| `VoiceAlertDebouncerTest` | Spike hold before sound (~2.5s) |
+| `VoiceAlertDebouncerTest` | Per-key hold (coolant ~4s / battery ~25s) before sound |
+| `DiagnosticBrainTest` | EMA smoothing + zone hysteresis latch |
 | `DiagnosticEventTrackerTest` | Zone / fuel-loop events |
 | `DtcDecoderTest` | Mode 03/07 DTC frames |
 | `DeepSearchKnowledgeBaseTest` | Strategy order + demo ATRV/ambient recovery |

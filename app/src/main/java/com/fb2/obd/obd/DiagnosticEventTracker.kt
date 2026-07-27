@@ -132,7 +132,10 @@ class DiagnosticEventTracker {
 
         // Colour-zone transitions
         zone("coolant", HealthEvaluator.coolant(snapshot.coolantC, thresholds))
-        zone("battery", HealthEvaluator.battery(snapshot.batteryVolts, engineOn, thresholds))
+        zone(
+            "battery",
+            HealthEvaluator.battery(snapshot.batteryVolts, engineOn, thresholds, rpm = snapshot.rpm),
+        )
         zone("stft", HealthEvaluator.fuelTrim(snapshot.stftPct, thresholds))
         zone("ltft", HealthEvaluator.fuelTrim(snapshot.ltftPct, thresholds))
         zone("intake", HealthEvaluator.intakeAir(snapshot.intakeC, thresholds))
@@ -169,10 +172,16 @@ class DiagnosticEventTracker {
             emit("OVERHEAT", "Overheating ended")
         }
 
-        // Charging problem begin/end (engine running only)
-        val batt = HealthEvaluator.battery(snapshot.batteryVolts, engineOn, thresholds)
+        // Charging problem begin/end (engine running + above-idle ELD gate)
+        val batt = HealthEvaluator.battery(
+            snapshot.batteryVolts,
+            engineOn,
+            thresholds,
+            rpm = snapshot.rpm,
+        )
         val chargeBad = engineOn &&
-            (batt.health == Health.CRITICAL || batt.health == Health.ELEVATED)
+            (batt.health == Health.CRITICAL || batt.health == Health.ELEVATED) &&
+            (snapshot.rpm ?: 0.0) > (thresholds.rpmIdleHigh + 150.0)
         if (chargeBad && !chargingProblem) {
             chargingProblem = true
             emit("CHARGE", "Charging problem began (${batt.label})")
