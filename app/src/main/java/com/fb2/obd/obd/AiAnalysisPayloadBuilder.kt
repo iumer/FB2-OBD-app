@@ -581,6 +581,7 @@ Before returning the reply, verify that:
         healthText: String,
         dtcText: String,
         log: TruncatedLog,
+        isDemo: Boolean = false,
     ): Payload {
         val limitedNote = if (log.limited) {
             "NOTE: Log window was truncated for size/time. Confidence may be limited.\n"
@@ -592,17 +593,27 @@ Before returning the reply, verify that:
         } else {
             ""
         }
+        val demoNote = if (isDemo) {
+            "NOTE: These readings are from DEMO mode (simulated), not a live ELM/vehicle connection. Treat as UI/test data only.\n"
+        } else {
+            ""
+        }
         val user = buildString {
             appendLine("Analyze this Honda Civic FB2 session.")
             appendLine("Source: $sourceLabel")
+            if (isDemo) appendLine("Mode: DEMO (simulated)")
             appendLine("Requested window: ${clampWindowMinutes(windowMinutes)} minutes")
             appendLine("Samples in window: ${log.rowCount} snapshots, ${log.eventCount} events")
+            append(demoNote)
             append(limitedNote)
             append(thinNote)
             appendLine()
             appendLine("Reminders:")
             appendLine("- Reply with ===SCREEN_BRIEF=== then ===FULL_REPORT=== exactly as specified.")
             appendLine("- Judge from numeric CSV/snapshot values; do not echo app ZONE/ALERT labels as facts.")
+            if (isDemo) {
+                appendLine("- State clearly in Vehicle and session information that this is DEMO / simulated data.")
+            }
             appendLine()
             appendLine("=== LATEST SNAPSHOT ===")
             appendLine(snapshotText.trim())

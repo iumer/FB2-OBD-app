@@ -248,6 +248,8 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
     private val _savedLogs = MutableStateFlow(sessionLogStore.list())
     val savedLogs: StateFlow<List<SavedLogFile>> = _savedLogs.asStateFlow()
     private var sessionStartedMs: Long = 0L
+    /** True when the current LOG session was started while on Demo (simulated). */
+    private var sessionLoggingIsDemo: Boolean = false
 
     private val aiReportStore = AiReportStore(File(filesDir, "ai_reports"), app)
     private val _savedAiReports = MutableStateFlow(aiReportStore.list())
@@ -503,10 +505,19 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
         loggingJob?.cancel()
         ObdLogger.clearValues()
         sessionStartedMs = System.currentTimeMillis()
+        sessionLoggingIsDemo = !_uiState.value.sourceIsLive
         ObdLogger.sessionStartMs = sessionStartedMs
         ObdLogger.valueLoggingEnabled = true
         _settings.update { it.copy(valueLogging = true) }
-        ObdLogger.logDebug(ObdLogger.Dir.INFO, "VALUE LOG session start — main Dash only")
+        if (sessionLoggingIsDemo) {
+            ObdLogger.logDebug(
+                ObdLogger.Dir.INFO,
+                "VALUE LOG session start — DEMO (simulated readings, not live ELM)",
+            )
+            ObdLogger.logEvent("LOG", "Demo mode — readings are simulated, not from a live vehicle")
+        } else {
+            ObdLogger.logDebug(ObdLogger.Dir.INFO, "VALUE LOG session start — main Dash only")
+        }
         lastDashLogMs = 0L
         logDashValues(_uiState.value.snapshot, force = true)
         // Lightly refresh user-added Dash (+) tiles so extras stay current in the CSV.
@@ -526,6 +537,7 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
         loggingJob?.cancel()
         loggingJob = null
         val wasOn = ObdLogger.valueLoggingEnabled
+        val isDemo = sessionLoggingIsDemo
         // Final snapshot while logging is still enabled.
         logDashValues(_uiState.value.snapshot, force = true)
         ObdLogger.valueLoggingEnabled = false
@@ -533,13 +545,15 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
         val empty = ObdLogger.valueRows().isEmpty() &&
             ObdLogger.tabValueRows().none { it.tab.equals("Dash", true) }
         if (!wasOn && empty) {
+            sessionLoggingIsDemo = false
             return null
         }
-        val csv = ObdLogger.valuesCsv()
+        val csv = ObdLogger.valuesCsv(isDemo = isDemo)
         val started = if (sessionStartedMs > 0L) sessionStartedMs else System.currentTimeMillis()
-        val saved = sessionLogStore.saveSession(csv, started)
+        val saved = sessionLogStore.saveSession(csv, started, isDemo = isDemo)
         ObdLogger.logDebug(ObdLogger.Dir.INFO, "VALUE LOG saved ${saved.fileName}")
         ObdLogger.sessionStartMs = 0L
+        sessionLoggingIsDemo = false
         _savedLogs.value = sessionLogStore.list()
         // Mirror into Downloads for USB pull, then try cloud upload if online.
         runCatching {
@@ -655,9 +669,18 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
                     AiAnalysisPayloadBuilder.truncateSavedCsv(csv, minutes, now)
                 }
                 val sourceLabel = if (st.modeLive) {
-                    "live_window_${minutes}min"
+                    if (!_uiState.value.sourceIsLive) {
+                        "demo_live_window_${minutes}min"
+                    } else {
+                        "live_window_${minutes}min"
+                    }
                 } else {
                     "saved:${st.selectedLogFileName}"
+                }
+                val isDemo = if (st.modeLive) {
+                    !_uiState.value.sourceIsLive
+                } else {
+                    st.selectedLogFileName?.contains("demo", ignoreCase = true) == true
                 }
                 val payload = AiAnalysisPayloadBuilder.buildUserMessage(
                     sourceLabel = sourceLabel,
@@ -666,10 +689,15 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
                     healthText = AiAnalysisPayloadBuilder.formatHealth(health),
                     dtcText = dtcText,
                     log = truncated,
+                    isDemo = isDemo,
                 )
                 val result = openAiClient.complete(payload.systemPrompt, payload.userMessage)
                 val parsed = AiAnalysisPayloadBuilder.parseModelResponse(result.text)
                 val readingsAppendix = buildString {
+                    if (isDemo) {
+                        appendLine("NOTE: These readings are from DEMO (simulated), not a live ELM/vehicle connection.")
+                        appendLine()
+                    }
                     appendLine("--- Latest snapshot ---")
                     appendLine(AiAnalysisPayloadBuilder.formatSnapshot(snapshot).trim())
                     appendLine()
@@ -689,6 +717,7 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
                     windowMinutes = payload.windowMinutes,
                     model = result.model,
                     readingsAppendix = readingsAppendix,
+                    isDemo = isDemo,
                 )
                 val screenText = buildString {
                     append(parsed.screenBrief.trim())

@@ -60,14 +60,17 @@ class AiReportStore(
         model: String,
         readingsAppendix: String = "",
         createdMs: Long = System.currentTimeMillis(),
+        isDemo: Boolean = false,
     ): SavedAiReport {
         dir.mkdirs()
         val stamp = FILE_FMT.format(Date(createdMs))
-        var name = "FB2-ai-$stamp.txt"
+        // "demo" in the name so simulated AI reports are easy to find/delete later.
+        val prefix = if (isDemo) "FB2-ai-demo" else "FB2-ai"
+        var name = "$prefix-$stamp.txt"
         var file = File(dir, name)
         var n = 2
         while (file.exists()) {
-            name = "FB2-ai-$stamp-$n.txt"
+            name = "$prefix-$stamp-$n.txt"
             file = File(dir, name)
             n++
         }
@@ -78,6 +81,7 @@ class AiReportStore(
             model = model,
             readingsAppendix = readingsAppendix,
             createdMs = createdMs,
+            isDemo = isDemo,
         )
         file.writeText(text)
         mirrorToDownloads(file, name)
@@ -111,6 +115,7 @@ class AiReportStore(
             model: String,
             readingsAppendix: String,
             createdMs: Long,
+            isDemo: Boolean = false,
         ): String = buildString {
             appendLine("# FB2-OBD AI diagnostic report")
             appendLine("# created_ms=$createdMs")
@@ -118,6 +123,10 @@ class AiReportStore(
             appendLine("# window_minutes=$windowMinutes")
             appendLine("# model=$model")
             appendLine("# vehicle=Honda Civic FB2 2013 R18 PK UG AT (D/D3/D2/D1)")
+            if (isDemo) {
+                appendLine("# mode=demo")
+                appendLine("# note: Readings are from DEMO (simulated), not a live ELM/vehicle connection.")
+            }
             appendLine()
             appendLine("===== AI FINDINGS =====")
             appendLine()

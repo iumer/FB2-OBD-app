@@ -58,6 +58,8 @@ fun AiAnalyzeScreen(
     onOpenSettings: () -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
+    /** True when the connected source is Demo (not live ELM). */
+    liveSourceIsDemo: Boolean = false,
 ) {
     val context = LocalContext.current
     LaunchedEffect(Unit) { onRefreshLogs() }
@@ -107,6 +109,20 @@ fun AiAnalyzeScreen(
         }
 
         if (state.modeLive) {
+            if (liveSourceIsDemo) {
+                Text(
+                    text = "DEMO mode — these readings are simulated, not from a live vehicle/ELM. Saved report filename will include \"demo\".",
+                    color = WarnAmber,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 8.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(Surface)
+                        .padding(12.dp),
+                )
+            }
             Text(
                 text = "Time window: ${state.windowMinutes} min",
                 color = TextPrimary,
@@ -165,6 +181,7 @@ fun AiAnalyzeScreen(
             } else {
                 savedLogs.forEach { log ->
                     val selected = log.fileName == state.selectedLogFileName
+                    val logIsDemo = log.fileName.contains("demo", ignoreCase = true)
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -188,8 +205,11 @@ fun AiAnalyzeScreen(
                                 fontWeight = FontWeight.SemiBold,
                             )
                             Text(
-                                text = "${log.sizeBytes / 1024} KB",
-                                color = TextMuted,
+                                text = buildString {
+                                    append("${log.sizeBytes / 1024} KB")
+                                    if (logIsDemo) append(" · DEMO (simulated)")
+                                },
+                                color = if (logIsDemo) WarnAmber else TextMuted,
                                 fontSize = 11.sp,
                             )
                         }

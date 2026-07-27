@@ -182,7 +182,7 @@ fun SettingsScreen(
 
         SectionLabel("Logging")
         Text(
-            text = "Real ELM connect auto-starts Dash value LOG until you tap STOP LOG. Sessions save as FB2-log-yyyyMMdd-HHmmss.csv.",
+            text = "Real ELM connect auto-starts Dash value LOG until you tap STOP LOG. Sessions save as FB2-log-yyyyMMdd-HHmmss.csv (demo sessions: FB2-log-demo-…).",
             color = TextMuted,
             fontSize = 12.sp,
             modifier = Modifier.padding(bottom = 8.dp),

@@ -32,4 +32,15 @@ class SessionLogStoreTest {
         assertTrue(a.fileName != b.fileName)
         assertTrue(b.fileName.contains("-2") || a.fileName.contains("-2"))
     }
+
+    @Test
+    fun saveSession_demo_putsDemoInFileName() {
+        val store = SessionLogStore(tmp.newFolder("logs3"))
+        val saved = store.saveSession("# demo csv", startedMs = 1_700_000_000_000L, isDemo = true)
+        assertTrue(saved.fileName.startsWith("FB2-log-demo-"))
+        assertTrue(saved.fileName.endsWith(".csv"))
+        val live = store.saveSession("# live csv", startedMs = 1_700_000_100_000L, isDemo = false)
+        assertTrue(live.fileName.startsWith("FB2-log-"))
+        assertTrue(!live.fileName.startsWith("FB2-log-demo-"))
+    }
 }

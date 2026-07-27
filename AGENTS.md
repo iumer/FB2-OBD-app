@@ -103,7 +103,8 @@ non-obvious cloud specifics.
 - **Value LOG** captures **main Dash only** (hero RPM/Speed/Gear + Dash tiles
   including any `+` extras). It does **not** dump Fuel/Trip/Trans/Perf/etc.
   Saved CSVs are lean (`events` + `dashboard_snapshots` + `dash_tiles`) named
-  `FB2-log-yyyyMMdd-HHmmss.csv`. **Real ELM connect auto-starts logging** until
+  `FB2-log-yyyyMMdd-HHmmss.csv` (Demo sessions: `FB2-log-demo-…` so they are
+  easy to delete). **Real ELM connect auto-starts logging** until
   STOP LOG. **Save logs:** always writes `Downloads/FB2-Diag/` + `Documents/exports/`
   (never auto-opens a Bluetooth-only share sheet on car HUs). Dialog offers
   Open file / optional Share… only when a useful non-BT app exists.
@@ -117,8 +118,9 @@ non-obvious cloud specifics.
   file, size-capped). One-shot OpenAI `gpt-4o-mini` dual output
   (`===SCREEN_BRIEF===` + `===FULL_REPORT===`; read-only FB2 system prompt).
   On-screen shows the short brief only (plus `Full report saved to: …`); the
-  detailed report is saved under `ai_reports/FB2-ai-*.txt` (mirrored to Downloads)
-  with an audit **readings table**. Prompt treats app ZONE/ALERT labels as
+  detailed report is saved under `ai_reports/FB2-ai-*.txt` (Demo: `FB2-ai-demo-…`)
+  with an audit **readings table**. Live Demo / demo-named history logs show a
+  short “simulated, not live” note. Prompt treats app ZONE/ALERT labels as
   heuristics — model must judge from numeric CSV values. API key in Settings →
   AI analysis (`platform.openai.com` — Plus ≠ API). No conversational chat
   in-app.

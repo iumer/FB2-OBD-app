@@ -148,6 +148,28 @@ class AiAnalysisPayloadBuilderTest {
     }
 
     @Test
+    fun buildUserMessage_demoNoteWhenIsDemo() {
+        val truncated = AiAnalysisPayloadBuilder.TruncatedLog(
+            csvText = "# dashboard_snapshots\n100,800,0,90,,,,,,,,,,,,,,",
+            rowCount = 10,
+            eventCount = 0,
+            limited = false,
+            windowMinutesUsed = 5,
+        )
+        val payload = AiAnalysisPayloadBuilder.buildUserMessage(
+            sourceLabel = "demo_live_window_5min",
+            windowMinutes = 5,
+            snapshotText = "rpm=800",
+            healthText = "(none)",
+            dtcText = "(none)",
+            log = truncated,
+            isDemo = true,
+        )
+        assertTrue(payload.userMessage.contains("DEMO mode"))
+        assertTrue(payload.userMessage.contains("simulated"))
+    }
+
+    @Test
     fun maxPayload_truncatesHugeCsv() {
         val now = 5_000_000_000L
         val hugeLine = "x".repeat(2_000)

@@ -41,14 +41,20 @@ class SessionLogStore(private val dir: File) {
             ?: emptyList()
     }
 
-    fun saveSession(csv: String, startedMs: Long = System.currentTimeMillis()): SavedLogFile {
+    fun saveSession(
+        csv: String,
+        startedMs: Long = System.currentTimeMillis(),
+        isDemo: Boolean = false,
+    ): SavedLogFile {
         dir.mkdirs()
         val stamp = FILE_FMT.format(Date(startedMs))
-        var name = "FB2-log-$stamp.csv"
+        // "demo" in the name so simulated sessions are easy to find/delete later.
+        val prefix = if (isDemo) "FB2-log-demo" else "FB2-log"
+        var name = "$prefix-$stamp.csv"
         var file = File(dir, name)
         var n = 2
         while (file.exists()) {
-            name = "FB2-log-$stamp-$n.csv"
+            name = "$prefix-$stamp-$n.csv"
             file = File(dir, name)
             n++
         }
