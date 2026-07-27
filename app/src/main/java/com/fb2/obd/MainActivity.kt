@@ -63,6 +63,7 @@ import com.fb2.obd.ui.DashboardScreen
 import com.fb2.obd.ui.DebugLogScreen
 import com.fb2.obd.ui.DeepSearchDialogs
 import com.fb2.obd.ui.DiagnosticsDepthScreen
+import com.fb2.obd.ui.AiAnalyzeScreen
 import java.util.concurrent.atomic.AtomicBoolean
 import com.fb2.obd.ui.DiagnosticsHubScreen
 import com.fb2.obd.ui.DiagnosticsNav
@@ -79,7 +80,7 @@ import kotlinx.coroutines.delay
 
 private enum class Screen {
     DASHBOARD, SETTINGS, DIAG_HUB, FAULTS, DEBUG_LOG, VALUE_LOG,
-    CUSTOM, VEHICLE, DEEP_DIAG, MAINTENANCE, HONDA,
+    CUSTOM, VEHICLE, DEEP_DIAG, MAINTENANCE, HONDA, AI_ANALYZE,
 }
 
 class MainActivity : ComponentActivity() {
@@ -206,7 +207,8 @@ class MainActivity : ComponentActivity() {
                         Screen.DASHBOARD -> showExitConfirm = true
                         Screen.SETTINGS, Screen.DIAG_HUB, Screen.CUSTOM -> screen = Screen.DASHBOARD
                         Screen.DEBUG_LOG, Screen.VALUE_LOG -> screen = Screen.SETTINGS
-                        Screen.FAULTS, Screen.DEEP_DIAG, Screen.VEHICLE, Screen.HONDA, Screen.MAINTENANCE ->
+                        Screen.FAULTS, Screen.DEEP_DIAG, Screen.VEHICLE, Screen.HONDA,
+                        Screen.MAINTENANCE, Screen.AI_ANALYZE ->
                             screen = Screen.DIAG_HUB
                     }
                 }
@@ -228,6 +230,10 @@ class MainActivity : ComponentActivity() {
                     },
                     onHonda = { screen = Screen.HONDA },
                     onMaintenance = { screen = Screen.MAINTENANCE },
+                    onAiAnalyze = {
+                        viewModel.refreshSavedLogs()
+                        screen = Screen.AI_ANALYZE
+                    },
                 )
 
                 when (screen) {
@@ -330,6 +336,8 @@ class MainActivity : ComponentActivity() {
                                 viewModel.uploadSavedLogs()
                                 toast("Uploading saved logs…")
                             },
+                            openAiApiKey = viewModel.openAiApiKey(),
+                            onOpenAiApiKeyChange = viewModel::setOpenAiApiKey,
                             nav = settingsNav,
                             onBack = { screen = Screen.DASHBOARD },
                             modifier = Modifier.fillMaxSize(),
@@ -342,6 +350,24 @@ class MainActivity : ComponentActivity() {
                         onBack = { screen = Screen.DASHBOARD },
                         modifier = Modifier.fillMaxSize(),
                     )
+
+                    Screen.AI_ANALYZE -> {
+                        val aiState by viewModel.aiAnalyze.collectAsState()
+                        val logs by viewModel.savedLogs.collectAsState()
+                        AiAnalyzeScreen(
+                            state = aiState,
+                            savedLogs = logs,
+                            hasApiKey = viewModel.openAiApiKey().isNotBlank(),
+                            onModeLive = viewModel::setAiAnalyzeModeLive,
+                            onWindowMinutes = viewModel::setAiAnalyzeWindowMinutes,
+                            onSelectLog = viewModel::setAiAnalyzeSelectedLog,
+                            onAnalyze = viewModel::runAiAnalysis,
+                            onRefreshLogs = viewModel::refreshSavedLogs,
+                            onOpenSettings = { screen = Screen.SETTINGS },
+                            onBack = { screen = Screen.DIAG_HUB },
+                            modifier = Modifier.fillMaxSize(),
+                        )
+                    }
 
                     Screen.CUSTOM -> CustomSensorsScreen(
                         catalog = viewModel.pidCatalog,

@@ -31,6 +31,7 @@ data class DiagnosticsNav(
     val onVehicle: () -> Unit = {},
     val onHonda: () -> Unit = {},
     val onMaintenance: () -> Unit = {},
+    val onAiAnalyze: () -> Unit = {},
 )
 
 /**
@@ -52,11 +53,12 @@ fun DiagnosticsHubScreen(
     ) {
         ScreenHeader(title = "Diagnostics", onBack = onBack)
         Text(
-            text = "Read / clear codes, deep scans, VIN, Honda modules, and maintenance. Live sensor pages are on the dashboard swipe tabs.",
+            text = "Read / clear codes, AI analysis, deep scans, VIN, Honda modules, and maintenance. Live sensor pages are on the dashboard swipe tabs.",
             color = TextMuted,
             fontSize = 12.sp,
             modifier = Modifier.padding(bottom = 12.dp),
         )
+        DiagRow("Analyze via AI (OpenAI report)", nav.onAiAnalyze)
         DiagRow("Fault codes (read / clear + tips)", nav.onFaults)
         DiagRow("Deep diagnostics (freeze / readiness / Mode 05+06)", nav.onDeepDiag)
         DiagRow("Vehicle info (VIN / Mode 09)", nav.onVehicle)

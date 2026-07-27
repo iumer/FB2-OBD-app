@@ -21,8 +21,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
 
 /**
- * Uploads **saved** (finished) session CSVs to GitHub
- * `logs/car-uploads/` so drives can be pulled from the repo on a PC.
+ * Uploads **saved** (finished) session CSVs to GitHub `logs/car-uploads/`
+ * and AI report `.txt` files to `logs/ai-reports/`.
  *
  * Requires a fine-grained PAT with Contents:Write on the target repo
  * (Settings → Log upload token). Never uploads the in-progress live buffer.
@@ -30,6 +30,7 @@ import kotlinx.coroutines.withContext
 class LogUploadManager(
     context: Context,
     private val sessionLogStore: SessionLogStore,
+    private val aiReportStore: AiReportStore? = null,
 ) {
     data class Status(
         val online: Boolean = false,
@@ -101,9 +102,13 @@ class LogUploadManager(
 
     fun refreshCounts() {
         val files = sessionLogStore.list()
-        val synced = files.count { isSynced(it.fileName, File(it.absolutePath)) }
+        val aiFiles = aiReportStore?.list().orEmpty()
+        val syncedLogs = files.count { isSynced(it.fileName, File(it.absolutePath)) }
+        val syncedAi = aiFiles.count { isSynced(it.fileName, File(it.absolutePath)) }
+        val total = files.size + aiFiles.size
+        val synced = syncedLogs + syncedAi
         _status.value = _status.value.copy(
-            pendingCount = (files.size - synced).coerceAtLeast(0),
+            pendingCount = (total - synced).coerceAtLeast(0),
             syncedCount = synced,
         )
     }
@@ -145,24 +150,10 @@ class LogUploadManager(
                         out += FileResult(saved.fileName, FileResult.Outcome.SKIPPED_ACTIVE)
                         continue
                     }
-                    val file = File(saved.absolutePath)
-                    if (!file.isFile) continue
-                    val sha = sha256Hex(file) ?: continue
-                    if (prefs.getString(syncKey(saved.fileName), null) == sha) {
-                        out += FileResult(saved.fileName, FileResult.Outcome.ALREADY_SYNCED)
-                        continue
-                    }
-                    val result = putGitHubFile(token, saved.fileName, file.readBytes())
-                    if (result.isSuccess) {
-                        markSynced(saved.fileName, sha)
-                        out += FileResult(saved.fileName, FileResult.Outcome.UPLOADED)
-                    } else {
-                        out += FileResult(
-                            saved.fileName,
-                            FileResult.Outcome.FAILED,
-                            result.exceptionOrNull()?.message ?: "error",
-                        )
-                    }
+                    out += uploadOne(token, saved.fileName, File(saved.absolutePath), REMOTE_DIR)
+                }
+                for (rep in aiReportStore?.list().orEmpty()) {
+                    out += uploadOne(token, rep.fileName, File(rep.absolutePath), REMOTE_AI_DIR)
                 }
                 val uploaded = out.count { it.outcome == FileResult.Outcome.UPLOADED }
                 val already = out.count { it.outcome == FileResult.Outcome.ALREADY_SYNCED }
@@ -171,8 +162,8 @@ class LogUploadManager(
                     if (uploaded > 0) append("Uploaded $uploaded. ")
                     if (already > 0) append("Already synced $already. ")
                     if (failed > 0) append("Failed $failed. ")
-                    if (uploaded == 0 && already > 0 && failed == 0) append("All logs already synced.")
-                    if (out.isEmpty()) append("No saved logs to upload.")
+                    if (uploaded == 0 && already > 0 && failed == 0) append("All logs/reports already synced.")
+                    if (out.isEmpty()) append("No saved logs or AI reports to upload.")
                 }.trim()
                 _status.value = _status.value.copy(lastMessage = msg, uploading = false)
                 refreshCounts()
@@ -185,9 +176,40 @@ class LogUploadManager(
             out
         }
 
-    private fun putGitHubFile(token: String, fileName: String, bytes: ByteArray): Result<Unit> {
+    private fun uploadOne(
+        token: String,
+        fileName: String,
+        file: File,
+        remoteDir: String,
+    ): FileResult {
+        if (!file.isFile) {
+            return FileResult(fileName, FileResult.Outcome.FAILED, "missing file")
+        }
+        val sha = sha256Hex(file) ?: return FileResult(fileName, FileResult.Outcome.FAILED, "hash")
+        if (prefs.getString(syncKey(fileName), null) == sha) {
+            return FileResult(fileName, FileResult.Outcome.ALREADY_SYNCED)
+        }
+        val result = putGitHubFile(token, remoteDir, fileName, file.readBytes())
+        return if (result.isSuccess) {
+            markSynced(fileName, sha)
+            FileResult(fileName, FileResult.Outcome.UPLOADED)
+        } else {
+            FileResult(
+                fileName,
+                FileResult.Outcome.FAILED,
+                result.exceptionOrNull()?.message ?: "error",
+            )
+        }
+    }
+
+    private fun putGitHubFile(
+        token: String,
+        remoteDir: String,
+        fileName: String,
+        bytes: ByteArray,
+    ): Result<Unit> {
         return runCatching {
-            val path = "$REMOTE_DIR/$fileName"
+            val path = "$remoteDir/$fileName"
             val api = "https://api.github.com/repos/$githubOwner/$githubRepo/contents/$path"
             val existingSha = getRemoteSha(token, api)
             val body = JSONObject().apply {
@@ -196,7 +218,7 @@ class LogUploadManager(
                 if (existingSha != null) put("sha", existingSha)
             }
             val conn = (URL(api).openConnection() as HttpURLConnection).apply {
-                requestMethod = if (existingSha != null) "PUT" else "PUT"
+                requestMethod = "PUT"
                 setRequestProperty("Authorization", "Bearer $token")
                 setRequestProperty("Accept", "application/vnd.github+json")
                 setRequestProperty("X-GitHub-Api-Version", "2022-11-28")
@@ -253,5 +275,6 @@ class LogUploadManager(
         const val DEFAULT_OWNER = "iumer"
         const val DEFAULT_REPO = "FB2-OBD-app"
         const val REMOTE_DIR = "logs/car-uploads"
+        const val REMOTE_AI_DIR = "logs/ai-reports"
     }
 }
