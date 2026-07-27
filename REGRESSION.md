@@ -27,6 +27,9 @@ Keep these fixed. If a change might touch one of these areas, re-verify it.
 | I27 | Battery red/orange on Dash but no audible alarm | Fixed | Alarm tone + TTS; battery ELEVATED → “Battery low”; Settings Check sound alert |
 | I28 | Alerts duck CarPlay/Z-Link and volume never restores | Fixed | Default no audio-focus duck; optional “Lower CarPlay during alerts”; no SCO/MUSIC while A2DP |
 | I29 | Split-second threshold spikes trigger false alarms | Fixed | `VoiceAlertDebouncer` ~2.5s sustained hold before sound |
+| I30 | Satellite tap pinned wrong metric on collapsed bubble | Fixed | Satellite taps never change Coolant primary |
+| I31 | Want LOG on by default for real ELM | Fixed | Auto-start value logging on live ELM connect |
+| I32 | Hard to get logs off HU | Fixed | GitHub `logs/car-uploads/` sync + Upload button + Downloads mirror |
 | I12 | Android Auto sideload not showing on real HU | Documented | Needs Play Internal testing/sharing; DHU for desk — see `AGENTS.md` |
 | I13 | LOG should be main Dash only (not Fuel/Trip/Trans dumps) | Fixed | Lean CSV: events + dashboard_snapshots + dash_tiles |
 | I14 | Pakistan units (km, km/h, km/L) | Fixed | Product default |

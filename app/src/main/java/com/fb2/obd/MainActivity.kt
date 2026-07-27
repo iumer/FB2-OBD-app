@@ -112,6 +112,7 @@ class MainActivity : ComponentActivity() {
                 val dashExtraValues by viewModel.dashExtraValues.collectAsState()
                 val dashTileOverrides by viewModel.dashTileOverrides.collectAsState()
                 val savedLogs by viewModel.savedLogs.collectAsState()
+                val uploadStatus by viewModel.uploadStatus.collectAsState()
                 val deepSearch by viewModel.deepSearch.collectAsState()
                 val deepFoundValues by viewModel.deepFoundValues.collectAsState()
                 val healthThresholds by viewModel.healthThresholds.collectAsState()
@@ -311,20 +312,29 @@ class MainActivity : ComponentActivity() {
                         onResetThresholds = viewModel::resetHealthThresholds,
                     )
 
-                    Screen.SETTINGS -> SettingsScreen(
-                        settings = settings,
-                        onToggleEstimatedGear = viewModel::setShowEstimatedGear,
-                        onToggleVoiceAlerts = viewModel::setVoiceAlerts,
-                        onToggleDuckMedia = viewModel::setDuckMediaDuringAlerts,
-                        onCheckSoundAlert = {
-                            viewModel.testSoundAlert()
-                            toast("Playing test alarm — CarPlay volume should stay up afterward")
-                        },
-                        nav = settingsNav,
-                        onBack = { screen = Screen.DASHBOARD },
-                        modifier = Modifier.fillMaxSize(),
-                        scrollState = settingsScrollState,
-                    )
+                    Screen.SETTINGS -> {
+                        SettingsScreen(
+                            settings = settings,
+                            onToggleEstimatedGear = viewModel::setShowEstimatedGear,
+                            onToggleVoiceAlerts = viewModel::setVoiceAlerts,
+                            onToggleDuckMedia = viewModel::setDuckMediaDuringAlerts,
+                            onCheckSoundAlert = {
+                                viewModel.testSoundAlert()
+                                toast("Playing test alarm — CarPlay volume should stay up afterward")
+                            },
+                            uploadStatus = uploadStatus,
+                            githubToken = viewModel.githubUploadToken(),
+                            onGithubTokenChange = viewModel::setGithubUploadToken,
+                            onUploadLogs = {
+                                viewModel.uploadSavedLogs()
+                                toast("Uploading saved logs…")
+                            },
+                            nav = settingsNav,
+                            onBack = { screen = Screen.DASHBOARD },
+                            modifier = Modifier.fillMaxSize(),
+                            scrollState = settingsScrollState,
+                        )
+                    }
 
                     Screen.DIAG_HUB -> DiagnosticsHubScreen(
                         nav = diagnosticsNav,
@@ -416,6 +426,18 @@ class MainActivity : ComponentActivity() {
                                 viewModel.deleteSavedLog(file.fileName)
                                 toast("Deleted ${file.fileName}")
                                 tick++
+                            },
+                            uploadEnabled = !uploadStatus.uploading,
+                            onUpload = {
+                                viewModel.uploadSavedLogs()
+                                toast(if (uploadStatus.online) "Uploading…" else "No internet — will retry when online")
+                            },
+                            uploadStatusLine = buildString {
+                                append(if (uploadStatus.online) "Online" else "Offline")
+                                append(" · ${uploadStatus.pendingCount} pending · ${uploadStatus.syncedCount} synced")
+                                if (uploadStatus.lastMessage.isNotBlank()) {
+                                    append(" · ${uploadStatus.lastMessage}")
+                                }
                             },
                         )
                     }

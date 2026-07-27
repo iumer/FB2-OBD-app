@@ -114,6 +114,9 @@ fun ValueLogScreen(
     loggingActive: Boolean = false,
     onShareFile: (SavedLogFile) -> Unit = {},
     onDeleteFile: (SavedLogFile) -> Unit = {},
+    uploadEnabled: Boolean = true,
+    onUpload: () -> Unit = {},
+    uploadStatusLine: String = "",
 ) {
     Column(
         modifier = modifier
@@ -123,16 +126,26 @@ fun ValueLogScreen(
     ) {
         ScreenHeader(title = "Value log", onBack = onBack) {
             Row {
+                HeaderAction("Upload", onUpload, color = if (uploadEnabled) Accent else TextMuted)
                 HeaderAction("Save", onShare)
                 HeaderAction("Clear current", onClear)
             }
+        }
+
+        if (uploadStatusLine.isNotBlank()) {
+            Text(
+                text = uploadStatusLine,
+                color = TextMuted,
+                fontSize = 11.sp,
+                modifier = Modifier.padding(bottom = 6.dp),
+            )
         }
 
         Text(
             text = if (loggingActive) {
                 "LOGGING LIVE — main Dash only (${rows.size} rows). Tap STOP LOG on the dashboard to save."
             } else {
-                "Current buffer: ${rows.size} rows. LOG captures hero + Dash tiles (including any + extras)."
+                "Current buffer: ${rows.size} rows. Finished sessions upload to GitHub when online (Settings → token)."
             },
             color = if (loggingActive) GoodGreen else TextMuted,
             fontSize = 12.sp,

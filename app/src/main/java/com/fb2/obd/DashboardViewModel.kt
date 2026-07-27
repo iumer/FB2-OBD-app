@@ -11,6 +11,8 @@ import com.fb2.obd.data.DemoObdSource
 import com.fb2.obd.data.HealthThresholdStore
 import com.fb2.obd.data.MaintenanceEntry
 import com.fb2.obd.data.MaintenanceStore
+import com.fb2.obd.data.LogExportHelper
+import com.fb2.obd.data.LogUploadManager
 import com.fb2.obd.data.ObdLogger
 import com.fb2.obd.data.ObdSource
 import com.fb2.obd.data.SavedLogFile
@@ -224,6 +226,10 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
     val savedLogs: StateFlow<List<SavedLogFile>> = _savedLogs.asStateFlow()
     private var sessionStartedMs: Long = 0L
 
+    private val logUploadManager = LogUploadManager(app, sessionLogStore)
+    val uploadStatus = logUploadManager.status
+    private var autoUploadJob: Job? = null
+
     private val _deepSearch = MutableStateFlow(DeepSearchUiState())
     val deepSearch: StateFlow<DeepSearchUiState> = _deepSearch.asStateFlow()
 
@@ -377,6 +383,22 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
         voiceAlerter.enabled = _settings.value.voiceAlerts
         voiceAlerter.duckMediaDuringAlerts = _settings.value.duckMediaDuringAlerts
         voiceAlerter.start()
+        logUploadManager.start()
+        autoUploadJob = viewModelScope.launch {
+            var lastAttemptMs = 0L
+            logUploadManager.status.collect { st ->
+                val now = System.currentTimeMillis()
+                if (st.online &&
+                    logUploadManager.githubToken.isNotBlank() &&
+                    st.pendingCount > 0 &&
+                    !st.uploading &&
+                    now - lastAttemptMs > 30_000L
+                ) {
+                    lastAttemptMs = now
+                    logUploadManager.uploadPending(skipFileName = null)
+                }
+            }
+        }
         VehicleLiveStore.onToggleLogging = {
             if (_settings.value.valueLogging) stopValueLogging() else startValueLogging()
             publishCarDash()
@@ -479,7 +501,35 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
         ObdLogger.logDebug(ObdLogger.Dir.INFO, "VALUE LOG saved ${saved.fileName}")
         ObdLogger.sessionStartMs = 0L
         _savedLogs.value = sessionLogStore.list()
+        // Mirror into Downloads for USB pull, then try cloud upload if online.
+        runCatching {
+            LogExportHelper.exportFile(
+                getApplication(),
+                File(saved.absolutePath),
+                saved.fileName,
+                "text/csv",
+            )
+        }
+        viewModelScope.launch {
+            if (logUploadManager.githubToken.isNotBlank() && logUploadManager.isOnline()) {
+                logUploadManager.uploadPending()
+            } else {
+                logUploadManager.refreshCounts()
+            }
+        }
         return saved
+    }
+
+    fun setGithubUploadToken(token: String) {
+        logUploadManager.githubToken = token
+    }
+
+    fun githubUploadToken(): String = logUploadManager.githubToken
+
+    fun uploadSavedLogs() {
+        viewModelScope.launch {
+            logUploadManager.uploadPending()
+        }
     }
 
     /** Re-probe user-added (+) sensors and remapped built-in tiles. */
@@ -559,6 +609,7 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
     fun deleteSavedLog(fileName: String) {
         sessionLogStore.delete(fileName)
         _savedLogs.value = sessionLogStore.list()
+        logUploadManager.refreshCounts()
     }
 
     fun setShowEstimatedGear(enabled: Boolean) {
@@ -641,6 +692,12 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
             )
         }
         publishCarDash()
+        // Real ELM: auto-start value logging unless already running.
+        // Manual STOP LOG turns it off until the next fresh ELM connect.
+        if (source.isLive && !_settings.value.valueLogging) {
+            startValueLogging()
+            ObdLogger.logDebug(ObdLogger.Dir.INFO, "VALUE LOG auto-started on ELM connect")
+        }
         collectJob = source.snapshots()
             .onEach { incoming ->
                 lastLiveSnapshotMs = System.currentTimeMillis()
@@ -1128,6 +1185,9 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
         MaintenanceStore(File(filesDir, "maintenance.json")).save(_maintenance.value)
         VehicleLiveStore.onToggleLogging = null
         VehicleLiveStore.onConnectRequest = null
+        autoUploadJob?.cancel()
+        autoUploadJob = null
+        logUploadManager.stop()
         voiceAlerter.shutdown()
         super.onCleared()
     }

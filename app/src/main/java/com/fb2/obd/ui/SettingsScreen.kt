@@ -12,23 +12,32 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.fb2.obd.SettingsState
+import com.fb2.obd.data.LogUploadManager
 import com.fb2.obd.ui.theme.Accent
 import com.fb2.obd.ui.theme.Background
 import com.fb2.obd.ui.theme.GoodGreen
 import com.fb2.obd.ui.theme.Surface
 import com.fb2.obd.ui.theme.TextMuted
 import com.fb2.obd.ui.theme.TextPrimary
+import com.fb2.obd.ui.theme.WarnAmber
 
 @Composable
 fun ScreenHeader(title: String, onBack: () -> Unit, action: (@Composable () -> Unit)? = null) {
@@ -75,6 +84,10 @@ fun SettingsScreen(
     onToggleVoiceAlerts: (Boolean) -> Unit = {},
     onToggleDuckMedia: (Boolean) -> Unit = {},
     onCheckSoundAlert: () -> Unit = {},
+    uploadStatus: LogUploadManager.Status = LogUploadManager.Status(),
+    githubToken: String = "",
+    onGithubTokenChange: (String) -> Unit = {},
+    onUploadLogs: () -> Unit = {},
     nav: SettingsNav,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
@@ -126,13 +139,69 @@ fun SettingsScreen(
 
         SectionLabel("Logging")
         Text(
-            text = "Use LOG on the dashboard to capture every tab (Dash, Custom, Idle, Fuel, Trip, Trans, Perf, G-force, Health) plus probes into one CSV. Debug ELM TX/RX stays separate below.",
+            text = "Real ELM connect auto-starts Dash value LOG until you tap STOP LOG. Sessions save as FB2-log-yyyyMMdd-HHmmss.csv.",
             color = TextMuted,
             fontSize = 12.sp,
             modifier = Modifier.padding(bottom = 8.dp),
         )
         NavRow("Debug log (raw ELM327)", nav.onDebug)
         NavRow("Saved value logs (CSV)", nav.onValues)
+
+        SectionLabel("Log upload")
+        Text(
+            text = if (uploadStatus.online) "Internet: online" else "Internet: offline",
+            color = if (uploadStatus.online) GoodGreen else WarnAmber,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(bottom = 6.dp),
+        )
+        Text(
+            text = "Uploads finished drives to github.com/${LogUploadManager.DEFAULT_OWNER}/${LogUploadManager.DEFAULT_REPO}/${LogUploadManager.REMOTE_DIR}/ (not the live buffer). Needs a fine-grained PAT with Contents: Write.",
+            color = TextMuted,
+            fontSize = 12.sp,
+            modifier = Modifier.padding(bottom = 8.dp),
+        )
+        var tokenDraft by remember(githubToken) { mutableStateOf(githubToken) }
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(12.dp))
+                .background(Surface)
+                .padding(14.dp),
+        ) {
+            Text("GitHub token", color = TextPrimary, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+            BasicTextField(
+                value = tokenDraft,
+                onValueChange = {
+                    tokenDraft = it
+                    onGithubTokenChange(it)
+                },
+                singleLine = true,
+                textStyle = TextStyle(color = TextPrimary, fontSize = 13.sp),
+                cursorBrush = SolidColor(Accent),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 8.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(Background)
+                    .padding(12.dp),
+                decorationBox = { inner ->
+                    if (tokenDraft.isBlank()) {
+                        Text("ghp_… paste token", color = TextMuted, fontSize = 13.sp)
+                    }
+                    inner()
+                },
+            )
+        }
+        ActionRow(
+            title = "Upload saved logs",
+            subtitle = buildString {
+                append("${uploadStatus.pendingCount} pending · ${uploadStatus.syncedCount} synced")
+                if (uploadStatus.lastMessage.isNotBlank()) append(" · ${uploadStatus.lastMessage}")
+            },
+            actionLabel = if (uploadStatus.uploading) "…" else "UPLOAD",
+            onClick = onUploadLogs,
+        )
     }
 }
 
