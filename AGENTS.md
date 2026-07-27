@@ -120,9 +120,10 @@ non-obvious cloud specifics.
   `ObdMonitorForegroundService` (`connectedDevice` FGS + sticky notification +
   `PARTIAL_WAKE_LOCK`). Demo mode must not start it. Voice alerts play a short
   beep + TTS. **Default is CarPlay/Z-Link safe:** no audio-focus duck (many HUs
-  duck Z-Link and never restore volume). Optional Settings → **Lower CarPlay
-  during alerts** re-enables MAY_DUCK. Never start BT SCO or rewrite STREAM_MUSIC
-  while A2DP is present.   Settings → **Check sound alert** plays the test alarm.
+  duck Z-Link and never restore volume). Settings → **CarPlay / Android Auto
+  connected** (Yes = no duck / Z-Link safe; No = briefly duck media). Stored flag
+  is the inverse (`duckMediaDuringAlerts`). Never start BT SCO or rewrite STREAM_MUSIC
+  while A2DP is present. Settings → **Check sound alert** plays the test alarm.
   Battery voice is **CRITICAL only** (above idle + sustained low volts) — orange
   ELD dips stay silent. Voice/sound alerts require the condition for a per-key
   hold (`AlertPolicy` / `VoiceAlertDebouncer`) before beeping — Dash tiles still
@@ -133,12 +134,12 @@ non-obvious cloud specifics.
   survives going to Home / CarPlay. MainActivity waits for `ACTION_READY` (overlay
   attached) before `moveTaskToBack` — do not background first or OEMs may hide /
   defer the WindowManager view. Needs `SYSTEM_ALERT_WINDOW`.
-  Collapsed = one draggable circle showing **Coolant 1** (not RPM) with coolant
-  health colour — tapping satellites does **not** pin another metric to the
-  main blob. Expanded = center + up to **5 satellites** (Coolant, RPM with
-  redline colour, MAP, Battery, Intake…). Vertical swipe pages metrics. Idle ~6s
-  auto-collapses. **Long-press opens the app and dismisses the bubble.** Exit &
-  disconnect also stops the overlay.
+  Collapsed = one draggable circle showing the **pinned** metric (default
+  **Coolant 1**; tap a satellite to pin RPM/MAF/MAP/etc., persisted). Expanded =
+  center + up to **5 satellites** (Coolant, RPM with redline colour, MAP,
+  Battery, Intake…). Vertical swipe pages metrics. Idle ~6s auto-collapses.
+  **Long-press opens the app and dismisses the bubble.** Exit & disconnect also
+  stops the overlay.
   Bubble position is clamped to the current display (landscape app → portrait
   Home must not push it off-screen).
 - **Dash tile remap:** Double-tap any main-Dash tile to open the same sensor

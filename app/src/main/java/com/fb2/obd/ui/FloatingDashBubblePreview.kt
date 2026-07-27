@@ -66,6 +66,8 @@ fun FloatingDashBubblePreview(
     expanded: Boolean,
     modifier: Modifier = Modifier,
     statusLine: String = "LIVE",
+    /** Collapsed primary — matches satellite pin on the real overlay. */
+    pinnedLabel: String? = null,
     /** @deprecated Kept for older call sites; prefer [pageIndex]. */
     index: Int = 0,
 ) {
@@ -75,10 +77,10 @@ fun FloatingDashBubblePreview(
     val page = if (expanded) {
         FloatingDashMetrics.page(safe, pageIndex)
     } else {
-        listOf(FloatingDashMetrics.collapsedMetric(safe))
+        listOf(FloatingDashMetrics.collapsedMetric(safe, pinnedLabel))
     }
     val pages = FloatingDashMetrics.pageCount(safe)
-    val collapsedPrimary = FloatingDashMetrics.collapsedMetric(safe)
+    val collapsedPrimary = FloatingDashMetrics.collapsedMetric(safe, pinnedLabel)
     val rim = healthColor(
         if (expanded) {
             FloatingDashMetrics.worstHealth(safe.mapNotNull { it.health })

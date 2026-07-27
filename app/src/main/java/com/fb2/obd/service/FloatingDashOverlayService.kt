@@ -48,9 +48,10 @@ import kotlin.math.sin
 
 /**
  * Floating OBD overlay for Dellson / Android HU:
- * - Collapsed: one draggable circular button
+ * - Collapsed: one draggable circular button (pinned metric; default Coolant)
  * - Expanded: same center button + up to 5 satellite circles around it
- * - Vertical swipe pages through remaining metrics (center stays fixed)
+ * - Tap a satellite to pin it as the collapsed primary
+ * - Vertical swipe pages through remaining metrics
  * - Auto-collapses after idle timeout
  *
  * Runs as a **foreground service** so the bubble stays visible over Home /
@@ -73,6 +74,8 @@ class FloatingDashOverlayService : Service() {
 
     private var expanded = false
     private var pageIndex = 0
+    /** Label pinned by tapping a satellite — shown on the collapsed blob. */
+    private var pinnedLabel: String = "Coolant 1"
     private var latest: CarDashState = CarDashState()
     private var metrics: List<FloatingDashMetrics.Metric> = emptyList()
 
@@ -93,6 +96,7 @@ class FloatingDashOverlayService : Service() {
         super.onCreate()
         windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
         prefs = getSharedPreferences(PREFS, MODE_PRIVATE)
+        pinnedLabel = prefs.getString(KEY_PINNED, "Coolant 1") ?: "Coolant 1"
         ensureChannel()
         // Promote BEFORE addView so OEMs don't defer / kill us as we leave the app.
         promoteToForeground()
@@ -324,9 +328,9 @@ class FloatingDashOverlayService : Service() {
             }
         }
 
-        // Satellite taps must never collapse or change the Coolant primary on
-        // the main blob — only keep the ring open a bit longer.
-        val satTouchListener = View.OnTouchListener { _, event ->
+        // Satellite tap pins that metric as the collapsed blob primary.
+        // Swipe still pages; long-press still opens the app.
+        val satTouchListener = View.OnTouchListener { view, event ->
             when (event.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
                     downRawX = event.rawX
@@ -349,6 +353,7 @@ class FloatingDashOverlayService : Service() {
                             expanded && abs(moveDy) > abs(moveDx) * 1.2f -> TouchMode.PAGE
                             else -> TouchMode.DRAG
                         }
+                        if (mode == TouchMode.PAGE) moved = true
                         mainHandler.removeCallbacks(longPress)
                     }
                     when (mode) {
@@ -370,9 +375,20 @@ class FloatingDashOverlayService : Service() {
                             bumpAutoCollapse()
                             render()
                         }
-                        !moved && event.actionMasked == MotionEvent.ACTION_UP -> {
-                            // Tap satellite: stay expanded on Coolant primary. Do nothing else.
-                            bumpAutoCollapse()
+                        !moved && mode == TouchMode.NONE && event.actionMasked == MotionEvent.ACTION_UP -> {
+                            val label = view.tag as? String
+                            if (!label.isNullOrBlank()) {
+                                pinnedLabel = label
+                                prefs.edit().putString(KEY_PINNED, label).apply()
+                                // Collapse so the blob immediately shows the new primary.
+                                setExpanded(false)
+                                ObdLogger.logDebug(
+                                    ObdLogger.Dir.INFO,
+                                    "Floating dash pinned primary: $label",
+                                )
+                            } else {
+                                bumpAutoCollapse()
+                            }
                         }
                         mode == TouchMode.DRAG -> {
                             prefs.edit().putInt(KEY_X, lp.x).putInt(KEY_Y, lp.y).apply()
@@ -448,8 +464,8 @@ class FloatingDashOverlayService : Service() {
             metrics = listOf(FloatingDashMetrics.Metric("Dash", "--", "", null, "WAITING"))
         }
         val page = FloatingDashMetrics.page(metrics, pageIndex)
-        val primary = FloatingDashMetrics.collapsedMetric(metrics)
-        // Collapsed rim follows coolant (what is shown). Expanded rim = worst of all.
+        val primary = FloatingDashMetrics.collapsedMetric(metrics, pinnedLabel)
+        // Collapsed rim follows the pinned metric. Expanded rim = worst of all.
         val rimHealth = if (expanded) {
             FloatingDashMetrics.worstHealth(metrics.mapNotNull { it.health })
         } else {
@@ -482,7 +498,7 @@ class FloatingDashOverlayService : Service() {
             lp.width = expandedSize
             lp.height = expandedSize
             pageHint?.visibility = View.VISIBLE
-            pageHint?.text = "↕ scroll · tap center to collapse"
+            pageHint?.text = "↕ scroll · tap value to pin"
             val cx = (expandedSize - satSize) / 2f
             val cy = (expandedSize - satSize) / 2f
             for (i in 0 until FloatingDashMetrics.PAGE_SIZE) {
@@ -494,6 +510,7 @@ class FloatingDashOverlayService : Service() {
                     val x = (cx + radius * cos(rad)).roundToInt()
                     val y = (cy + radius * sin(rad)).roundToInt()
                     sat.visibility = View.VISIBLE
+                    sat.tag = m.label
                     sat.layoutParams = FrameLayout.LayoutParams(satSize, satSize).apply {
                         leftMargin = x
                         topMargin = y
@@ -511,6 +528,7 @@ class FloatingDashOverlayService : Service() {
                     sat.background = circleDrawable(healthColor(m.health), fillAlpha = 215)
                 } else {
                     sat.visibility = View.GONE
+                    sat.tag = null
                 }
             }
         } else {
@@ -564,9 +582,9 @@ class FloatingDashOverlayService : Service() {
         }
         clampToScreen(lp)
         expanded = value
-        if (!expanded) {
-            // Always reopen page 0 (Coolant-first) after collapse.
-            pageIndex = 0
+        if (value) {
+            // Re-open on the page that contains the pinned primary.
+            pageIndex = FloatingDashMetrics.pageIndexOf(metrics, pinnedLabel)
         }
         if (expanded) bumpAutoCollapse() else mainHandler.removeCallbacks(autoCollapse)
         render()
@@ -672,6 +690,7 @@ class FloatingDashOverlayService : Service() {
         private const val PREFS = "floating_dash"
         private const val KEY_X = "x"
         private const val KEY_Y = "y"
+        private const val KEY_PINNED = "pinned_label"
         private const val CHANNEL_ID = "floating_dash"
         private const val NOTIFICATION_ID = 1002
 

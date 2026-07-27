@@ -44,17 +44,34 @@ object FloatingDashMetrics {
     }
 
     /**
-     * Metric shown on the collapsed floating circle — always Coolant 1 when
-     * present (fallback Coolant 2 → first metric).
+     * Metric shown on the collapsed floating circle.
+     * Prefers [preferredLabel] when the user pinned a satellite (e.g. RPM/MAF);
+     * otherwise defaults to Coolant 1.
      */
-    fun collapsedMetric(metrics: List<Metric>): Metric {
+    fun collapsedMetric(
+        metrics: List<Metric>,
+        preferredLabel: String? = null,
+    ): Metric {
         if (metrics.isEmpty()) {
             return Metric("Dash", "--", "", null, "WAITING")
+        }
+        if (!preferredLabel.isNullOrBlank()) {
+            metrics.firstOrNull { it.label.equals(preferredLabel, ignoreCase = true) }?.let {
+                return it
+            }
         }
         return metrics.firstOrNull { it.label.equals("Coolant 1", ignoreCase = true) }
             ?: metrics.firstOrNull { it.label.equals("Coolant 2", ignoreCase = true) }
             ?: metrics.firstOrNull { it.label.contains("Coolant", ignoreCase = true) }
             ?: metrics.first()
+    }
+
+    /** Page index that contains [label], or 0 if missing. */
+    fun pageIndexOf(metrics: List<Metric>, label: String?, pageSize: Int = PAGE_SIZE): Int {
+        if (label.isNullOrBlank() || metrics.isEmpty()) return 0
+        val idx = metrics.indexOfFirst { it.label.equals(label, ignoreCase = true) }
+        if (idx < 0) return 0
+        return idx / pageSize
     }
 
     fun pageCount(metrics: List<Metric>, pageSize: Int = PAGE_SIZE): Int =
