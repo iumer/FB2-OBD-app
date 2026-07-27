@@ -310,7 +310,69 @@ class FloatingDashOverlayService : Service() {
                             render()
                         }
                         !moved && event.actionMasked == MotionEvent.ACTION_UP -> {
+                            // Center / empty area toggles. Satellite taps use their own listener.
                             setExpanded(!expanded)
+                        }
+                        mode == TouchMode.DRAG -> {
+                            prefs.edit().putInt(KEY_X, lp.x).putInt(KEY_Y, lp.y).apply()
+                        }
+                    }
+                    mode = TouchMode.NONE
+                    true
+                }
+                else -> false
+            }
+        }
+
+        // Satellite taps must never collapse or change the Coolant primary on
+        // the main blob — only keep the ring open a bit longer.
+        val satTouchListener = View.OnTouchListener { _, event ->
+            when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    downRawX = event.rawX
+                    downRawY = event.rawY
+                    startX = lp.x
+                    startY = lp.y
+                    moved = false
+                    longPressFired = false
+                    mode = TouchMode.NONE
+                    bumpAutoCollapse()
+                    mainHandler.removeCallbacks(longPress)
+                    mainHandler.postDelayed(longPress, LONG_PRESS_MS)
+                    true
+                }
+                MotionEvent.ACTION_MOVE -> {
+                    val moveDx = event.rawX - downRawX
+                    val moveDy = event.rawY - downRawY
+                    if (mode == TouchMode.NONE && (abs(moveDx) > dp(8) || abs(moveDy) > dp(8))) {
+                        mode = when {
+                            expanded && abs(moveDy) > abs(moveDx) * 1.2f -> TouchMode.PAGE
+                            else -> TouchMode.DRAG
+                        }
+                        mainHandler.removeCallbacks(longPress)
+                    }
+                    when (mode) {
+                        TouchMode.DRAG -> applyDrag(event)
+                        TouchMode.PAGE -> Unit
+                        TouchMode.NONE -> Unit
+                    }
+                    true
+                }
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    mainHandler.removeCallbacks(longPress)
+                    val dy = event.rawY - downRawY
+                    when {
+                        longPressFired -> Unit
+                        mode == TouchMode.PAGE && abs(dy) > dp(36) -> {
+                            val pages = FloatingDashMetrics.pageCount(metrics)
+                            if (dy < 0) pageIndex = (pageIndex + 1) % pages
+                            else pageIndex = (pageIndex - 1 + pages) % pages
+                            bumpAutoCollapse()
+                            render()
+                        }
+                        !moved && event.actionMasked == MotionEvent.ACTION_UP -> {
+                            // Tap satellite: stay expanded on Coolant primary. Do nothing else.
+                            bumpAutoCollapse()
                         }
                         mode == TouchMode.DRAG -> {
                             prefs.edit().putInt(KEY_X, lp.x).putInt(KEY_Y, lp.y).apply()
@@ -325,7 +387,7 @@ class FloatingDashOverlayService : Service() {
 
         center.setOnTouchListener(touchListener)
         container.setOnTouchListener(touchListener)
-        satellites.forEach { it.setOnTouchListener(touchListener) }
+        satellites.forEach { it.setOnTouchListener(satTouchListener) }
 
         root = container
         params = lp
@@ -502,6 +564,10 @@ class FloatingDashOverlayService : Service() {
         }
         clampToScreen(lp)
         expanded = value
+        if (!expanded) {
+            // Always reopen page 0 (Coolant-first) after collapse.
+            pageIndex = 0
+        }
         if (expanded) bumpAutoCollapse() else mainHandler.removeCallbacks(autoCollapse)
         render()
     }

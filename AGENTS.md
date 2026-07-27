@@ -95,10 +95,14 @@ non-obvious cloud specifics.
   section — independent of the continuous value LOG toggle.
 - **Value LOG** captures **main Dash only** (hero RPM/Speed/Gear + Dash tiles
   including any `+` extras). It does **not** dump Fuel/Trip/Trans/Perf/etc.
-  Saved CSVs are lean (`events` + `dashboard_snapshots` + `dash_tiles`).
-  **Save logs:** always writes `Downloads/FB2-Diag/` + `Documents/exports/`
+  Saved CSVs are lean (`events` + `dashboard_snapshots` + `dash_tiles`) named
+  `FB2-log-yyyyMMdd-HHmmss.csv`. **Real ELM connect auto-starts logging** until
+  STOP LOG. **Save logs:** always writes `Downloads/FB2-Diag/` + `Documents/exports/`
   (never auto-opens a Bluetooth-only share sheet on car HUs). Dialog offers
   Open file / optional Share… only when a useful non-BT app exists.
+  **Log upload:** finished sessions sync to `logs/car-uploads/` on GitHub when
+  online (Settings → paste fine-grained PAT with Contents:Write). Manual
+  **Upload** on Settings / Value log; already-synced files report as such.
 - **ELM idle drop:** cheap clones often hang mid-poll. The app uses short PID
   timeouts (~650 ms poll / ~450 ms probe), skips repeatedly-failing PIDs, keeps
   last-good Dash values, and retries RFCOMM forever with backoff (UI shows
@@ -122,7 +126,8 @@ non-obvious cloud specifics.
   attached) before `moveTaskToBack` — do not background first or OEMs may hide /
   defer the WindowManager view. Needs `SYSTEM_ALERT_WINDOW`.
   Collapsed = one draggable circle showing **Coolant 1** (not RPM) with coolant
-  health colour. Expanded = center + up to **5 satellites** (Coolant, RPM with
+  health colour — tapping satellites does **not** pin another metric to the
+  main blob. Expanded = center + up to **5 satellites** (Coolant, RPM with
   redline colour, MAP, Battery, Intake…). Vertical swipe pages metrics. Idle ~6s
   auto-collapses. **Long-press opens the app and dismisses the bubble.** Exit &
   disconnect also stops the overlay.
