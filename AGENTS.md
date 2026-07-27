@@ -113,7 +113,8 @@ non-obvious cloud specifics.
   AI reports (`.txt`) sync to `logs/ai-reports/` via the same Upload button.
 - **Analyze via AI:** DIAGNOSTICS → **Analyze via AI**. Modes: **Live data**
   (lookback time bar 1–15 min over current auto-LOG) or **From history** (pick a
-  saved `FB2-log-*.csv`, same window). One-shot OpenAI `gpt-4o-mini` report
+  saved `FB2-log-*.csv`; **Analyze on that row**, no time slider — recent end of
+  file, size-capped). One-shot OpenAI `gpt-4o-mini` report
   (read-only FB2 system prompt). API key in Settings → AI analysis
   (`platform.openai.com` — Plus ≠ API). Result is copyable and saved under
   `ai_reports/FB2-ai-*.txt` (mirrored to Downloads) including an audit
