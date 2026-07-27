@@ -1,0 +1,225 @@
+# FB2-OBD AI diagnostic report
+# created_ms=1785182783210
+# source=live_window_1min
+# window_minutes=1
+# model=gpt-4o-mini-2024-07-18
+# vehicle=Honda Civic FB2 2013 R18 PK UG AT (D/D3/D2/D1)
+
+===== AI FINDINGS =====
+
+AI VEHICLE ANALYSIS REPORT
+
+VEHICLE
+- Vehicle identification: Honda Civic FB2, 2013, 1.8L R18
+- Log source: live_window_1min
+- Log filename, if provided: N/A
+- Analysis start: 1785182701827 ms
+- Analysis end: 1785182759689 ms
+- Analysis duration: 1 minute
+- Total records reviewed: 37
+- Valid readings analyzed: 37
+
+DATA AVAILABILITY
+- Sensors requested or selected: rpm, speed_kmh, coolant1_c, coolant2_c, intake_c, ambient_c, load_pct, throttle_pct, timing, maf_gps, map_kpa, stft_pct, ltft_pct, ecu_v, gear, fuel_loop
+- Sensors with valid data: rpm, speed_kmh, coolant1_c, intake_c, load_pct, throttle_pct, timing, maf_gps, map_kpa, stft_pct, ecu_v, fuel_loop
+- Sensors without usable data: coolant2_c, ambient_c, ltft_pct, gear
+- Missing, N/A, unsupported, or failed responses: coolant2_c, ambient_c, ltft_pct, gear were not available.
+- Sampling and connection quality: Fair, but confidence may be limited due to truncation.
+- Suspected logger, scanner, or ELM limitations: Possible limitations in capturing transmission data.
+
+Some sensors were selected in the app but did not produce usable readings during this analysis. This is not by itself evidence of a vehicle fault. It may be caused by vehicle PID support, the ELM adapter, scanner communication, polling behavior, or an app limitation. This report is based only on the valid readings actually received. No missing values were assumed or estimated.
+
+OVERALL ASSESSMENT
+- Overall condition based on available data: Mostly normal with a few items to monitor.
+- Overall confidence: Moderate due to missing transmission data.
+- Concise explanation: The engine is operating normally, but battery voltage indicates a potential issue.
+- Important limitations: Lack of transmission data limits the assessment of that system.
+
+WHAT LOOKS NORMAL
+- Coolant temperature: Ranged from 52.0 to 59.0 °C, indicating a typical cold engine state.
+- MAF: Ranged from 2.7 to 3.2 g/s at low RPM, which is expected for idle conditions.
+- Battery voltage: Latest reading of 12.35 V, though it suggests a weak charge.
+
+CONCERNS OR ITEMS TO MONITOR
+- Finding: Battery voltage shows signs of weakness.
+- Recorded evidence: Latest voltage reading of 12.35 V.
+- Time and duration: Throughout the session.
+- Repetition: Consistent low voltage readings.
+- Supporting data: Battery health notes indicate a weak charge.
+- Conflicting data: None noted.
+- Severity: Moderate concern.
+- Confidence: Moderate due to the lack of additional data.
+- Plausible explanations: Aging battery, poor charging system performance.
+- Additional data needed: Voltage readings during engine operation and charging tests.
+
+SAFE NEXT CHECKS
+- Check the battery and charging system for proper operation.
+- Monitor battery voltage during engine startup and while driving.
+- Additional sensors that would improve confidence include transmission fluid temperature and gear position.
+
+ANALYZED VALUES
+- Sensor name: rpm
+  Unit: RPM
+  Minimum: 815.0
+  Maximum: 903.0
+  Average: 857.0
+  Median: 857.0
+  Latest valid value: 815.0
+  Valid sample count: 37
+  Invalid or missing sample count: 0
+  Observed trend: Stable at idle.
+  Relevant duration or excursion information: Continuous during the session.
+
+- Sensor name: speed_kmh
+  Unit: km/h
+  Minimum: 0.0
+  Maximum: 0.0
+  Average: 0.0
+  Latest valid value: 0.0
+  Valid sample count: 37
+  Invalid or missing sample count: 0
+  Observed trend: Stationary throughout the session.
+
+- Sensor name: coolant1_c
+  Unit: °C
+  Minimum: 52.0
+  Maximum: 59.0
+  Average: 55.0
+  Latest valid value: 59.0
+  Valid sample count: 37
+  Invalid or missing sample count: 0
+  Observed trend: Normal for a cold engine.
+
+- Sensor name: maf_gps
+  Unit: g/s
+  Minimum: 2.7
+  Maximum: 3.2
+  Average: 3.0
+  Latest valid value: 2.81
+  Valid sample count: 37
+  Invalid or missing sample count: 0
+  Observed trend: Normal for idle conditions.
+
+- Sensor name: ecu_v
+  Unit: V
+  Minimum: 12.35
+  Maximum: 12.425
+  Average: 12.39
+  Latest valid value: 12.35
+  Valid sample count: 37
+  Invalid or missing sample count: 0
+  Observed trend: Indicates a weak charge.
+
+UNAVAILABLE OR UNUSED VALUES
+- Sensor name: coolant2_c
+  Requested or selected status: Selected
+  Reason it could not be analyzed: No data received.
+  Mark as: unavailable.
+
+- Sensor name: ambient_c
+  Requested or selected status: Selected
+  Reason it could not be analyzed: No data received.
+  Mark as: unavailable.
+
+- Sensor name: ltft_pct
+  Requested or selected status: Selected
+  Reason it could not be analyzed: No data received.
+  Mark as: unavailable.
+
+- Sensor name: gear
+  Requested or selected status: Selected
+  Reason it could not be analyzed: No data received.
+  Mark as: unavailable.
+
+ANALYSIS NOTES
+- Assumptions, if any: None made.
+- Missing context: None noted.
+- Data-quality limitations: Limited confidence due to truncated log window.
+- Conditions that reduced confidence: Missing transmission data.
+- Features or systems that could not be evaluated: Transmission performance.
+- Whether any app zone/event labels disagreed with numeric evidence: No significant discrepancies noted.
+
+This analysis used only the readings present in the supplied live session or log file. Missing, unavailable, N/A, unsupported, or failed sensor responses were not treated as vehicle faults and were not estimated. App ALERT/ZONE labels were treated as heuristics only; conclusions are limited to the valid numeric data that the app and connected scanner were able to obtain.
+
+===== READINGS SENT TO AI (audit table) =====
+
+--- Latest snapshot ---
+rpm=815.0
+speed_kmh=0.0
+coolant1_c=59.0
+coolant2_c=null
+intake_c=42.0
+ambient_c=null
+load_pct=28.627450980392158
+throttle_pct=14.117647058823529
+timing=14.0
+maf_gps=2.81
+map_kpa=29.0
+stft_pct=-3.90625
+ltft_pct=null
+battery_v=12.35
+fuel_loop=CLOSED LOOP
+gear=null source=NONE
+
+--- App health notes ---
+engine_pct=94 transmission_pct=null vehicle_pct=94
+engine_ok=true transmission_ok=false
+engine_notes:
+- LTFT n/s on this ECU (common on FB2)
+- Engine still cold — open loop enrichment is normal
+- Battery ELD LOW — check charging system
+transmission_notes:
+- No TCM sensors answered (ATF / gear / slip n/s) — cannot score transmission yet
+- Run Transmission or Honda probe; Mode 22 IDs may need remapping for this FB2
+
+--- DTCs ---
+(no DTCs loaded — open Faults to refresh if needed)
+Readiness DTC count: 0
+
+--- Time-window CSV (1 min, 37 rows) ---
+# events
+time_ms,category,message
+1785182711141,ZONE,battery WARN → ELEVATED (WEAK CHARGE)
+1785182711141,CHARGE,Charging problem began (WEAK CHARGE)
+1785182712635,ZONE,battery ELEVATED → WARN (ELD LOW)
+1785182712635,CHARGE,Charging problem ended
+
+# dashboard_snapshots
+time_ms,rpm,speed_kmh,coolant1_c,coolant2_c,intake_c,ambient_c,load_pct,throttle_pct,timing,maf_gps,map_kpa,stft_pct,ltft_pct,ecu_v,gear,fuel_loop
+1785182701827,885.0,0.0,52.0,,42.0,,31.764705882352942,14.509803921568627,16.0,3.2,30.0,-3.90625,,12.375,,CLOSED LOOP
+1785182703045,882.0,0.0,53.0,,42.0,,30.980392156862745,14.509803921568627,16.0,3.05,29.0,-3.90625,,12.425,,CLOSED LOOP
+1785182704572,897.0,0.0,53.0,,42.0,,30.980392156862745,14.509803921568627,17.0,3.17,29.0,-3.90625,,12.375,,CLOSED LOOP
+1785182706583,896.0,0.0,53.0,,42.0,,32.15686274509804,14.509803921568627,17.0,3.05,29.0,-3.90625,,12.425,,CLOSED LOOP
+1785182708060,900.0,0.0,53.0,,42.0,,31.372549019607842,14.509803921568627,16.5,3.11,29.0,-3.90625,,12.35,,CLOSED LOOP
+1785182709685,884.0,0.0,54.0,,42.0,,31.372549019607842,14.509803921568627,16.5,3.05,29.0,-4.6875,,12.425,,CLOSED LOOP
+1785182711139,903.0,0.0,54.0,,42.0,,30.980392156862745,14.509803921568627,15.5,3.2,29.0,-3.90625,,12.425,,CLOSED LOOP
+1785182712633,892.0,0.0,54.0,,42.0,,30.19607843137255,14.509803921568627,17.0,3.08,30.0,-4.6875,,12.4,,CLOSED LOOP
+1785182714305,882.0,0.0,54.0,,42.0,,31.764705882352942,14.509803921568627,12.5,2.99,30.0,-4.6875,,12.4,,CLOSED LOOP
+1785182716215,880.0,0.0,54.0,,42.0,,29.80392156862745,14.117647058823529,14.0,3.14,30.0,-4.6875,,12.35,,CLOSED LOOP
+1785182717489,866.0,0.0,55.0,,42.0,,30.980392156862745,14.509803921568627,15.0,3.11,29.0,-4.6875,,12.425,,CLOSED LOOP
+1785182719266,870.0,0.0,55.0,,42.0,,31.372549019607842,14.117647058823529,14.5,2.99,29.0,-4.6875,,12.4,,CLOSED LOOP
+1785182720918,859.0,0.0,55.0,,42.0,,31.372549019607842,14.117647058823529,13.5,2.96,30.0,-4.6875,,12.4,,CLOSED LOOP
+1785182722535,871.0,0.0,55.0,,42.0,,29.41176470588235,14.117647058823529,17.5,2.93,29.0,-4.6875,,12.35,,CLOSED LOOP
+1785182724094,849.0,0.0,55.0,,42.0,,30.980392156862745,14.117647058823529,17.0,3.02,29.0,-4.6875,,12.4,,CLOSED LOOP
+1785182725421,853.0,0.0,56.0,,42.0,,30.19607843137255,14.117647058823529,17.0,2.87,29.0,-4.6875,,12.4,,CLOSED LOOP
+1785182727077,846.0,0.0,56.0,,42.0,,29.41176470588235,14.117647058823529,16.0,3.02,30.0,-4.6875,,12.375,,CLOSED LOOP
+1785182728895,846.0,0.0,56.0,,42.0,,30.980392156862745,14.117647058823529,15.5,3.11,29.0,-4.6875,,12.4,,CLOSED LOOP
+1785182730782,854.0,0.0,56.0,,42.0,,30.980392156862745,14.117647058823529,14.0,3.02,29.0,-4.6875,,12.375,,CLOSED LOOP
+1785182732773,855.0,0.0,56.0,,42.0,,29.80392156862745,14.117647058823529,14.5,2.9,29.0,-4.6875,,12.35,,CLOSED LOOP
+1785182734018,857.0,0.0,56.0,,42.0,,31.764705882352942,14.117647058823529,17.0,2.93,29.0,-4.6875,,12.375,,CLOSED LOOP
+1785182735900,838.0,0.0,57.0,,42.0,,30.19607843137255,14.117647058823529,15.0,3.02,29.0,-4.6875,,12.4,,CLOSED LOOP
+1785182737428,845.0,0.0,57.0,,42.0,,30.58823529411765,14.117647058823529,16.0,2.96,29.0,-4.6875,,12.4,,CLOSED LOOP
+1785182739080,836.0,0.0,57.0,,42.0,,30.58823529411765,14.117647058823529,14.5,2.99,29.0,-3.90625,,12.4,,CLOSED LOOP
+1785182740685,843.0,0.0,57.0,,42.0,,29.80392156862745,14.117647058823529,14.5,2.87,29.0,-3.90625,,12.425,,CLOSED LOOP
+1785182742477,834.0,0.0,57.0,,42.0,,29.41176470588235,14.117647058823529,13.5,2.99,29.0,-3.90625,,12.35,,CLOSED LOOP
+1785182744295,832.0,0.0,57.0,,42.0,,30.19607843137255,14.117647058823529,15.0,2.78,28.0,-3.90625,,12.375,,CLOSED LOOP
+1785182745889,835.0,0.0,57.0,,42.0,,30.58823529411765,14.117647058823529,16.0,2.93,29.0,-3.90625,,12.375,,CLOSED LOOP
+1785182747418,825.0,0.0,58.0,,42.0,,29.80392156862745,14.117647058823529,13.5,2.87,29.0,-3.90625,,12.375,,CLOSED LOOP
+1785182748866,836.0,0.0,58.0,,42.0,,29.019607843137255,14.117647058823529,16.0,2.78,29.0,-3.90625,,12.4,,CLOSED LOOP
+1785182751056,819.0,0.0,58.0,,42.0,,27.84313725490196,14.117647058823529,14.5,2.75,29.0,-3.90625,,12.4,,CLOSED LOOP
+1785182751984,831.0,0.0,58.0,,42.0,,29.80392156862745,14.117647058823529,15.0,2.75,29.0,-3.90625,,12.375,,CLOSED LOOP
+1785182753529,828.0,0.0,58.0,,42.0,,28.627450980392158,14.117647058823529,14.0,2.93,29.0,-3.90625,,12.375,,CLOSED LOOP
+1785182755231,823.0,0.0,58.0,,42.0,,29.019607843137255,14.117647058823529,15.5,2.93,28.0,-3.90625,,12.375,,CLOSED LOOP
+1785182756766,817.0,0.0,58.0,,42.0,,28.627450980392158,14.117647058823529,17.0,2.9,28.0,-3.90625,,12.425,,CLOSED LOOP
+1785182758180,827.0,0.0,59.0,,42.0,,28.627450980392158,14.117647058823529,16.5,2.7,29.0,-3.90625,,12.375,,CLOSED LOOP
+1785182759689,815.0,0.0,59.0,,42.0,,28.627450980392158,14.117647058823529,14.0,2.81,29.0,-3.90625,,12.35,,CLOSED LOOP
