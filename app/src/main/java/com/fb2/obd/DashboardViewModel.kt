@@ -633,12 +633,7 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
                 it.copy(loading = true, error = null, reportText = null, savedReport = null)
             }
             try {
-                val minutes = if (st.modeLive) {
-                    AiAnalysisPayloadBuilder.clampWindowMinutes(st.windowMinutes)
-                } else {
-                    // History has no time slider — use max lookback of the file end (still size-capped).
-                    AiAnalysisPayloadBuilder.MAX_WINDOW_MINUTES
-                }
+                val minutes = AiAnalysisPayloadBuilder.clampWindowMinutes(st.windowMinutes)
                 val now = System.currentTimeMillis()
                 val snapshot = _uiState.value.snapshot
                 val health = _health.value
@@ -705,6 +700,18 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
                         appendLine("NOTE: These readings are from DEMO (simulated), not a live ELM/vehicle connection.")
                         appendLine()
                     }
+                    appendLine("--- Window metadata (app-computed) ---")
+                    appendLine("requested_window_minutes=${payload.windowMinutes}")
+                    appendLine("actual_window_seconds=${payload.actualDurationSeconds}")
+                    payload.firstTimestampMs?.let {
+                        appendLine("window_start_utc=${AiAnalysisPayloadBuilder.formatIsoUtc(it)}")
+                    }
+                    payload.lastTimestampMs?.let {
+                        appendLine("window_end_utc=${AiAnalysisPayloadBuilder.formatIsoUtc(it)}")
+                    }
+                    appendLine("snapshot_rows=${payload.sampleCount}")
+                    appendLine("unique_timestamps=${payload.uniqueTimestampCount}")
+                    appendLine()
                     appendLine("--- Latest snapshot ---")
                     appendLine(AiAnalysisPayloadBuilder.formatSnapshot(snapshot).trim())
                     appendLine()
@@ -714,7 +721,10 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
                     appendLine("--- DTCs ---")
                     appendLine(dtcText.trim())
                     appendLine()
-                    appendLine("--- Time-window CSV (${payload.windowMinutes} min, ${truncated.rowCount} rows) ---")
+                    appendLine(
+                        "--- Time-window CSV (requested ${payload.windowMinutes} min, " +
+                            "actual ${payload.actualDurationSeconds}s, ${truncated.rowCount} rows) ---",
+                    )
                     appendLine(truncated.csvText.trim())
                 }
                 // Persist the detailed FULL_REPORT (+ readings audit), not the short brief.
@@ -725,6 +735,15 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
                     model = result.model,
                     readingsAppendix = readingsAppendix,
                     isDemo = isDemo,
+                    actualDurationSeconds = payload.actualDurationSeconds,
+                    windowStartUtc = payload.firstTimestampMs?.let {
+                        AiAnalysisPayloadBuilder.formatIsoUtc(it)
+                    },
+                    windowEndUtc = payload.lastTimestampMs?.let {
+                        AiAnalysisPayloadBuilder.formatIsoUtc(it)
+                    },
+                    snapshotRows = payload.sampleCount,
+                    uniqueTimestamps = payload.uniqueTimestampCount,
                 )
                 val screenText = buildString {
                     append(parsed.screenBrief.trim())

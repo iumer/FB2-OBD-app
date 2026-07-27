@@ -108,48 +108,53 @@ fun AiAnalyzeScreen(
             ModeChip("From history", selected = !state.modeLive) { onModeLive(false) }
         }
 
-        if (state.modeLive) {
-            if (liveSourceIsDemo) {
-                Text(
-                    text = "DEMO mode — these readings are simulated, not from a live vehicle/ELM. Saved report filename will include \"demo\".",
-                    color = WarnAmber,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(bottom = 8.dp)
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(Surface)
-                        .padding(12.dp),
-                )
-            }
+        if (liveSourceIsDemo && state.modeLive) {
             Text(
-                text = "Time window: ${state.windowMinutes} min",
-                color = TextPrimary,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.SemiBold,
-            )
-            Text(
-                text = "Uses the last ${state.windowMinutes} minutes of the current auto-LOG (look back).",
-                color = TextMuted,
+                text = "DEMO mode — these readings are simulated, not from a live vehicle/ELM. Saved report filename will include \"demo\".",
+                color = WarnAmber,
                 fontSize = 12.sp,
-                modifier = Modifier.padding(bottom = 4.dp),
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 8.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(Surface)
+                    .padding(12.dp),
             )
-            Slider(
-                value = state.windowMinutes.toFloat(),
-                onValueChange = { onWindowMinutes(it.roundToInt()) },
-                valueRange = AiAnalysisPayloadBuilder.MIN_WINDOW_MINUTES.toFloat()..
-                    AiAnalysisPayloadBuilder.MAX_WINDOW_MINUTES.toFloat(),
-                steps = AiAnalysisPayloadBuilder.MAX_WINDOW_MINUTES -
-                    AiAnalysisPayloadBuilder.MIN_WINDOW_MINUTES - 1,
-                colors = SliderDefaults.colors(
-                    thumbColor = Accent,
-                    activeTrackColor = Accent,
-                    inactiveTrackColor = TextMuted.copy(alpha = 0.35f),
-                ),
-                modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
-            )
+        }
 
+        Text(
+            text = "Time window: ${state.windowMinutes} min",
+            color = TextPrimary,
+            fontSize = 14.sp,
+            fontWeight = FontWeight.SemiBold,
+        )
+        Text(
+            text = if (state.modeLive) {
+                "Uses the last ${state.windowMinutes} minutes of the current auto-LOG (look back)."
+            } else {
+                "Uses the last ${state.windowMinutes} minutes of the selected saved log (from file end). Size-capped if dense."
+            },
+            color = TextMuted,
+            fontSize = 12.sp,
+            modifier = Modifier.padding(bottom = 4.dp),
+        )
+        Slider(
+            value = state.windowMinutes.toFloat(),
+            onValueChange = { onWindowMinutes(it.roundToInt()) },
+            valueRange = AiAnalysisPayloadBuilder.MIN_WINDOW_MINUTES.toFloat()..
+                AiAnalysisPayloadBuilder.MAX_WINDOW_MINUTES.toFloat(),
+            steps = AiAnalysisPayloadBuilder.MAX_WINDOW_MINUTES -
+                AiAnalysisPayloadBuilder.MIN_WINDOW_MINUTES - 1,
+            colors = SliderDefaults.colors(
+                thumbColor = Accent,
+                activeTrackColor = Accent,
+                inactiveTrackColor = TextMuted.copy(alpha = 0.35f),
+            ),
+            modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
+        )
+
+        if (state.modeLive) {
             LiveAnalyzeBar(
                 loading = state.loading,
                 canClear = !state.loading &&
@@ -166,7 +171,7 @@ fun AiAnalyzeScreen(
                 modifier = Modifier.padding(bottom = 4.dp),
             )
             Text(
-                text = "Tap a log to select it, then tap Analyze on that row. Uses the recent end of the file (size-capped).",
+                text = "Tap a log to select it, then tap Analyze on that row.",
                 color = TextMuted,
                 fontSize = 12.sp,
                 modifier = Modifier.padding(bottom = 8.dp),

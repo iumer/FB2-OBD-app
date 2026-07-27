@@ -113,10 +113,12 @@ non-obvious cloud specifics.
   **Upload** on Settings / Value log; already-synced files report as such.
   AI reports (`.txt`) sync to `logs/ai-reports/` via the same Upload button.
 - **Analyze via AI:** DIAGNOSTICS → **Analyze via AI**. Modes: **Live data**
-  (lookback time bar 1–15 min over current auto-LOG) or **From history** (pick a
-  saved `FB2-log-*.csv`; **Analyze on that row**, no time slider — recent end of
-  file, size-capped). One-shot OpenAI `gpt-4o-mini` dual output
-  (`===SCREEN_BRIEF===` + `===FULL_REPORT===`; read-only FB2 system prompt).
+  (lookback 1–15 min over current auto-LOG) or **From history** (pick a saved
+  `FB2-log-*.csv`; **Analyze on that row**, same 1–15 min lookback from file end,
+  size-capped). Payload includes app-computed UTC start/end + actual duration
+  seconds (model must copy, not invent dates). One-shot OpenAI `gpt-4o-mini`
+  dual output (`===SCREEN_BRIEF===` + `===FULL_REPORT===`; read-only FB2 system
+  prompt with Honda ELD / window-scope / STFT wording rules).
   On-screen shows the short brief only (plus `Full report saved to: …`); the
   detailed report is saved under `ai_reports/FB2-ai-*.txt` (Demo: `FB2-ai-demo-…`)
   with an audit **readings table**. Live Demo / demo-named history logs show a
