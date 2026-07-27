@@ -612,7 +612,12 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
                 it.copy(loading = true, error = null, reportText = null, savedReport = null)
             }
             try {
-                val minutes = AiAnalysisPayloadBuilder.clampWindowMinutes(st.windowMinutes)
+                val minutes = if (st.modeLive) {
+                    AiAnalysisPayloadBuilder.clampWindowMinutes(st.windowMinutes)
+                } else {
+                    // History has no time slider — use max lookback of the file end (still size-capped).
+                    AiAnalysisPayloadBuilder.MAX_WINDOW_MINUTES
+                }
                 val now = System.currentTimeMillis()
                 val snapshot = _uiState.value.snapshot
                 val health = _health.value

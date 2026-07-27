@@ -43,7 +43,7 @@ import kotlin.math.roundToInt
 
 /**
  * One-shot Analyze via AI — live lookback window or a saved session CSV.
- * Result is copyable and saved as `.txt` (synced to GitHub with logs).
+ * History: Analyze sits on the selected log row (no bottom hunt / no time slider).
  */
 @Composable
 fun AiAnalyzeScreen(
@@ -107,44 +107,54 @@ fun AiAnalyzeScreen(
             ModeChip("From history", selected = !state.modeLive) { onModeLive(false) }
         }
 
-        Text(
-            text = "Time window: ${state.windowMinutes} min",
-            color = TextPrimary,
-            fontSize = 14.sp,
-            fontWeight = FontWeight.SemiBold,
-        )
-        Text(
-            text = if (state.modeLive) {
-                "Uses the last ${state.windowMinutes} minutes of the current auto-LOG (look back)."
-            } else {
-                "Uses the last ${state.windowMinutes} minutes from the selected saved log."
-            },
-            color = TextMuted,
-            fontSize = 12.sp,
-            modifier = Modifier.padding(bottom = 4.dp),
-        )
-        Slider(
-            value = state.windowMinutes.toFloat(),
-            onValueChange = { onWindowMinutes(it.roundToInt()) },
-            valueRange = AiAnalysisPayloadBuilder.MIN_WINDOW_MINUTES.toFloat()..
-                AiAnalysisPayloadBuilder.MAX_WINDOW_MINUTES.toFloat(),
-            steps = AiAnalysisPayloadBuilder.MAX_WINDOW_MINUTES -
-                AiAnalysisPayloadBuilder.MIN_WINDOW_MINUTES - 1,
-            colors = SliderDefaults.colors(
-                thumbColor = Accent,
-                activeTrackColor = Accent,
-                inactiveTrackColor = TextMuted.copy(alpha = 0.35f),
-            ),
-            modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
-        )
+        if (state.modeLive) {
+            Text(
+                text = "Time window: ${state.windowMinutes} min",
+                color = TextPrimary,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Text(
+                text = "Uses the last ${state.windowMinutes} minutes of the current auto-LOG (look back).",
+                color = TextMuted,
+                fontSize = 12.sp,
+                modifier = Modifier.padding(bottom = 4.dp),
+            )
+            Slider(
+                value = state.windowMinutes.toFloat(),
+                onValueChange = { onWindowMinutes(it.roundToInt()) },
+                valueRange = AiAnalysisPayloadBuilder.MIN_WINDOW_MINUTES.toFloat()..
+                    AiAnalysisPayloadBuilder.MAX_WINDOW_MINUTES.toFloat(),
+                steps = AiAnalysisPayloadBuilder.MAX_WINDOW_MINUTES -
+                    AiAnalysisPayloadBuilder.MIN_WINDOW_MINUTES - 1,
+                colors = SliderDefaults.colors(
+                    thumbColor = Accent,
+                    activeTrackColor = Accent,
+                    inactiveTrackColor = TextMuted.copy(alpha = 0.35f),
+                ),
+                modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
+            )
 
-        if (!state.modeLive) {
+            LiveAnalyzeBar(
+                loading = state.loading,
+                canClear = !state.loading &&
+                    (state.reportText != null || state.error != null || state.savedReport != null),
+                onAnalyze = onAnalyze,
+                onClear = onClearReport,
+            )
+        } else {
             Text(
                 text = "Saved logs",
                 color = TextPrimary,
                 fontSize = 14.sp,
                 fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.padding(bottom = 6.dp),
+                modifier = Modifier.padding(bottom = 4.dp),
+            )
+            Text(
+                text = "Tap a log to select it, then tap Analyze on that row. Uses the recent end of the file (size-capped).",
+                color = TextMuted,
+                fontSize = 12.sp,
+                modifier = Modifier.padding(bottom = 8.dp),
             )
             if (savedLogs.isEmpty()) {
                 Text(
@@ -154,7 +164,7 @@ fun AiAnalyzeScreen(
                     modifier = Modifier.padding(bottom = 12.dp),
                 )
             } else {
-                savedLogs.take(20).forEach { log ->
+                savedLogs.forEach { log ->
                     val selected = log.fileName == state.selectedLogFileName
                     Row(
                         modifier = Modifier
@@ -166,63 +176,54 @@ fun AiAnalyzeScreen(
                                 if (selected) Modifier.border(2.dp, Accent, RoundedCornerShape(10.dp))
                                 else Modifier,
                             )
-                            .clickable { onSelectLog(log.fileName) }
-                            .padding(12.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
+                            .clickable(enabled = !state.loading) { onSelectLog(log.fileName) }
+                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Column(modifier = Modifier.fillMaxWidth()) {
-                            Text(log.displayName, color = TextPrimary, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                        Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                "${log.sizeBytes / 1024} KB",
+                                text = log.displayName,
+                                color = TextPrimary,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.SemiBold,
+                            )
+                            Text(
+                                text = "${log.sizeBytes / 1024} KB",
                                 color = TextMuted,
                                 fontSize = 11.sp,
                             )
                         }
-                        if (selected) Text("✓", color = Accent, fontSize = 16.sp)
+                        if (selected) {
+                            Text(
+                                text = if (state.loading) "…" else "Analyze",
+                                color = if (state.loading) TextMuted else Background,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(if (state.loading) Background else Accent)
+                                    .clickable(enabled = !state.loading) { onAnalyze() }
+                                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                            )
+                        }
                     }
                 }
             }
-        }
-
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Row(
-                modifier = Modifier
-                    .weight(1f)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(if (state.loading) Surface else Accent)
-                    .clickable(enabled = !state.loading) { onAnalyze() }
-                    .padding(vertical = 14.dp),
-                horizontalArrangement = Arrangement.Center,
-            ) {
-                Text(
-                    text = if (state.loading) "Analyzing…" else "Analyze",
-                    color = if (state.loading) TextMuted else Background,
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Bold,
-                )
-            }
             val canClear = !state.loading &&
                 (state.reportText != null || state.error != null || state.savedReport != null)
-            Row(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(Surface)
-                    .clickable(enabled = canClear) { onClearReport() }
-                    .padding(horizontal = 16.dp, vertical = 14.dp),
-                horizontalArrangement = Arrangement.Center,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
+            if (canClear) {
                 Text(
-                    text = "Clear",
-                    color = if (canClear) TextPrimary else TextMuted,
-                    fontSize = 16.sp,
+                    text = "Clear report",
+                    color = TextPrimary,
+                    fontSize = 13.sp,
                     fontWeight = FontWeight.Bold,
+                    modifier = Modifier
+                        .padding(top = 8.dp, bottom = 4.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable { onClearReport() }
+                        .background(Surface)
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
                 )
             }
         }
@@ -311,10 +312,58 @@ fun AiAnalyzeScreen(
                     .padding(14.dp),
             )
             Text(
-                text = "Tip: scroll down in the report for the readings table. COPY includes AI findings + values. Paste into chatgpt.com to continue.",
+                text = "Tip: scroll down in the report for the readings table. COPY includes AI findings + values.",
                 color = TextMuted,
                 fontSize = 11.sp,
                 modifier = Modifier.padding(top = 8.dp),
+            )
+        }
+    }
+}
+
+@Composable
+private fun LiveAnalyzeBar(
+    loading: Boolean,
+    canClear: Boolean,
+    onAnalyze: () -> Unit,
+    onClear: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Row(
+            modifier = Modifier
+                .weight(1f)
+                .clip(RoundedCornerShape(12.dp))
+                .background(if (loading) Surface else Accent)
+                .clickable(enabled = !loading) { onAnalyze() }
+                .padding(vertical = 14.dp),
+            horizontalArrangement = Arrangement.Center,
+        ) {
+            Text(
+                text = if (loading) "Analyzing…" else "Analyze",
+                color = if (loading) TextMuted else Background,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold,
+            )
+        }
+        Row(
+            modifier = Modifier
+                .clip(RoundedCornerShape(12.dp))
+                .background(Surface)
+                .clickable(enabled = canClear) { onClear() }
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = "Clear",
+                color = if (canClear) TextPrimary else TextMuted,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold,
             )
         }
     }
