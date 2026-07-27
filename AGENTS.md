@@ -114,12 +114,14 @@ non-obvious cloud specifics.
 - **Analyze via AI:** DIAGNOSTICS → **Analyze via AI**. Modes: **Live data**
   (lookback time bar 1–15 min over current auto-LOG) or **From history** (pick a
   saved `FB2-log-*.csv`; **Analyze on that row**, no time slider — recent end of
-  file, size-capped). One-shot OpenAI `gpt-4o-mini` report
-  (read-only FB2 system prompt). API key in Settings → AI analysis
-  (`platform.openai.com` — Plus ≠ API). Result is copyable and saved under
-  `ai_reports/FB2-ai-*.txt` (mirrored to Downloads) including an audit
-  **readings table** (snapshot + health + DTCs + window CSV). No conversational
-  chat in-app.
+  file, size-capped). One-shot OpenAI `gpt-4o-mini` dual output
+  (`===SCREEN_BRIEF===` + `===FULL_REPORT===`; read-only FB2 system prompt).
+  On-screen shows the short brief only (plus `Full report saved to: …`); the
+  detailed report is saved under `ai_reports/FB2-ai-*.txt` (mirrored to Downloads)
+  with an audit **readings table**. Prompt treats app ZONE/ALERT labels as
+  heuristics — model must judge from numeric CSV values. API key in Settings →
+  AI analysis (`platform.openai.com` — Plus ≠ API). No conversational chat
+  in-app.
 - **ELM idle drop:** cheap clones often hang mid-poll. The app uses short PID
   timeouts (~650 ms poll / ~450 ms probe), skips repeatedly-failing PIDs, keeps
   last-good Dash values, and retries RFCOMM forever with backoff (UI shows

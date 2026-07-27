@@ -668,6 +668,7 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
                     log = truncated,
                 )
                 val result = openAiClient.complete(payload.systemPrompt, payload.userMessage)
+                val parsed = AiAnalysisPayloadBuilder.parseModelResponse(result.text)
                 val readingsAppendix = buildString {
                     appendLine("--- Latest snapshot ---")
                     appendLine(AiAnalysisPayloadBuilder.formatSnapshot(snapshot).trim())
@@ -681,27 +682,27 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
                     appendLine("--- Time-window CSV (${payload.windowMinutes} min, ${truncated.rowCount} rows) ---")
                     appendLine(truncated.csvText.trim())
                 }
+                // Persist the detailed FULL_REPORT (+ readings audit), not the short brief.
                 val saved = aiReportStore.saveReport(
-                    body = result.text,
+                    body = parsed.fullReport,
                     sourceLabel = sourceLabel,
                     windowMinutes = payload.windowMinutes,
                     model = result.model,
                     readingsAppendix = readingsAppendix,
                 )
-                val fullText = AiReportStore.buildFullReportText(
-                    body = result.text,
-                    sourceLabel = sourceLabel,
-                    windowMinutes = payload.windowMinutes,
-                    model = result.model,
-                    readingsAppendix = readingsAppendix,
-                    createdMs = saved.createdMs,
-                )
+                val screenText = buildString {
+                    append(parsed.screenBrief.trim())
+                    appendLine()
+                    appendLine()
+                    appendLine("Full report saved to:")
+                    appendLine(saved.fileName)
+                }
                 _savedAiReports.value = aiReportStore.list()
                 logUploadManager.refreshCounts()
                 _aiAnalyze.update {
                     it.copy(
                         loading = false,
-                        reportText = fullText,
+                        reportText = screenText,
                         savedReport = saved,
                         limitedData = payload.limited,
                         error = null,
