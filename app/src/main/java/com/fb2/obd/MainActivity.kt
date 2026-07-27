@@ -266,7 +266,13 @@ class MainActivity : ComponentActivity() {
                                 )
                             } else {
                                 viewModel.startValueLogging()
-                                toast("Logging started")
+                                toast(
+                                    if (!state.sourceIsLive) {
+                                        "Logging started (DEMO — simulated, not live)"
+                                    } else {
+                                        "Logging started"
+                                    },
+                                )
                             }
                         },
                         onMinimizeClick = { requestMinimizeToBubble() },
@@ -367,6 +373,7 @@ class MainActivity : ComponentActivity() {
                             onOpenSettings = { screen = Screen.SETTINGS },
                             onBack = { screen = Screen.DIAG_HUB },
                             modifier = Modifier.fillMaxSize(),
+                            liveSourceIsDemo = !state.sourceIsLive,
                         )
                     }
 
@@ -437,16 +444,25 @@ class MainActivity : ComponentActivity() {
 
                     Screen.VALUE_LOG -> {
                         val rows = remember(tick) { ObdLogger.valueRows() }
+                        val loggingDemo = settings.valueLogging && !state.sourceIsLive
                         ValueLogScreen(
                             rows = rows,
                             onShare = {
-                                shareCsvContent("FB2-Diag-current.csv", ObdLogger.valuesCsv())
+                                shareCsvContent(
+                                    if (loggingDemo || !state.sourceIsLive) {
+                                        "FB2-Diag-current-demo.csv"
+                                    } else {
+                                        "FB2-Diag-current.csv"
+                                    },
+                                    ObdLogger.valuesCsv(isDemo = loggingDemo || !state.sourceIsLive),
+                                )
                             },
                             onClear = { ObdLogger.clearValues(); tick++ },
                             onBack = { screen = Screen.SETTINGS },
                             modifier = Modifier.fillMaxSize(),
                             savedFiles = savedLogs,
                             loggingActive = settings.valueLogging,
+                            sourceIsDemo = !state.sourceIsLive,
                             onShareFile = { file ->
                                 shareSavedLogFile(file)
                             },

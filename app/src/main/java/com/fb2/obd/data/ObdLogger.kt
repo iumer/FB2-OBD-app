@@ -184,7 +184,7 @@ object ObdLogger {
      * Lean session export for Share: events + main Dash snapshots + Dash extras.
      * Probes / ELM debug stay on the Debug log screen (not packed into value CSVs).
      */
-    fun valuesCsv(): String = synchronized(lock) {
+    fun valuesCsv(isDemo: Boolean = false): String = synchronized(lock) {
         val header = "time_ms,rpm,speed_kmh,coolant1_c,coolant2_c,intake_c,ambient_c," +
             "load_pct,throttle_pct,timing,maf_gps,map_kpa,stft_pct,ltft_pct,ecu_v,gear,fuel_loop"
         val rows = values.joinToString("\n") { row ->
@@ -216,6 +216,10 @@ object ObdLogger {
             appendLine("# fb2_session_log")
             appendLine("# sections: events | dashboard_snapshots | dash_tiles")
             appendLine("# note: main Dash only (hero + tiles + any + extras). Fuel/Trans/etc. not included.")
+            if (isDemo) {
+                appendLine("# mode=demo")
+                appendLine("# note: Readings are from DEMO (simulated), not a live ELM/vehicle connection.")
+            }
             appendLine()
             appendLine("# events")
             appendLine(eventCsv)

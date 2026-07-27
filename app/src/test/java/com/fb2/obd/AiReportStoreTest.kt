@@ -2,9 +2,14 @@ package com.fb2.obd
 
 import com.fb2.obd.data.AiReportStore
 import org.junit.Assert.assertTrue
+import org.junit.Rule
 import org.junit.Test
+import org.junit.rules.TemporaryFolder
 
 class AiReportStoreTest {
+
+    @get:Rule
+    val tmp = TemporaryFolder()
 
     @Test
     fun fullReportText_includesFindingsAndReadingsAppendix() {
@@ -31,5 +36,23 @@ class AiReportStoreTest {
         assertTrue(text.contains("rpm=1800.0"))
         assertTrue(text.contains("# dashboard_snapshots"))
         assertTrue(text.contains("source=live_window_5min"))
+    }
+
+    @Test
+    fun saveReport_demo_putsDemoInFileNameAndHeader() {
+        val store = AiReportStore(tmp.newFolder("ai"))
+        val saved = store.saveReport(
+            body = "brief findings",
+            sourceLabel = "demo_live_window_5min",
+            windowMinutes = 5,
+            model = "gpt-4o-mini",
+            readingsAppendix = "rpm=800",
+            createdMs = 1_700_000_000_000L,
+            isDemo = true,
+        )
+        assertTrue(saved.fileName.startsWith("FB2-ai-demo-"))
+        val text = store.read(saved.fileName)!!
+        assertTrue(text.contains("# mode=demo"))
+        assertTrue(text.contains("DEMO (simulated)"))
     }
 }

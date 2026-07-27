@@ -29,6 +29,7 @@ import com.fb2.obd.ui.theme.GoodGreen
 import com.fb2.obd.ui.theme.Surface
 import com.fb2.obd.ui.theme.TextMuted
 import com.fb2.obd.ui.theme.TextPrimary
+import com.fb2.obd.ui.theme.WarnAmber
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -112,6 +113,8 @@ fun ValueLogScreen(
     modifier: Modifier = Modifier,
     savedFiles: List<SavedLogFile> = emptyList(),
     loggingActive: Boolean = false,
+    /** True when the current/connected source is Demo (simulated). */
+    sourceIsDemo: Boolean = false,
     onShareFile: (SavedLogFile) -> Unit = {},
     onDeleteFile: (SavedLogFile) -> Unit = {},
     uploadEnabled: Boolean = true,
@@ -141,13 +144,31 @@ fun ValueLogScreen(
             )
         }
 
+        if (sourceIsDemo && loggingActive) {
+            Text(
+                text = "DEMO mode — these readings are simulated, not from a live vehicle/ELM. Saved file will include \"demo\" in the name.",
+                color = WarnAmber,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.padding(bottom = 8.dp),
+            )
+        }
+
         Text(
             text = if (loggingActive) {
-                "LOGGING LIVE — main Dash only (${rows.size} rows). Tap STOP LOG on the dashboard to save."
+                if (sourceIsDemo) {
+                    "LOGGING DEMO — simulated Dash data (${rows.size} rows). Tap STOP LOG on the dashboard to save."
+                } else {
+                    "LOGGING LIVE — main Dash only (${rows.size} rows). Tap STOP LOG on the dashboard to save."
+                }
             } else {
                 "Current buffer: ${rows.size} rows. Finished sessions upload to GitHub when online (Settings → token)."
             },
-            color = if (loggingActive) GoodGreen else TextMuted,
+            color = if (loggingActive) {
+                if (sourceIsDemo) WarnAmber else GoodGreen
+            } else {
+                TextMuted
+            },
             fontSize = 12.sp,
             modifier = Modifier.padding(bottom = 8.dp),
         )
