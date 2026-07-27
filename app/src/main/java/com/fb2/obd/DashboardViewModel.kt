@@ -5,6 +5,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.fb2.obd.car.CarDashBuilder
 import com.fb2.obd.car.VehicleLiveStore
+import com.fb2.obd.data.AiAnalysisErrors
 import com.fb2.obd.data.AiAnalysisStore
 import com.fb2.obd.data.AiReportStore
 import com.fb2.obd.data.ConnectionState
@@ -621,6 +622,12 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
             }
             return
         }
+        if (!logUploadManager.isOnline()) {
+            _aiAnalyze.update {
+                it.copy(error = AiAnalysisErrors.NO_INTERNET)
+            }
+            return
+        }
         viewModelScope.launch {
             _aiAnalyze.update {
                 it.copy(loading = true, error = null, reportText = null, savedReport = null)
@@ -745,7 +752,7 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
                 _aiAnalyze.update {
                     it.copy(
                         loading = false,
-                        error = e.message ?: e.javaClass.simpleName,
+                        error = AiAnalysisErrors.friendlyMessage(e),
                     )
                 }
             }

@@ -120,10 +120,11 @@ non-obvious cloud specifics.
   On-screen shows the short brief only (plus `Full report saved to: …`); the
   detailed report is saved under `ai_reports/FB2-ai-*.txt` (Demo: `FB2-ai-demo-…`)
   with an audit **readings table**. Live Demo / demo-named history logs show a
-  short “simulated, not live” note. Prompt treats app ZONE/ALERT labels as
-  heuristics — model must judge from numeric CSV values. API key in Settings →
-  AI analysis (`platform.openai.com` — Plus ≠ API). No conversational chat
-  in-app.
+  short “simulated, not live” note. Offline Analyze shows
+  “Internet is not connected…” (not the raw OpenAI host error). Prompt treats
+  app ZONE/ALERT labels as heuristics — model must judge from numeric CSV
+  values. API key in Settings → AI analysis (`platform.openai.com` — Plus ≠ API).
+  No conversational chat in-app.
 - **ELM idle drop:** cheap clones often hang mid-poll. The app uses short PID
   timeouts (~650 ms poll / ~450 ms probe), skips repeatedly-failing PIDs, keeps
   last-good Dash values, and retries RFCOMM forever with backoff (UI shows
