@@ -21,13 +21,22 @@ class HealthEvaluatorTest {
     }
 
     @Test
-    fun battery_engineRunning() {
-        assertEquals(Health.GOOD, HealthEvaluator.battery(14.2, true).health)
-        assertEquals("CHARGING OK", HealthEvaluator.battery(14.2, true).label)
-        assertEquals(Health.WARN, HealthEvaluator.battery(13.4, true).health)
-        assertEquals(Health.ELEVATED, HealthEvaluator.battery(13.0, true).health)
-        assertEquals(Health.CRITICAL, HealthEvaluator.battery(12.5, true).health)
-        assertEquals(Health.CRITICAL, HealthEvaluator.battery(15.5, true).health)
+    fun battery_engineRunning_eldAware() {
+        // Full charge band
+        assertEquals(Health.GOOD, HealthEvaluator.battery(14.2, true, rpm = 2000.0).health)
+        assertEquals("CHARGING OK", HealthEvaluator.battery(14.2, true, rpm = 2000.0).label)
+        // 13.4V is inside green (good min 13.2)
+        assertEquals(Health.GOOD, HealthEvaluator.battery(13.4, true, rpm = 2000.0).health)
+        // Soft ELD at idle — low volts are not ALT WEAK
+        assertEquals(Health.GOOD, HealthEvaluator.battery(13.0, true, rpm = 800.0).health)
+        assertEquals("ELD IDLE", HealthEvaluator.battery(13.0, true, rpm = 800.0).label)
+        assertEquals(Health.ELEVATED, HealthEvaluator.battery(12.5, true, rpm = 800.0).health)
+        assertEquals("IDLE LOW", HealthEvaluator.battery(12.5, true, rpm = 800.0).label)
+        // Above idle: same volts escalate
+        assertEquals(Health.WARN, HealthEvaluator.battery(13.0, true, rpm = 2000.0).health)
+        assertEquals(Health.CRITICAL, HealthEvaluator.battery(12.5, true, rpm = 2000.0).health)
+        assertEquals("ALT WEAK", HealthEvaluator.battery(12.5, true, rpm = 2000.0).label)
+        assertEquals(Health.CRITICAL, HealthEvaluator.battery(15.5, true, rpm = 2000.0).health)
     }
 
     @Test
@@ -57,8 +66,13 @@ class HealthEvaluatorTest {
         assertEquals(Health.COLD, HealthEvaluator.intakeAir(10.0).health)
         assertEquals(Health.CRITICAL, HealthEvaluator.intakeAir(65.0).health)
         assertEquals(Health.GOOD, HealthEvaluator.map(35.0, 18.0, 700.0, 0.0).health) // idle
-        assertEquals(Health.GOOD, HealthEvaluator.map(98.0, 95.0, 3000.0, 80.0).health) // WOT OK
-        assertEquals(Health.WARN, HealthEvaluator.map(98.0, 20.0, 2500.0, 60.0).health)
+        assertEquals("IDLE", HealthEvaluator.map(35.0, 18.0, 700.0, 0.0).label)
+        assertEquals(Health.GOOD, HealthEvaluator.map(98.0, 95.0, 3000.0, 80.0).health) // WOT
+        // Tip-in / rising MAP under light throttle must stay green (not WARN "RISING")
+        assertEquals(Health.GOOD, HealthEvaluator.map(98.0, 20.0, 2500.0, 60.0).health)
+        assertEquals("LIGHT LOAD", HealthEvaluator.map(98.0, 20.0, 2500.0, 60.0).label)
+        assertEquals(Health.GOOD, HealthEvaluator.map(70.0, 40.0, 2500.0, 60.0).health)
+        assertEquals("MED LOAD", HealthEvaluator.map(70.0, 40.0, 2500.0, 60.0).label)
         assertEquals(Health.WARN, HealthEvaluator.timing(-2.0).health) // 0 to -5 yellow
         assertEquals(Health.CRITICAL, HealthEvaluator.timing(-6.0).health)
         assertEquals(Health.GOOD, HealthEvaluator.timing(15.0).health)
@@ -85,8 +99,10 @@ class HealthEvaluatorTest {
     @Test
     fun fuelSystem_and_dtc() {
         assertEquals(Health.GOOD, HealthEvaluator.fuelSystem("CLOSED LOOP", 90.0).health)
-        assertEquals(Health.WARN, HealthEvaluator.fuelSystem("OPEN LOOP", 90.0).health)
+        // Warm OPEN LOOP is normal (accel / fuel cut) — never WARN
+        assertEquals(Health.GOOD, HealthEvaluator.fuelSystem("OPEN LOOP", 90.0).health)
         assertEquals(Health.COLD, HealthEvaluator.fuelSystem("OPEN LOOP", 40.0).health)
+        assertEquals(Health.ELEVATED, HealthEvaluator.fuelSystem("OPEN (FAULT)", 90.0).health)
         assertEquals(Health.GOOD, HealthEvaluator.dtcCount(0).health)
         assertEquals(Health.CRITICAL, HealthEvaluator.dtcCount(2).health)
     }

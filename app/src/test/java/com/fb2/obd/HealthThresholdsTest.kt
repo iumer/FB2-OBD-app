@@ -22,9 +22,10 @@ class HealthThresholdsTest {
             .withField("battRunGoodMin", 12.7)
             .withField("battRunGoodMax", 14.5)
             .withField("battRunWarnMin", 12.4)
-        assertEquals(Health.GOOD, HealthEvaluator.battery(13.0, true, t).health)
-        assertEquals(Health.GOOD, HealthEvaluator.battery(14.5, true, t).health)
-        assertEquals(Health.CRITICAL, HealthEvaluator.battery(12.0, true, t).health)
+        assertEquals(Health.GOOD, HealthEvaluator.battery(13.0, true, t, rpm = 2000.0).health)
+        assertEquals(Health.GOOD, HealthEvaluator.battery(14.5, true, t, rpm = 2000.0).health)
+        // Below elevated band + above idle → CRITICAL ALT WEAK
+        assertEquals(Health.CRITICAL, HealthEvaluator.battery(12.0, true, t, rpm = 2000.0).health)
     }
 
     @Test

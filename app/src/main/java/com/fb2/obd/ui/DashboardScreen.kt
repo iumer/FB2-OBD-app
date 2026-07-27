@@ -70,6 +70,7 @@ import com.fb2.obd.obd.PidCategory
 import com.fb2.obd.obd.PidDefinition
 import com.fb2.obd.obd.StandardPidCatalog
 import com.fb2.obd.obd.VehicleSnapshot
+import com.fb2.obd.obd.isEffectivelyBlank
 import com.fb2.obd.ui.theme.Accent
 import com.fb2.obd.ui.theme.Background
 import com.fb2.obd.ui.theme.CritRed
@@ -179,6 +180,8 @@ fun DashboardScreen(
     healthThresholds: HealthThresholds = HealthThresholds.DEFAULT,
     onThresholdFieldChange: (id: String, value: Double) -> Unit = { _, _ -> },
     onResetThresholds: () -> Unit = {},
+    /** Zone hysteresis from [DiagnosticBrain] — keeps phone Dash colours stable. */
+    onLatchHealth: (String, MetricStatus) -> MetricStatus = { _, status -> status },
 ) {
     val s = state.snapshot
     val pagerState = rememberPagerState(pageCount = { DashPageTitles.size })
@@ -244,6 +247,8 @@ fun DashboardScreen(
                 when (page) {
                     0 -> MetricsPage(
                         snapshot = s,
+                        healthSnapshot = state.decisionSnapshot.takeUnless { it.isEffectivelyBlank() } ?: s,
+                        latchHealth = onLatchHealth,
                         extraPidIds = extraPidIds,
                         extraValues = extraValues,
                         tileOverrides = tileOverrides,
@@ -554,6 +559,8 @@ private fun PageTabs(titles: List<String>, current: Int, onSelect: (Int) -> Unit
 @Composable
 private fun MetricsPage(
     snapshot: VehicleSnapshot,
+    healthSnapshot: VehicleSnapshot = snapshot,
+    latchHealth: (String, MetricStatus) -> MetricStatus = { _, status -> status },
     extraPidIds: List<String>,
     extraValues: Map<String, String>,
     tileOverrides: Map<String, String>,
@@ -568,29 +575,35 @@ private fun MetricsPage(
     onDeepSearch: (label: String, pidId: String?) -> Unit,
     onEditThresholds: (EditableMetric) -> Unit,
 ) {
-    val engineRunning = (snapshot.rpm ?: 0.0) > 0.0
+    val hs = healthSnapshot
+    val engineRunning = (hs.rpm ?: snapshot.rpm ?: 0.0) > 0.0
     val t = thresholds
     val vehiclePct = healthScore?.vehiclePct
+    fun L(key: String, status: MetricStatus) = latchHealth(key, status)
     val baseTiles = listOf(
         TileData(
             "Coolant 1", snapshot.coolantC.fmt(), "\u00B0C",
-            HealthEvaluator.coolant(snapshot.coolantC, t), ObdPid.COOLANT_TEMP,
+            L("coolant1", HealthEvaluator.coolant(hs.coolantC, t)), ObdPid.COOLANT_TEMP,
         ),
         TileData(
             "Coolant 2", snapshot.coolant2C.fmt(), "\u00B0C",
-            HealthEvaluator.coolant(snapshot.coolant2C, t), ObdPid.COOLANT_TEMP_2,
+            L("coolant2", HealthEvaluator.coolant(hs.coolant2C, t)), ObdPid.COOLANT_TEMP_2,
         ),
         TileData(
             "Battery", snapshot.batteryVolts.fmt(1), "V",
-            HealthEvaluator.battery(snapshot.batteryVolts, engineRunning, t), ObdPid.CONTROL_MODULE_VOLTAGE,
+            L(
+                "battery",
+                HealthEvaluator.battery(hs.batteryVolts, engineRunning, t, rpm = hs.rpm ?: snapshot.rpm),
+            ),
+            ObdPid.CONTROL_MODULE_VOLTAGE,
         ),
         TileData(
             "Intake", snapshot.intakeC.fmt(), "\u00B0C",
-            HealthEvaluator.intakeAir(snapshot.intakeC, t), ObdPid.INTAKE_TEMP,
+            L("intake", HealthEvaluator.intakeAir(hs.intakeC, t)), ObdPid.INTAKE_TEMP,
         ),
         TileData(
             "Ambient", snapshot.ambientC.fmt(), "\u00B0C",
-            HealthEvaluator.ambient(snapshot.ambientC, t), ObdPid.AMBIENT_TEMP,
+            L("ambient", HealthEvaluator.ambient(hs.ambientC, t)), ObdPid.AMBIENT_TEMP,
         ),
         TileData(
             "Load", snapshot.engineLoadPct.fmt(), "%",
@@ -602,25 +615,37 @@ private fun MetricsPage(
         ),
         TileData(
             "STFT", snapshot.stftPct.fmt(1), "%",
-            HealthEvaluator.fuelTrim(snapshot.stftPct, t), ObdPid.STFT_B1,
+            L("stft", HealthEvaluator.fuelTrim(hs.stftPct, t)), ObdPid.STFT_B1,
         ),
         TileData(
             "LTFT", snapshot.ltftPct.fmt(1), "%",
-            HealthEvaluator.fuelTrim(snapshot.ltftPct, t), ObdPid.LTFT_B1,
+            L("ltft", HealthEvaluator.fuelTrim(hs.ltftPct, t)), ObdPid.LTFT_B1,
         ),
         TileData(
             "MAF", snapshot.mafGps.fmt(1), "g/s",
-            HealthEvaluator.maf(snapshot.mafGps, snapshot.rpm, snapshot.speedKmh, snapshot.throttlePct, t),
+            L(
+                "maf",
+                HealthEvaluator.maf(
+                    hs.mafGps, hs.rpm ?: snapshot.rpm, hs.speedKmh ?: snapshot.speedKmh,
+                    hs.throttlePct ?: snapshot.throttlePct, t,
+                ),
+            ),
             ObdPid.MAF,
         ),
         TileData(
             "MAP", snapshot.mapKpa.fmt(), "kPa",
-            HealthEvaluator.map(snapshot.mapKpa, snapshot.throttlePct, snapshot.rpm, snapshot.speedKmh, t),
+            L(
+                "map",
+                HealthEvaluator.map(
+                    hs.mapKpa, hs.throttlePct ?: snapshot.throttlePct,
+                    hs.rpm ?: snapshot.rpm, hs.speedKmh ?: snapshot.speedKmh, t,
+                ),
+            ),
             ObdPid.INTAKE_MAP,
         ),
         TileData(
             "Timing", snapshot.timingAdvance.fmt(), "\u00B0",
-            HealthEvaluator.timing(snapshot.timingAdvance, t), ObdPid.TIMING_ADVANCE,
+            L("timing", HealthEvaluator.timing(hs.timingAdvance, t)), ObdPid.TIMING_ADVANCE,
         ),
         TileData(
             "Fuel loop",
@@ -864,6 +889,7 @@ private fun DenseSensorGridPage(
                                         effective.substringBefore(" ").toDoubleOrNull(),
                                         true,
                                         thresholds,
+                                        rpm = snapshot.rpm,
                                     )
                                     EditableMetric.FUEL_TRIM -> HealthEvaluator.fuelTrim(
                                         effective.substringBefore(" ").toDoubleOrNull(),

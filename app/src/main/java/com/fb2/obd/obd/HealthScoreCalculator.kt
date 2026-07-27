@@ -53,7 +53,12 @@ object HealthScoreCalculator {
         }
 
         val running = (snapshot.rpm ?: 0.0) > 0
-        val battStatus = HealthEvaluator.battery(snapshot.batteryVolts, running, thresholds)
+        val battStatus = HealthEvaluator.battery(
+            snapshot.batteryVolts,
+            running,
+            thresholds,
+            rpm = snapshot.rpm,
+        )
         when (battStatus.health) {
             Health.WARN -> deductE(6, "Battery ${battStatus.label} — check charging system")
             Health.ELEVATED -> deductE(10, "Battery ${battStatus.label} — check alternator / battery")
@@ -73,7 +78,8 @@ object HealthScoreCalculator {
         trimNote("LTFT", HealthEvaluator.fuelTrim(snapshot.ltftPct, thresholds))
 
         when (HealthEvaluator.fuelSystem(snapshot.fuelSystemStatus, snapshot.coolantC).health) {
-            Health.WARN -> deductE(5, "Open loop while warm — check O2 sensors / ECT / enrichment")
+            Health.ELEVATED, Health.CRITICAL ->
+                deductE(8, "Fuel system fault status — check O2 / fuel delivery")
             else -> {}
         }
 

@@ -147,6 +147,12 @@ class VoiceAlerter(context: Context) : TextToSpeech.OnInitListener {
         } ?: return
 
         if (speaking.get()) return
+        if (candidate.detail.isNotBlank()) {
+            ObdLogger.logDebug(
+                ObdLogger.Dir.INFO,
+                "VOICE DETAIL [${candidate.key}]: ${candidate.detail}",
+            )
+        }
         announce(candidate.key, candidate.phrase, now)
     }
 
@@ -338,10 +344,17 @@ class VoiceAlerter(context: Context) : TextToSpeech.OnInitListener {
         }
     }
 
+    /** Clear persistence timers / spoken-state when switching OBD sources. */
+    fun resetHoldTimers() {
+        debouncer.reset()
+        lastSpokenAt.clear()
+        lastHealth.clear()
+    }
+
     fun shutdown() {
         ready.set(false)
         pendingPhrase = null
-        debouncer.reset()
+        resetHoldTimers()
         mainHandler.removeCallbacksAndMessages(null)
         tts?.stop()
         tts?.shutdown()
