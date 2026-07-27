@@ -1,0 +1,390 @@
+# FB2-OBD AI diagnostic report
+# created_ms=1785181346982
+# source=saved:FB2-log-20260724-183830.csv
+# window_minutes=15
+# model=gpt-4o-mini-2024-07-18
+# vehicle=Honda Civic FB2 2013 R18 PK UG AT (D/D3/D2/D1)
+
+===== AI FINDINGS =====
+
+AI VEHICLE ANALYSIS REPORT
+
+VEHICLE
+- Vehicle identification: Honda Civic FB2, 2013, 1.8L R18
+- Log source: saved:FB2-log-20260724-183830.csv
+- Log filename, if provided: FB2-log-20260724-183830.csv
+- Analysis start: 2023-07-24 18:38:30
+- Analysis end: 2023-07-24 18:53:30
+- Analysis duration: 15 minutes
+- Total records reviewed: 93 snapshots, 45 events
+- Valid readings analyzed: 93 snapshots
+
+DATA AVAILABILITY
+- Sensors requested or selected: rpm, speed_kmh, coolant1_c, coolant2_c, intake_c, ambient_c, load_pct, throttle_pct, timing, maf_gps, map_kpa, stft_pct, ltft_pct, battery_v, gear, fuel_loop
+- Sensors with valid data: rpm, speed_kmh, coolant1_c, intake_c, load_pct, throttle_pct, timing, maf_gps, map_kpa, stft_pct, battery_v, gear, fuel_loop
+- Sensors without usable data: coolant2_c, ambient_c, ltft_pct
+- Missing, N/A, unsupported, or failed responses: coolant2_c (null), ambient_c (null), ltft_pct (null)
+- Sampling and connection quality: No connection gaps or out-of-order records noted. Data appears consistent.
+- Suspected logger, scanner, or ELM limitations: None noted, but TCM sensors were not answered.
+
+Some sensors were selected in the app but did not produce usable readings during this analysis. This is not by itself evidence of a vehicle fault. It may be caused by vehicle PID support, the ELM adapter, scanner communication, polling behavior, or an app limitation. This report is based only on the valid readings actually received. No missing values were assumed or estimated.
+
+OVERALL ASSESSMENT
+- Overall condition based on available data: Generally normal with some areas to monitor.
+- Overall confidence: Moderate
+- Concise explanation: Most core engine parameters are within expected ranges, but there are concerns regarding MAF readings and transmission data.
+- Important limitations: Lack of usable data from TCM sensors limits assessment of transmission health.
+
+WHAT LOOKS NORMAL
+- Engine RPM: Ranged from 732.0 to 3205.0 RPM, with an average of 1096.0 RPM during operation.
+- Vehicle Speed: Ranged from 0.0 to 73.0 km/h, with an average of 25.0 km/h during operation.
+- Coolant Temperature: Coolant1_c reached a maximum of 92.0°C, indicating normal operating temperature.
+- Load Percentage: Averaged around 48.4%, which is typical for normal driving conditions.
+- Throttle Position: Averaged around 34.3%, indicating moderate throttle input.
+- Fuel Loop Status: Remained in CLOSED LOOP for the majority of the session, indicating normal fuel system operation.
+
+CONCERNS OR ITEMS TO MONITOR
+1. Finding: MAF readings frequently indicated CRITICAL (VERY LOW) status.
+   - Recorded evidence: MAF readings fluctuated between WARN and CRITICAL, with multiple instances of CRITICAL noted.
+   - Time and duration: Throughout the session, particularly noted at 1784900331038 and 1784900559999.
+   - Repetition: Multiple occurrences of MAF being flagged as CRITICAL.
+   - Supporting data: RPM and load values were normal during these events.
+   - Conflicting data: None noted.
+   - Severity: Moderate concern due to potential impact on engine performance.
+   - Confidence: Moderate, based on repeated observations.
+   - Plausible explanations: Possible MAF sensor malfunction, contamination, or air intake issues.
+   - Additional data needed: MAF sensor voltage readings and air filter condition.
+
+2. Finding: Transmission data not available.
+   - Recorded evidence: No TCM sensors answered during the session.
+   - Time and duration: Throughout the session.
+   - Repetition: Consistent lack of data.
+   - Supporting data: Engine parameters appear normal, but transmission health cannot be assessed.
+   - Conflicting data: None noted.
+   - Severity: Moderate concern due to inability to assess transmission performance.
+   - Confidence: High, based on lack of data.
+   - Plausible explanations: Possible communication issue with TCM or unsupported PIDs.
+   - Additional data needed: TCM sensor readings and diagnostic tests.
+
+No clear fault was identified from the available readings.
+
+SAFE NEXT CHECKS
+- Recommend checking the MAF sensor for cleanliness and proper operation.
+- Inspect the air intake system for leaks or blockages.
+- Monitor transmission behavior during subsequent drives to identify any irregularities.
+- Additional sensors that would improve confidence include TCM data and MAF voltage readings.
+
+ANALYZED VALUES
+- Sensor name: rpm
+  - Unit: RPM
+  - Minimum: 732.0
+  - Maximum: 3205.0
+  - Average: 1096.0
+  - Latest valid value: 3205.0
+  - Valid sample count: 93
+  - Invalid or missing sample count: 0
+  - Observed trend: Normal operation with some fluctuations.
+
+- Sensor name: speed_kmh
+  - Unit: km/h
+  - Minimum: 0.0
+  - Maximum: 73.0
+  - Average: 25.0
+  - Latest valid value: 73.0
+  - Valid sample count: 93
+  - Invalid or missing sample count: 0
+  - Observed trend: Normal operation with acceleration and deceleration.
+
+- Sensor name: coolant1_c
+  - Unit: °C
+  - Minimum: 43.0
+  - Maximum: 92.0
+  - Average: 66.0
+  - Latest valid value: 92.0
+  - Valid sample count: 93
+  - Invalid or missing sample count: 0
+  - Observed trend: Normal operating temperature.
+
+- Sensor name: intake_c
+  - Unit: °C
+  - Minimum: 32.0
+  - Maximum: 35.0
+  - Average: 34.0
+  - Latest valid value: 32.0
+  - Valid sample count: 93
+  - Invalid or missing sample count: 0
+  - Observed trend: Stable intake temperature.
+
+- Sensor name: load_pct
+  - Unit: %
+  - Minimum: 30.0
+  - Maximum: 78.0
+  - Average: 48.4
+  - Latest valid value: 48.4
+  - Valid sample count: 93
+  - Invalid or missing sample count: 0
+  - Observed trend: Normal load during operation.
+
+- Sensor name: throttle_pct
+  - Unit: %
+  - Minimum: 14.9
+  - Maximum: 78.0
+  - Average: 34.3
+  - Latest valid value: 34.3
+  - Valid sample count: 93
+  - Invalid or missing sample count: 0
+  - Observed trend: Moderate throttle input.
+
+- Sensor name: maf_gps
+  - Unit: g/s
+  - Minimum: 3.02
+  - Maximum: 11.62
+  - Average: 6.46
+  - Latest valid value: 13.69
+  - Valid sample count: 93
+  - Invalid or missing sample count: 0
+  - Observed trend: Fluctuating, with critical low readings noted.
+
+- Sensor name: map_kpa
+  - Unit: kPa
+  - Minimum: 30.0
+  - Maximum: 78.4
+  - Average: 39.0
+  - Latest valid value: 78.4
+  - Valid sample count: 93
+  - Invalid or missing sample count: 0
+  - Observed trend: Normal MAP readings.
+
+- Sensor name: stft_pct
+  - Unit: %
+  - Minimum: -8.59
+  - Maximum: 11.13
+  - Average: 0.21
+  - Latest valid value: 0.21
+  - Valid sample count: 93
+  - Invalid or missing sample count: 0
+  - Observed trend: Generally stable with slight rich conditions noted.
+
+- Sensor name: battery_v
+  - Unit: V
+  - Minimum: 14.11
+  - Maximum: 14.28
+  - Average: 14.22
+  - Latest valid value: 14.28
+  - Valid sample count: 93
+  - Invalid or missing sample count: 0
+  - Observed trend: Normal battery voltage.
+
+- Sensor name: gear
+  - Unit: Estimated
+  - Minimum: 1
+  - Maximum: 3
+  - Average: 2.0
+  - Latest valid value: 3
+  - Valid sample count: 93
+  - Invalid or missing sample count: 0
+  - Observed trend: Normal gear shifting behavior.
+
+UNAVAILABLE OR UNUSED VALUES
+- Sensor name: coolant2_c
+  - Requested or selected status: Selected
+  - Reason it could not be analyzed: No data received
+  - Mark as: unavailable
+- Sensor name: ambient_c
+  - Requested or selected status: Selected
+  - Reason it could not be analyzed: No data received
+  - Mark as: unavailable
+- Sensor name: ltft_pct
+  - Requested or selected status: Selected
+  - Reason it could not be analyzed: No data received
+  - Mark as: unavailable
+
+ANALYSIS NOTES
+- Assumptions, if any: None made beyond the data received.
+- Missing context: None noted.
+- Data-quality limitations: Some sensors did not provide usable data.
+- Conditions that reduced confidence: Lack of TCM data limits transmission assessment.
+- Features or systems that could not be evaluated: Transmission health due to missing TCM data.
+
+FINAL STATEMENT
+
+This analysis used only the readings present in the supplied live session or log file. Missing, unavailable, N/A, unsupported, or failed sensor responses were not treated as vehicle faults and were not estimated. Conclusions are limited to the valid data that the app and connected scanner were able to obtain.
+
+===== READINGS SENT TO AI (audit table) =====
+
+--- Latest snapshot ---
+rpm=3205.0
+speed_kmh=73.0
+coolant1_c=92.0
+coolant2_c=null
+intake_c=32.0
+ambient_c=null
+load_pct=48.4356751204113
+throttle_pct=34.316854633026395
+timing=12.0
+maf_gps=13.68713502408226
+map_kpa=78.4356751204113
+stft_pct=0.2119750235023137
+ltft_pct=null
+battery_v=14.28268286794901
+fuel_loop=CLOSED LOOP
+gear=3 source=ESTIMATED
+
+--- App health notes ---
+engine_pct=100 transmission_pct=null vehicle_pct=100
+engine_ok=true transmission_ok=false
+engine_notes:
+- LTFT n/s on this ECU (common on FB2)
+- Core engine parameters look OK from available sensors
+transmission_notes:
+- No TCM sensors answered (ATF / gear / slip n/s) — cannot score transmission yet
+- Run Transmission or Honda probe; Mode 22 IDs may need remapping for this FB2
+
+--- DTCs ---
+(no DTCs loaded — open Faults to refresh if needed)
+Readiness DTC count: 2
+
+--- Time-window CSV (15 min, 93 rows) ---
+# events
+time_ms,category,message
+1784900310493,ELM,ELM Connected (ELM327 (Bluetooth))
+1784900321633,ZONE,maf WARN → CRITICAL (VERY LOW)
+1784900331038,ZONE,stft WARN → GOOD (NORMAL)
+1784900334098,ZONE,stft GOOD → ELEVATED (LEAN)
+1784900339272,ZONE,stft ELEVATED → GOOD (NORMAL)
+1784900471344,ZONE,maf CRITICAL → WARN (LOW IDLE)
+1784900479969,ZONE,maf WARN → CRITICAL (VERY LOW)
+1784900487774,TRIP,Trip Start
+1784900487774,ZONE,maf CRITICAL → WARN (LOW)
+1784900491081,GEAR,Estimated gear 1 → 2
+1784900496823,FUEL,Fuel system CLOSED LOOP → OPEN LOOP
+1784900498856,FUEL,Fuel system OPEN LOOP → CLOSED LOOP
+1784900498857,ZONE,maf WARN → CRITICAL (VERY LOW)
+1784900500867,ZONE,stft GOOD → WARN (SLIGHT RICH)
+1784900502715,ZONE,stft WARN → GOOD (NORMAL)
+1784900502715,ZONE,maf CRITICAL → WARN (LOW)
+1784900505392,ZONE,maf WARN → CRITICAL (VERY LOW)
+1784900507124,ZONE,stft GOOD → WARN (SLIGHT RICH)
+1784900508522,ZONE,maf CRITICAL → WARN (LOW)
+1784900509780,ZONE,stft WARN → GOOD (NORMAL)
+1784900513672,GEAR,Estimated gear 2 → 1
+1784900517597,ZONE,map GOOD → WARN (RISING)
+1784900519171,GEAR,Estimated gear 1 → 2
+1784900519171,ZONE,map WARN → GOOD (CRUISE OK)
+1784900520432,ZONE,stft GOOD → WARN (SLIGHT RICH)
+1784900521839,ZONE,stft WARN → GOOD (NORMAL)
+1784900540558,GEAR,Estimated gear 2 → 3
+1784900540558,ZONE,stft GOOD → WARN (SLIGHT RICH)
+1784900541984,GEAR,Estimated gear 3 → 2
+1784900541984,ZONE,stft WARN → GOOD (NORMAL)
+1784900543629,GEAR,Estimated gear 2 → 3
+1784900544957,ZONE,stft GOOD → WARN (SLIGHT RICH)
+1784900546453,ZONE,coolant COLD → GOOD (NORMAL)
+1784900548027,ZONE,stft WARN → GOOD (NORMAL)
+1784900552039,ZONE,stft GOOD → WARN (SLIGHT RICH)
+1784900552039,ZONE,maf WARN → CRITICAL (VERY LOW)
+1784900554099,ZONE,maf CRITICAL → WARN (LOW)
+1784900555874,ZONE,stft WARN → GOOD (NORMAL)
+1784900559999,ZONE,maf WARN → CRITICAL (VERY LOW)
+1784900561298,ZONE,maf CRITICAL → WARN (LOW)
+1784900564600,GEAR,Estimated gear 3 → 2
+1784900564600,ZONE,maf WARN → CRITICAL (VERY LOW)
+1784900566694,GEAR,Estimated gear 2 → 1
+1784900566694,ZONE,maf CRITICAL → WARN (LOW)
+1784900569216,ZONE,maf WARN → CRITICAL (VERY LOW)
+
+# dashboard_snapshots
+time_ms,rpm,speed_kmh,coolant1_c,coolant2_c,intake_c,ambient_c,load_pct,throttle_pct,timing,maf_gps,map_kpa,stft_pct,ltft_pct,ecu_v,gear,fuel_loop
+1784900310491,1082.0,0.0,43.0,,35.0,,38.8235294117647,14.901960784313726,,4.12,32.0,-5.46875,,,,
+1784900311914,1060.0,0.0,43.0,,35.0,,36.07843137254902,14.901960784313726,12.0,4.28,32.0,-5.46875,,,,
+1784900313428,1064.0,0.0,43.0,,35.0,,38.8235294117647,14.901960784313726,17.5,4.28,32.0,-5.46875,,,,
+1784900314755,1041.0,0.0,43.0,,35.0,,38.8235294117647,14.901960784313726,14.5,4.28,32.0,-5.46875,,,,
+1784900316009,1041.0,0.0,43.0,,35.0,,37.254901960784316,14.901960784313726,12.5,4.28,32.0,-5.46875,,,,
+1784900317385,1053.0,0.0,44.0,,35.0,,37.254901960784316,14.901960784313726,12.5,4.08,32.0,-5.46875,,,,CLOSED LOOP
+1784900321629,1043.0,0.0,44.0,,35.0,,37.254901960784316,14.901960784313726,12.5,3.97,32.0,-5.46875,,,,CLOSED LOOP
+1784900323103,1015.0,0.0,44.0,,35.0,,36.470588235294116,14.901960784313726,15.0,3.97,32.0,-5.46875,,,,CLOSED LOOP
+1784900324360,1013.0,0.0,44.0,,35.0,,36.470588235294116,14.901960784313726,13.0,3.93,33.0,-5.46875,,,,CLOSED LOOP
+1784900325749,1013.0,0.0,46.0,,35.0,,36.86274509803921,14.901960784313726,13.5,3.93,33.0,-5.46875,,,,CLOSED LOOP
+1784900327063,1005.0,0.0,46.0,,35.0,,36.86274509803921,14.901960784313726,15.5,3.82,32.0,-5.46875,,,,CLOSED LOOP
+1784900328499,1006.0,0.0,46.0,,35.0,,35.294117647058826,14.901960784313726,15.5,3.82,33.0,-5.46875,,,,CLOSED LOOP
+1784900329805,1003.0,0.0,46.0,,35.0,,34.90196078431372,14.901960784313726,13.0,3.82,32.0,-5.46875,,,,CLOSED LOOP
+1784900331037,1003.0,0.0,46.0,,35.0,,34.90196078431372,14.901960784313726,17.0,3.82,31.0,-4.6875,,,,CLOSED LOOP
+1784900332439,1003.0,0.0,46.0,,35.0,,34.90196078431372,14.901960784313726,20.5,3.78,37.0,-3.90625,,,,CLOSED LOOP
+1784900334097,899.0,0.0,46.0,,35.0,,38.03921568627451,14.901960784313726,18.5,3.82,36.0,10.15625,,,,CLOSED LOOP
+1784900335438,899.0,0.0,47.0,,35.0,,34.11764705882353,14.901960784313726,9.0,3.82,36.0,10.9375,,,,CLOSED LOOP
+1784900339270,899.0,0.0,47.0,,35.0,,34.90196078431372,14.901960784313726,14.0,3.86,35.0,3.125,,,,CLOSED LOOP
+1784900348137,942.0,0.0,48.0,,35.0,,33.72549019607843,14.509803921568627,12.0,3.6,33.0,-3.90625,,,,CLOSED LOOP
+1784900359306,957.0,0.0,49.0,,35.0,,34.509803921568626,14.509803921568627,14.0,3.32,32.0,-3.90625,,,,CLOSED LOOP
+1784900371040,911.0,0.0,51.0,,35.0,,32.94117647058823,14.509803921568627,15.5,3.42,31.0,-3.90625,,,,CLOSED LOOP
+1784900384072,889.0,0.0,52.0,,35.0,,32.94117647058823,14.509803921568627,14.5,3.11,31.0,-3.90625,,,,CLOSED LOOP
+1784900401005,881.0,0.0,53.0,,35.0,,32.15686274509804,14.117647058823529,16.5,3.23,31.0,-4.6875,,,,CLOSED LOOP
+1784900422762,846.0,0.0,55.0,,35.0,,31.372549019607842,14.117647058823529,13.5,3.08,30.0,-4.6875,,,,CLOSED LOOP
+1784900440336,842.0,0.0,56.0,,36.0,,30.19607843137255,14.117647058823529,15.0,3.02,31.0,-2.34375,,,,CLOSED LOOP
+1784900458109,921.0,2.0,57.0,,35.0,,41.96078431372549,15.686274509803921,14.5,3.02,39.0,-3.125,,,,CLOSED LOOP
+1784900471343,829.0,0.0,59.0,,35.0,,31.764705882352942,14.901960784313726,16.0,4.08,39.0,-3.125,,,,CLOSED LOOP
+1784900479963,803.0,0.0,60.0,,35.0,,40.0,14.509803921568627,16.0,3.49,39.0,-1.5625,,,,CLOSED LOOP
+1784900487772,808.0,5.0,61.0,,35.0,,56.07843137254902,17.254901960784313,25.0,9.49,40.0,-0.78125,,,1,CLOSED LOOP
+1784900489171,1488.0,16.0,61.0,,35.0,,56.07843137254902,17.647058823529413,25.0,9.35,40.0,-1.5625,,,1,CLOSED LOOP
+1784900491080,1332.0,19.0,62.0,,35.0,,71.37254901960785,17.647058823529413,26.0,9.28,55.0,-0.78125,,,2,CLOSED LOOP
+1784900492404,1407.0,19.0,62.0,,35.0,,71.37254901960785,17.647058823529413,26.0,9.01,55.0,-1.5625,,,2,CLOSED LOOP
+1784900493919,1494.0,25.0,62.0,,35.0,,61.1764705882353,16.862745098039216,28.5,9.01,35.0,-3.125,,,2,CLOSED LOOP
+1784900495389,1540.0,25.0,62.0,,35.0,,41.96078431372549,16.470588235294116,28.5,6.46,35.0,-1.5625,,,2,CLOSED LOOP
+1784900496822,1540.0,25.0,62.0,,35.0,,40.78431372549019,16.470588235294116,1.0,6.46,26.0,0.0,,,2,OPEN LOOP
+1784900498851,1330.0,24.0,62.0,,35.0,,29.019607843137255,14.509803921568627,9.0,3.75,25.0,-3.90625,,,2,CLOSED LOOP
+1784900500866,1096.0,22.0,63.0,,35.0,,33.333333333333336,14.509803921568627,9.0,3.64,28.0,-7.03125,,,2,CLOSED LOOP
+1784900502714,1126.0,20.0,63.0,,35.0,,46.27450980392157,16.470588235294116,25.5,6.4,36.0,1.5625,,,2,CLOSED LOOP
+1784900504055,1126.0,20.0,64.0,,35.0,,48.627450980392155,16.470588235294116,25.5,6.4,36.0,-0.78125,,,2,CLOSED LOOP
+1784900505388,1349.0,20.0,64.0,,35.0,,48.627450980392155,16.470588235294116,13.0,3.64,25.0,-0.78125,,,2,CLOSED LOOP
+1784900507122,1054.0,20.0,64.0,,35.0,,48.627450980392155,14.509803921568627,9.0,3.75,29.0,-7.8125,,,2,CLOSED LOOP
+1784900508521,956.0,16.0,64.0,,35.0,,33.72549019607843,14.509803921568627,8.5,4.79,29.0,-7.8125,,,2,CLOSED LOOP
+1784900509779,956.0,16.0,64.0,,35.0,,50.19607843137255,14.509803921568627,9.5,4.87,29.0,-3.90625,,,2,CLOSED LOOP
+1784900510978,776.0,16.0,64.0,,35.0,,50.19607843137255,15.294117647058824,9.5,4.55,29.0,-1.5625,,,2,CLOSED LOOP
+1784900512311,979.0,16.0,64.0,,35.0,,50.19607843137255,17.254901960784313,9.5,8.27,29.0,-1.5625,,,2,CLOSED LOOP
+1784900513671,1274.0,10.0,65.0,,35.0,,66.27450980392157,17.254901960784313,26.5,10.41,56.0,3.125,,,1,CLOSED LOOP
+1784900515018,1514.0,10.0,65.0,,35.0,,66.27450980392157,18.431372549019606,28.0,10.41,52.0,3.125,,,1,CLOSED LOOP
+1784900516250,1744.0,10.0,65.0,,35.0,,66.27450980392157,18.431372549019606,30.0,11.13,52.0,3.125,,,1,CLOSED LOOP
+1784900517596,1399.0,10.0,65.0,,35.0,,78.03921568627452,18.431372549019606,25.0,10.73,65.0,-1.5625,,,1,CLOSED LOOP
+1784900519169,1334.0,19.0,66.0,,35.0,,78.03921568627452,18.431372549019606,18.5,7.47,50.0,-2.34375,,,2,CLOSED LOOP
+1784900520431,1147.0,19.0,66.0,,35.0,,78.03921568627452,15.294117647058824,18.5,5.12,35.0,-8.59375,,,2,CLOSED LOOP
+1784900521837,1183.0,19.0,66.0,,35.0,,44.31372549019608,16.862745098039216,22.0,7.29,35.0,0.78125,,,2,CLOSED LOOP
+1784900523231,1334.0,20.0,66.0,,35.0,,55.294117647058826,16.862745098039216,22.0,7.35,35.0,-0.78125,,,2,CLOSED LOOP
+1784900524666,1349.0,20.0,66.0,,35.0,,55.294117647058826,16.862745098039216,27.0,8.27,48.0,-1.5625,,,2,CLOSED LOOP
+1784900526332,1377.0,21.0,66.0,,35.0,,61.1764705882353,17.254901960784313,26.5,8.27,49.0,-0.78125,,,2,CLOSED LOOP
+1784900527906,1398.0,22.0,66.0,,35.0,,61.1764705882353,17.254901960784313,27.0,8.2,47.0,-0.78125,,,2,CLOSED LOOP
+1784900529325,1418.0,23.0,67.0,,35.0,,59.21568627450981,17.254901960784313,27.5,8.07,45.0,-0.78125,,,2,CLOSED LOOP
+1784900531066,1426.0,23.0,67.0,,35.0,,58.03921568627451,17.254901960784313,27.5,8.07,44.0,-2.34375,,,2,CLOSED LOOP
+1784900535322,1426.0,25.0,67.0,,35.0,,60.3921568627451,18.823529411764707,27.0,8.07,44.0,0.78125,,,2,CLOSED LOOP
+1784900536895,1611.0,26.0,68.0,,35.0,,72.54901960784314,18.823529411764707,28.0,11.62,55.0,-0.78125,,,2,CLOSED LOOP
+1784900538265,1648.0,26.0,68.0,,35.0,,67.45098039215686,18.03921568627451,24.0,8.94,54.0,-3.125,,,2,CLOSED LOOP
+1784900539433,1311.0,26.0,68.0,,35.0,,64.70588235294117,17.254901960784313,25.5,7.89,54.0,-3.125,,,2,CLOSED LOOP
+1784900540557,1311.0,28.0,68.0,,35.0,,39.21568627450981,17.254901960784313,8.5,7.89,54.0,-7.8125,,,3,CLOSED LOOP
+1784900541982,1311.0,27.0,69.0,,35.0,,39.21568627450981,17.254901960784313,8.5,5.24,39.0,-2.34375,,,2,CLOSED LOOP
+1784900543627,1142.0,26.0,69.0,,35.0,,47.05882352941177,17.254901960784313,21.0,4.83,34.0,-0.78125,,,3,CLOSED LOOP
+1784900544956,1142.0,25.0,69.0,,35.0,,41.1764705882353,14.901960784313726,21.0,4.04,34.0,-6.25,,,3,CLOSED LOOP
+1784900546451,989.0,25.0,70.0,,35.0,,52.549019607843135,16.862745098039216,21.0,6.81,46.0,-6.25,,,3,CLOSED LOOP
+1784900548026,1175.0,25.0,70.0,,35.0,,63.529411764705884,16.862745098039216,22.5,7.71,52.0,-0.78125,,,3,CLOSED LOOP
+1784900549991,1100.0,26.0,70.0,,35.0,,61.96078431372549,16.862745098039216,22.5,7.59,54.0,-1.5625,,,3,CLOSED LOOP
+1784900552037,1070.0,26.0,70.0,,35.0,,38.431372549019606,14.901960784313726,6.5,3.89,38.0,-7.8125,,,3,CLOSED LOOP
+1784900554098,831.0,24.0,71.0,,35.0,,42.745098039215684,14.901960784313726,6.0,4.08,40.0,-6.25,,,3,CLOSED LOOP
+1784900555873,820.0,20.0,71.0,,35.0,,42.745098039215684,14.901960784313726,6.0,4.08,40.0,-4.6875,,,3,CLOSED LOOP
+1784900557230,820.0,19.0,71.0,,35.0,,42.745098039215684,14.901960784313726,6.0,4.04,40.0,-4.6875,,,3,CLOSED LOOP
+1784900558640,820.0,18.0,71.0,,35.0,,42.745098039215684,14.901960784313726,6.0,4.04,41.0,-4.6875,,,3,CLOSED LOOP
+1784900559994,781.0,18.0,71.0,,35.0,,43.13725490196079,14.901960784313726,6.0,3.82,41.0,-4.6875,,,3,CLOSED LOOP
+1784900561296,758.0,18.0,71.0,,35.0,,43.13725490196079,14.901960784313726,6.5,4.08,41.0,-4.6875,,,3,CLOSED LOOP
+1784900562643,738.0,18.0,71.0,,35.0,,42.35294117647059,14.901960784313726,10.5,4.12,46.0,-4.6875,,,3,CLOSED LOOP
+1784900564597,738.0,10.0,71.0,,36.0,,44.705882352941174,14.901960784313726,10.5,3.78,45.0,-3.90625,,,2,CLOSED LOOP
+1784900566693,732.0,8.0,71.0,,36.0,,36.470588235294116,15.294117647058824,12.0,4.47,37.0,2.34375,,,1,CLOSED LOOP
+1784900569214,848.0,7.0,72.0,,36.0,,43.13725490196079,14.901960784313726,6.5,3.86,46.0,-3.90625,,,1,CLOSED LOOP
+1784900587991,848.0,7.0,72.0,,36.0,,43.13725490196079,14.901960784313726,6.5,3.86,46.0,-3.90625,,,1,CLOSED LOOP
+1784900614979,848.0,7.0,72.0,,36.0,,43.13725490196079,14.901960784313726,6.5,3.86,46.0,-3.90625,,,1,CLOSED LOOP
+1784900642287,848.0,7.0,72.0,,36.0,,43.13725490196079,14.901960784313726,6.5,3.86,46.0,-3.90625,,,1,CLOSED LOOP
+1784900672012,848.0,7.0,72.0,,36.0,,43.13725490196079,14.901960784313726,6.5,3.86,46.0,-3.90625,,,1,CLOSED LOOP
+1784900700179,848.0,7.0,72.0,,36.0,,43.13725490196079,14.901960784313726,6.5,3.86,46.0,-3.90625,,,1,CLOSED LOOP
+1784900729898,848.0,7.0,72.0,,36.0,,43.13725490196079,14.901960784313726,6.5,3.86,46.0,-3.90625,,,1,CLOSED LOOP
+1784900756790,848.0,7.0,72.0,,36.0,,43.13725490196079,14.901960784313726,6.5,3.86,46.0,-3.90625,,,1,CLOSED LOOP
+1784900784972,848.0,7.0,72.0,,36.0,,43.13725490196079,14.901960784313726,6.5,3.86,46.0,-3.90625,,,1,CLOSED LOOP
+1784900807235,848.0,7.0,72.0,,36.0,,43.13725490196079,14.901960784313726,6.5,3.86,46.0,-3.90625,,,1,CLOSED LOOP
+1784900828048,848.0,7.0,72.0,,36.0,,43.13725490196079,14.901960784313726,6.5,3.86,46.0,-3.90625,,,1,CLOSED LOOP
+1784900845805,848.0,7.0,72.0,,36.0,,43.13725490196079,14.901960784313726,6.5,3.86,46.0,-3.90625,,,1,CLOSED LOOP
+1784900863570,848.0,7.0,72.0,,36.0,,43.13725490196079,14.901960784313726,6.5,3.86,46.0,-3.90625,,,1,CLOSED LOOP
+1784900882770,848.0,7.0,72.0,,36.0,,43.13725490196079,14.901960784313726,6.5,3.86,46.0,-3.90625,,,1,CLOSED LOOP
