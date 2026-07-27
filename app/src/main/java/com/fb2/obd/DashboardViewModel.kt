@@ -84,7 +84,8 @@ data class SettingsState(
     val voiceAlerts: Boolean = true,
     /**
      * When true, alerts request Android audio focus and briefly duck media.
-     * Default false — CarPlay/Z-Link on many HUs ducks and never restores volume.
+     * Default false — safe when CarPlay/Z-Link is connected (Settings shows the
+     * inverse as “CarPlay / Android Auto connected” = Yes).
      */
     val duckMediaDuringAlerts: Boolean = false,
 )

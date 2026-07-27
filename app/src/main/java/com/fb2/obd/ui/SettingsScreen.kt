@@ -125,14 +125,15 @@ fun SettingsScreen(
             onCheckedChange = onToggleVoiceAlerts,
         )
         ToggleRow(
-            title = "Lower CarPlay during alerts",
-            subtitle = "Off (recommended with Z-Link): play alert without ducking media. On: briefly lower CarPlay — some HUs never restore volume.",
-            checked = settings.duckMediaDuringAlerts,
-            onCheckedChange = onToggleDuckMedia,
+            title = "CarPlay / Android Auto connected",
+            subtitle = "Yes (recommended with Z-Link): play alerts without ducking media. No: briefly lower media during alerts — some HUs never restore volume.",
+            // UI is inverted vs duckMedia: connected=Yes → do NOT duck.
+            checked = !settings.duckMediaDuringAlerts,
+            onCheckedChange = { connected -> onToggleDuckMedia(!connected) },
         )
         ActionRow(
             title = "Check sound alert",
-            subtitle = "Play battery-critical beep + voice now — verify CarPlay volume stays up afterward.",
+            subtitle = "Play battery-critical beep + voice now — verify media volume stays up afterward.",
             actionLabel = "PLAY",
             onClick = onCheckSoundAlert,
         )

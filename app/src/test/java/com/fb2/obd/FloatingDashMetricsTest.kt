@@ -40,10 +40,16 @@ class FloatingDashMetricsTest {
         )
         val metrics = FloatingDashMetrics.from(state)
         assertEquals("Coolant 1", metrics[0].label)
-        // Collapsed floating bubble always prefers coolant.
-        val collapsed = FloatingDashMetrics.collapsedMetric(metrics)
-        assertEquals("Coolant 1", collapsed.label)
-        assertEquals("88", collapsed.value)
+        // Default collapsed primary is Coolant; pin overrides.
+        assertEquals("Coolant 1", FloatingDashMetrics.collapsedMetric(metrics).label)
+        assertEquals("RPM", FloatingDashMetrics.collapsedMetric(metrics, "RPM").label)
+        assertEquals("MAF", FloatingDashMetrics.collapsedMetric(metrics, "MAF").label)
+        assertEquals("88", FloatingDashMetrics.collapsedMetric(metrics).value)
+        assertEquals(0, FloatingDashMetrics.pageIndexOf(metrics, "Coolant 1"))
+        assertEquals(
+            FloatingDashMetrics.pageIndexOf(metrics, "MAF"),
+            metrics.indexOfFirst { it.label == "MAF" } / FloatingDashMetrics.PAGE_SIZE,
+        )
         // First radial page leads with coolant, then RPM (keeps redline colour).
         val page0 = FloatingDashMetrics.page(metrics, 0)
         assertEquals(5, page0.size)
