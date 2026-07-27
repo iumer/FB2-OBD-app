@@ -22,9 +22,11 @@ class AiAnalysisPayloadBuilderTest {
         val p = AiAnalysisPayloadBuilder.SYSTEM_PROMPT
         assertTrue(p.contains("Civic FB2"))
         assertTrue(p.contains("Pakistani") || p.contains("UG"))
-        assertTrue(p.contains("READ ONLY") || p.contains("read-only") || p.contains("Read-only"))
-        assertTrue(p.contains("ELD"))
-        assertTrue(p.contains(".txt") || p.contains("plain-text"))
+        assertTrue(p.contains("read-only") || p.contains("READ ONLY") || p.contains("Remain read-only"))
+        assertTrue(p.contains("AI VEHICLE ANALYSIS REPORT"))
+        assertTrue(p.contains("ANALYZED VALUES"))
+        assertTrue(p.contains("Do not invent") || p.contains("do not invent"))
+        assertTrue(p.contains(".txt"))
     }
 
     @Test
