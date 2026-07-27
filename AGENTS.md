@@ -116,7 +116,9 @@ non-obvious cloud specifics.
   saved `FB2-log-*.csv`, same window). One-shot OpenAI `gpt-4o-mini` report
   (read-only FB2 system prompt). API key in Settings → AI analysis
   (`platform.openai.com` — Plus ≠ API). Result is copyable and saved under
-  `ai_reports/FB2-ai-*.txt` (mirrored to Downloads). No conversational chat in-app.
+  `ai_reports/FB2-ai-*.txt` (mirrored to Downloads) including an audit
+  **readings table** (snapshot + health + DTCs + window CSV). No conversational
+  chat in-app.
 - **ELM idle drop:** cheap clones often hang mid-poll. The app uses short PID
   timeouts (~650 ms poll / ~450 ms probe), skips repeatedly-failing PIDs, keeps
   last-good Dash values, and retries RFCOMM forever with backoff (UI shows

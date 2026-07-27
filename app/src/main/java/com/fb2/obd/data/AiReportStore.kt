@@ -50,14 +50,15 @@ class AiReportStore(
     }
 
     /**
-     * Write a report with metadata header + AI body.
-     * @return saved file info
+     * Write a report with metadata header + AI findings + the readings window
+     * that was sent to the model (so you can audit values offline).
      */
     fun saveReport(
         body: String,
         sourceLabel: String,
         windowMinutes: Int,
         model: String,
+        readingsAppendix: String = "",
         createdMs: Long = System.currentTimeMillis(),
     ): SavedAiReport {
         dir.mkdirs()
@@ -70,17 +71,14 @@ class AiReportStore(
             file = File(dir, name)
             n++
         }
-        val text = buildString {
-            appendLine("# FB2-OBD AI diagnostic report")
-            appendLine("# created_ms=$createdMs")
-            appendLine("# source=$sourceLabel")
-            appendLine("# window_minutes=$windowMinutes")
-            appendLine("# model=$model")
-            appendLine("# vehicle=Honda Civic FB2 2013 R18 PK UG AT (D/D3/D2/D1)")
-            appendLine()
-            append(body.trim())
-            appendLine()
-        }
+        val text = buildFullReportText(
+            body = body,
+            sourceLabel = sourceLabel,
+            windowMinutes = windowMinutes,
+            model = model,
+            readingsAppendix = readingsAppendix,
+            createdMs = createdMs,
+        )
         file.writeText(text)
         mirrorToDownloads(file, name)
         return SavedAiReport(
@@ -105,5 +103,33 @@ class AiReportStore(
 
     companion object {
         private val FILE_FMT = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US)
+
+        fun buildFullReportText(
+            body: String,
+            sourceLabel: String,
+            windowMinutes: Int,
+            model: String,
+            readingsAppendix: String,
+            createdMs: Long,
+        ): String = buildString {
+            appendLine("# FB2-OBD AI diagnostic report")
+            appendLine("# created_ms=$createdMs")
+            appendLine("# source=$sourceLabel")
+            appendLine("# window_minutes=$windowMinutes")
+            appendLine("# model=$model")
+            appendLine("# vehicle=Honda Civic FB2 2013 R18 PK UG AT (D/D3/D2/D1)")
+            appendLine()
+            appendLine("===== AI FINDINGS =====")
+            appendLine()
+            append(body.trim())
+            appendLine()
+            if (readingsAppendix.isNotBlank()) {
+                appendLine()
+                appendLine("===== READINGS SENT TO AI (audit table) =====")
+                appendLine()
+                append(readingsAppendix.trim())
+                appendLine()
+            }
+        }
     }
 }

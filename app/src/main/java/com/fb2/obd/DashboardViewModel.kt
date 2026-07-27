@@ -663,18 +663,40 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
                     log = truncated,
                 )
                 val result = openAiClient.complete(payload.systemPrompt, payload.userMessage)
+                val readingsAppendix = buildString {
+                    appendLine("--- Latest snapshot ---")
+                    appendLine(AiAnalysisPayloadBuilder.formatSnapshot(snapshot).trim())
+                    appendLine()
+                    appendLine("--- App health notes ---")
+                    appendLine(AiAnalysisPayloadBuilder.formatHealth(health).trim())
+                    appendLine()
+                    appendLine("--- DTCs ---")
+                    appendLine(dtcText.trim())
+                    appendLine()
+                    appendLine("--- Time-window CSV (${payload.windowMinutes} min, ${truncated.rowCount} rows) ---")
+                    appendLine(truncated.csvText.trim())
+                }
                 val saved = aiReportStore.saveReport(
                     body = result.text,
                     sourceLabel = sourceLabel,
                     windowMinutes = payload.windowMinutes,
                     model = result.model,
+                    readingsAppendix = readingsAppendix,
+                )
+                val fullText = AiReportStore.buildFullReportText(
+                    body = result.text,
+                    sourceLabel = sourceLabel,
+                    windowMinutes = payload.windowMinutes,
+                    model = result.model,
+                    readingsAppendix = readingsAppendix,
+                    createdMs = saved.createdMs,
                 )
                 _savedAiReports.value = aiReportStore.list()
                 logUploadManager.refreshCounts()
                 _aiAnalyze.update {
                     it.copy(
                         loading = false,
-                        reportText = result.text,
+                        reportText = fullText,
                         savedReport = saved,
                         limitedData = payload.limited,
                         error = null,
