@@ -1,0 +1,217 @@
+# FB2-OBD AI diagnostic report
+# created_ms=1785181234747
+# source=live_window_1min
+# window_minutes=1
+# model=gpt-4o-mini-2024-07-18
+# vehicle=Honda Civic FB2 2013 R18 PK UG AT (D/D3/D2/D1)
+
+===== AI FINDINGS =====
+
+AI VEHICLE ANALYSIS REPORT
+
+VEHICLE
+- Vehicle identification: Honda Civic FB2
+- Log source: live_window_1min
+- Log filename, if provided: Not provided
+- Analysis start: Not specified
+- Analysis end: Not specified
+- Analysis duration: 1 minute
+- Total records reviewed: 0 snapshots, 6 events
+- Valid readings analyzed: 1 snapshot with valid data
+
+DATA AVAILABILITY
+- Sensors requested or selected: rpm, speed_kmh, coolant1_c, coolant2_c, intake_c, ambient_c, load_pct, throttle_pct, timing, maf_gps, map_kpa, stft_pct, ltft_pct, battery_v, fuel_loop, gear
+- Sensors with valid data: rpm, speed_kmh, coolant1_c, intake_c, load_pct, throttle_pct, timing, maf_gps, map_kpa, stft_pct, battery_v, gear
+- Sensors without usable data: coolant2_c, ambient_c, ltft_pct, transmission_pct
+- Missing, N/A, unsupported, or failed responses: coolant2_c (null), ambient_c (null), ltft_pct (null), transmission_pct (null)
+- Sampling and connection quality: Limited due to 0 snapshots; only event data available
+- Suspected logger, scanner, or ELM limitations: Limited snapshot data may affect analysis quality
+
+Some sensors were selected in the app but did not produce usable readings during this analysis. This is not by itself evidence of a vehicle fault. It may be caused by vehicle PID support, the ELM adapter, scanner communication, polling behavior, or an app limitation. This report is based only on the valid readings actually received. No missing values were assumed or estimated.
+
+OVERALL ASSESSMENT
+- Overall condition based on available data: Generally normal engine operation observed
+- Overall confidence: Moderate
+- Concise explanation: Core engine parameters appear stable, but limited snapshot data restricts comprehensive analysis.
+- Important limitations: Lack of snapshot data and missing transmission information limit the ability to assess transmission health.
+
+WHAT LOOKS NORMAL
+- Supported findings only: 
+  - RPM: 2077.0
+  - Speed: 54.0 km/h
+  - Coolant Temperature: 64.0 °C
+  - Load Percentage: 39.52%
+  - Throttle Percentage: 27.84%
+  - MAF: 11.90 g/s
+  - STFT: 2.00%
+  - Battery Voltage: 14.13 V
+  - Gear: Estimated 3
+- Explanation: The engine is operating within expected parameters for a warm-up phase, with stable RPM, throttle position, and fuel trim values.
+
+CONCERNS OR ITEMS TO MONITOR
+No clear fault was identified from the available readings.
+
+SAFE NEXT CHECKS
+- Recommend observing engine performance during various driving conditions to gather more data.
+- Additional sensors that would improve confidence include transmission parameters (ATF temperature, gear position, slip) and ambient temperature.
+- A physical inspection of the transmission may be warranted if issues are suspected based on future data.
+
+ANALYZED VALUES
+- Sensor name: RPM
+  - Unit: RPM
+  - Minimum: 2077.0
+  - Maximum: 2077.0
+  - Average: 2077.0
+  - Latest valid value: 2077.0
+  - Valid sample count: 1
+  - Invalid or missing sample count: 0
+  - Observed trend: Stable
+- Sensor name: Speed
+  - Unit: km/h
+  - Minimum: 54.0
+  - Maximum: 54.0
+  - Average: 54.0
+  - Latest valid value: 54.0
+  - Valid sample count: 1
+  - Invalid or missing sample count: 0
+  - Observed trend: Stable
+- Sensor name: Coolant Temperature
+  - Unit: °C
+  - Minimum: 64.0
+  - Maximum: 64.0
+  - Average: 64.0
+  - Latest valid value: 64.0
+  - Valid sample count: 1
+  - Invalid or missing sample count: 0
+  - Observed trend: Stable
+- Sensor name: Load Percentage
+  - Unit: %
+  - Minimum: 39.52
+  - Maximum: 39.52
+  - Average: 39.52
+  - Latest valid value: 39.52
+  - Valid sample count: 1
+  - Invalid or missing sample count: 0
+  - Observed trend: Stable
+- Sensor name: Throttle Percentage
+  - Unit: %
+  - Minimum: 27.84
+  - Maximum: 27.84
+  - Average: 27.84
+  - Latest valid value: 27.84
+  - Valid sample count: 1
+  - Invalid or missing sample count: 0
+  - Observed trend: Stable
+- Sensor name: MAF
+  - Unit: g/s
+  - Minimum: 11.90
+  - Maximum: 11.90
+  - Average: 11.90
+  - Latest valid value: 11.90
+  - Valid sample count: 1
+  - Invalid or missing sample count: 0
+  - Observed trend: Stable
+- Sensor name: STFT
+  - Unit: %
+  - Minimum: 2.00
+  - Maximum: 2.00
+  - Average: 2.00
+  - Latest valid value: 2.00
+  - Valid sample count: 1
+  - Invalid or missing sample count: 0
+  - Observed trend: Stable
+- Sensor name: Battery Voltage
+  - Unit: V
+  - Minimum: 14.13
+  - Maximum: 14.13
+  - Average: 14.13
+  - Latest valid value: 14.13
+  - Valid sample count: 1
+  - Invalid or missing sample count: 0
+  - Observed trend: Stable
+- Sensor name: Gear
+  - Unit: Estimated
+  - Minimum: 3
+  - Maximum: 3
+  - Average: 3
+  - Latest valid value: 3
+  - Valid sample count: 1
+  - Invalid or missing sample count: 0
+  - Observed trend: Stable
+
+UNAVAILABLE OR UNUSED VALUES
+- Sensor name: Coolant2
+  - Requested or selected status: Selected
+  - Reason it could not be analyzed: No data available
+  - Mark as unavailable
+- Sensor name: Ambient
+  - Requested or selected status: Selected
+  - Reason it could not be analyzed: No data available
+  - Mark as unavailable
+- Sensor name: LTFT
+  - Requested or selected status: Selected
+  - Reason it could not be analyzed: No data available
+  - Mark as unavailable
+- Sensor name: Transmission
+  - Requested or selected status: Selected
+  - Reason it could not be analyzed: No data available
+  - Mark as unavailable
+
+ANALYSIS NOTES
+- Assumptions, if any: None
+- Missing context: None
+- Data-quality limitations: Limited snapshot data and missing transmission parameters
+- Conditions that reduced confidence: Lack of comprehensive snapshot data
+- Features or systems that could not be evaluated: Transmission health due to missing data
+
+FINAL STATEMENT
+
+This analysis used only the readings present in the supplied live session or log file. Missing, unavailable, N/A, unsupported, or failed sensor responses were not treated as vehicle faults and were not estimated. Conclusions are limited to the valid data that the app and connected scanner were able to obtain.
+
+===== READINGS SENT TO AI (audit table) =====
+
+--- Latest snapshot ---
+rpm=2077.0
+speed_kmh=54.0
+coolant1_c=64.0
+coolant2_c=null
+intake_c=32.0
+ambient_c=null
+load_pct=39.52463380042202
+throttle_pct=27.836097309397832
+timing=12.0
+maf_gps=11.904926760084404
+map_kpa=69.52463380042202
+stft_pct=1.99708669074921
+ltft_pct=null
+battery_v=14.134683499406247
+fuel_loop=OPEN LOOP
+gear=3 source=ESTIMATED
+
+--- App health notes ---
+engine_pct=100 transmission_pct=null vehicle_pct=100
+engine_ok=true transmission_ok=false
+engine_notes:
+- LTFT n/s on this ECU (common on FB2)
+- Engine still cold — open loop enrichment is normal
+- Core engine parameters look OK from available sensors
+transmission_notes:
+- No TCM sensors answered (ATF / gear / slip n/s) — cannot score transmission yet
+- Run Transmission or Honda probe; Mode 22 IDs may need remapping for this FB2
+
+--- DTCs ---
+(no DTCs loaded — open Faults to refresh if needed)
+Readiness DTC count: 2
+
+--- Time-window CSV (1 min, 0 rows) ---
+# events
+time_ms,category,message
+1785181199435,TRIP,Trip Start
+1785181199435,ELM,Demo Connected
+1785181199920,GEAR,Estimated gear 2 → 3
+1785181200258,DTC,DTC present: 2 code(s)
+1785181204315,GEAR,Estimated gear 3 → 4
+1785181208118,GEAR,Estimated gear 4 → 3
+
+# dashboard_snapshots
+time_ms,rpm,speed_kmh,coolant1_c,coolant2_c,intake_c,ambient_c,load_pct,throttle_pct,timing,maf_gps,map_kpa,stft_pct,ltft_pct,ecu_v,gear,fuel_loop
