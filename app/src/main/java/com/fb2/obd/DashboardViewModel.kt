@@ -5,6 +5,8 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.fb2.obd.car.CarDashBuilder
 import com.fb2.obd.car.VehicleLiveStore
+import com.fb2.obd.data.AiAnalysisStore
+import com.fb2.obd.data.AiReportStore
 import com.fb2.obd.data.ConnectionState
 import com.fb2.obd.data.DashTileOverrideStore
 import com.fb2.obd.data.DemoObdSource
@@ -15,9 +17,12 @@ import com.fb2.obd.data.LogExportHelper
 import com.fb2.obd.data.LogUploadManager
 import com.fb2.obd.data.ObdLogger
 import com.fb2.obd.data.ObdSource
+import com.fb2.obd.data.OpenAiClient
+import com.fb2.obd.data.SavedAiReport
 import com.fb2.obd.data.SavedLogFile
 import com.fb2.obd.data.SessionLogStore
 import com.fb2.obd.data.VoiceAlerter
+import com.fb2.obd.obd.AiAnalysisPayloadBuilder
 import com.fb2.obd.obd.ColdStartIdleCatalog
 import com.fb2.obd.obd.DeepSearchReport
 import com.fb2.obd.obd.DeepSensorSearch
@@ -88,6 +93,18 @@ data class SettingsState(
      * inverse as “CarPlay / Android Auto connected” = Yes).
      */
     val duckMediaDuringAlerts: Boolean = false,
+)
+
+/** UI state for one-shot Analyze via AI. */
+data class AiAnalyzeUiState(
+    val modeLive: Boolean = true,
+    val windowMinutes: Int = AiAnalysisPayloadBuilder.DEFAULT_WINDOW_MINUTES,
+    val selectedLogFileName: String? = null,
+    val loading: Boolean = false,
+    val reportText: String? = null,
+    val savedReport: SavedAiReport? = null,
+    val error: String? = null,
+    val limitedData: Boolean = false,
 )
 
 /** Diagnostic trouble code state for the Faults screen. */
@@ -232,7 +249,17 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
     val savedLogs: StateFlow<List<SavedLogFile>> = _savedLogs.asStateFlow()
     private var sessionStartedMs: Long = 0L
 
-    private val logUploadManager = LogUploadManager(app, sessionLogStore)
+    private val aiReportStore = AiReportStore(File(filesDir, "ai_reports"), app)
+    private val _savedAiReports = MutableStateFlow(aiReportStore.list())
+    val savedAiReports: StateFlow<List<SavedAiReport>> = _savedAiReports.asStateFlow()
+
+    private val aiAnalysisStore = AiAnalysisStore(app)
+    private val openAiClient = OpenAiClient(apiKeyProvider = { aiAnalysisStore.apiKey })
+
+    private val _aiAnalyze = MutableStateFlow(AiAnalyzeUiState())
+    val aiAnalyze: StateFlow<AiAnalyzeUiState> = _aiAnalyze.asStateFlow()
+
+    private val logUploadManager = LogUploadManager(app, sessionLogStore, aiReportStore)
     val uploadStatus = logUploadManager.status
     private var autoUploadJob: Job? = null
 
@@ -538,6 +565,135 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun githubUploadToken(): String = logUploadManager.githubToken
+
+    fun setOpenAiApiKey(key: String) {
+        aiAnalysisStore.apiKey = key
+    }
+
+    fun openAiApiKey(): String = aiAnalysisStore.apiKey
+
+    fun setAiAnalyzeModeLive(live: Boolean) {
+        _aiAnalyze.update { it.copy(modeLive = live, error = null) }
+    }
+
+    fun setAiAnalyzeWindowMinutes(minutes: Int) {
+        _aiAnalyze.update {
+            it.copy(windowMinutes = AiAnalysisPayloadBuilder.clampWindowMinutes(minutes), error = null)
+        }
+    }
+
+    fun setAiAnalyzeSelectedLog(fileName: String?) {
+        _aiAnalyze.update { it.copy(selectedLogFileName = fileName, error = null) }
+    }
+
+    fun clearAiAnalyzeResult() {
+        _aiAnalyze.update { it.copy(reportText = null, savedReport = null, error = null, limitedData = false) }
+    }
+
+    fun refreshSavedAiReports() {
+        _savedAiReports.value = aiReportStore.list()
+    }
+
+    /**
+     * One-shot OpenAI analysis: live lookback window or a saved session CSV slice.
+     * Saves the reply as `.txt` under ai_reports/ (GitHub sync picks it up).
+     */
+    fun runAiAnalysis() {
+        val st = _aiAnalyze.value
+        if (st.loading) return
+        if (aiAnalysisStore.apiKey.isBlank()) {
+            _aiAnalyze.update {
+                it.copy(error = "Add an OpenAI API key in Settings → AI analysis")
+            }
+            return
+        }
+        viewModelScope.launch {
+            _aiAnalyze.update {
+                it.copy(loading = true, error = null, reportText = null, savedReport = null)
+            }
+            try {
+                val minutes = AiAnalysisPayloadBuilder.clampWindowMinutes(st.windowMinutes)
+                val now = System.currentTimeMillis()
+                val snapshot = _uiState.value.snapshot
+                val health = _health.value
+                val dtcText = buildString {
+                    val stored = _faults.value.stored
+                    val pending = _faults.value.pending
+                    if (stored.isEmpty() && pending.isEmpty()) {
+                        appendLine("(no DTCs loaded — open Faults to refresh if needed)")
+                    } else {
+                        if (stored.isNotEmpty()) {
+                            appendLine("Stored:")
+                            stored.forEach { appendLine("- ${it.code}: ${it.description}") }
+                        }
+                        if (pending.isNotEmpty()) {
+                            appendLine("Pending:")
+                            pending.forEach { appendLine("- ${it.code}: ${it.description}") }
+                        }
+                    }
+                    _uiState.value.dtcCount?.let { appendLine("Readiness DTC count: $it") }
+                }
+                val truncated = if (st.modeLive) {
+                    val snaps = ObdLogger.valueRows().map { row ->
+                        row.timestampMs to AiAnalysisPayloadBuilder.snapshotCsvLine(row.timestampMs, row.snapshot)
+                    }
+                    val evs = ObdLogger.eventRows().map { e ->
+                        val msg = e.message.replace(",", " ").replace("\n", " ")
+                        e.timestampMs to "${e.timestampMs},${e.category},$msg"
+                    }
+                    AiAnalysisPayloadBuilder.truncateByTime(snaps, evs, minutes, now)
+                } else {
+                    val name = st.selectedLogFileName
+                        ?: error("Pick a saved log file first")
+                    val csv = sessionLogStore.read(name)
+                        ?: error("Could not read $name")
+                    AiAnalysisPayloadBuilder.truncateSavedCsv(csv, minutes, now)
+                }
+                val sourceLabel = if (st.modeLive) {
+                    "live_window_${minutes}min"
+                } else {
+                    "saved:${st.selectedLogFileName}"
+                }
+                val payload = AiAnalysisPayloadBuilder.buildUserMessage(
+                    sourceLabel = sourceLabel,
+                    windowMinutes = minutes,
+                    snapshotText = AiAnalysisPayloadBuilder.formatSnapshot(snapshot),
+                    healthText = AiAnalysisPayloadBuilder.formatHealth(health),
+                    dtcText = dtcText,
+                    log = truncated,
+                )
+                val result = openAiClient.complete(payload.systemPrompt, payload.userMessage)
+                val saved = aiReportStore.saveReport(
+                    body = result.text,
+                    sourceLabel = sourceLabel,
+                    windowMinutes = payload.windowMinutes,
+                    model = result.model,
+                )
+                _savedAiReports.value = aiReportStore.list()
+                logUploadManager.refreshCounts()
+                _aiAnalyze.update {
+                    it.copy(
+                        loading = false,
+                        reportText = result.text,
+                        savedReport = saved,
+                        limitedData = payload.limited,
+                        error = null,
+                    )
+                }
+                // Best-effort sync when online (same as value logs).
+                if (logUploadManager.isOnline() && logUploadManager.githubToken.isNotBlank()) {
+                    logUploadManager.uploadPending()
+                }
+            } catch (e: Exception) {
+                _aiAnalyze.update {
+                    it.copy(
+                        loading = false,
+                        error = e.message ?: e.javaClass.simpleName,
+                    )
+                }
+            }
+        }
+    }
 
     fun uploadSavedLogs() {
         viewModelScope.launch {

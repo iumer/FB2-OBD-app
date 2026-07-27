@@ -88,6 +88,8 @@ fun SettingsScreen(
     githubToken: String = "",
     onGithubTokenChange: (String) -> Unit = {},
     onUploadLogs: () -> Unit = {},
+    openAiApiKey: String = "",
+    onOpenAiApiKeyChange: (String) -> Unit = {},
     nav: SettingsNav,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
@@ -138,6 +140,46 @@ fun SettingsScreen(
             onClick = onCheckSoundAlert,
         )
 
+        SectionLabel("AI analysis")
+        Text(
+            text = "OpenAI API key for DIAGNOSTICS → Analyze via AI. ChatGPT Plus does not include API access — use platform.openai.com billing. Model: gpt-4o-mini (pay per use).",
+            color = TextMuted,
+            fontSize = 12.sp,
+            modifier = Modifier.padding(bottom = 8.dp),
+        )
+        var openAiDraft by remember(openAiApiKey) { mutableStateOf(openAiApiKey) }
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(12.dp))
+                .background(Surface)
+                .padding(14.dp),
+        ) {
+            Text("OpenAI API key", color = TextPrimary, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+            BasicTextField(
+                value = openAiDraft,
+                onValueChange = {
+                    openAiDraft = it
+                    onOpenAiApiKeyChange(it)
+                },
+                singleLine = true,
+                textStyle = TextStyle(color = TextPrimary, fontSize = 13.sp),
+                cursorBrush = SolidColor(Accent),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 8.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(Background)
+                    .padding(12.dp),
+                decorationBox = { inner ->
+                    if (openAiDraft.isBlank()) {
+                        Text("sk-… paste key", color = TextMuted, fontSize = 13.sp)
+                    }
+                    inner()
+                },
+            )
+        }
+
         SectionLabel("Logging")
         Text(
             text = "Real ELM connect auto-starts Dash value LOG until you tap STOP LOG. Sessions save as FB2-log-yyyyMMdd-HHmmss.csv.",
@@ -157,7 +199,7 @@ fun SettingsScreen(
             modifier = Modifier.padding(bottom = 6.dp),
         )
         Text(
-            text = "Uploads finished drives to github.com/${LogUploadManager.DEFAULT_OWNER}/${LogUploadManager.DEFAULT_REPO}/${LogUploadManager.REMOTE_DIR}/ (not the live buffer). Needs a fine-grained PAT with Contents: Write.",
+            text = "Uploads finished drives to …/${LogUploadManager.REMOTE_DIR}/ and AI reports to …/${LogUploadManager.REMOTE_AI_DIR}/. Needs a fine-grained PAT with Contents: Write.",
             color = TextMuted,
             fontSize = 12.sp,
             modifier = Modifier.padding(bottom = 8.dp),
@@ -195,7 +237,7 @@ fun SettingsScreen(
             )
         }
         ActionRow(
-            title = "Upload saved logs",
+            title = "Upload saved logs + AI reports",
             subtitle = buildString {
                 append("${uploadStatus.pendingCount} pending · ${uploadStatus.syncedCount} synced")
                 if (uploadStatus.lastMessage.isNotBlank()) append(" · ${uploadStatus.lastMessage}")

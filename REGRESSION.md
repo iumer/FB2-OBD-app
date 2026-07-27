@@ -29,7 +29,8 @@ Keep these fixed. If a change might touch one of these areas, re-verify it.
 | I29 | Split-second threshold spikes trigger false alarms | Fixed | Per-key `AlertPolicy` holds (coolant ~4s, battery ~25s) + EMA + hysteresis latch |
 | I30 | Want satellite tap to set collapsed blob metric | Fixed | Tap satellite pins primary (persisted); default Coolant until changed |
 | I31 | Want LOG on by default for real ELM | Fixed | Auto-start value logging on live ELM connect |
-| I32 | Hard to get logs off HU | Fixed | GitHub `logs/car-uploads/` sync + Upload button + Downloads mirror |
+| I32 | Hard to get logs off HU | Fixed | GitHub `logs/car-uploads/` + AI `logs/ai-reports/` sync + Upload + Downloads |
+| I33 | Want OpenAI analyze of drive data | Fixed | DIAG → Analyze via AI; live window / saved log; `.txt` reports |
 | I12 | Android Auto sideload not showing on real HU | Documented | Needs Play Internal testing/sharing; DHU for desk — see `AGENTS.md` |
 | I13 | LOG should be main Dash only (not Fuel/Trip/Trans dumps) | Fixed | Lean CSV: events + dashboard_snapshots + dash_tiles |
 | I14 | Pakistan units (km, km/h, km/L) | Fixed | Product default |
@@ -76,6 +77,7 @@ All three Gradle tasks must pass. Copy the APK into `dist/` so sideload artifact
 | `VoiceAlertRulesTest` | Voice critical thresholds |
 | `VoiceAlertDebouncerTest` | Per-key hold (coolant ~4s / battery ~25s) before sound |
 | `DiagnosticBrainTest` | EMA smoothing + zone hysteresis latch |
+| `AiAnalysisPayloadBuilderTest` | FB2 prompt + live/saved window truncation |
 | `DiagnosticEventTrackerTest` | Zone / fuel-loop events |
 | `DtcDecoderTest` | Mode 03/07 DTC frames |
 | `DeepSearchKnowledgeBaseTest` | Strategy order + demo ATRV/ambient recovery |
