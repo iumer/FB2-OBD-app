@@ -264,7 +264,7 @@ fun AiAnalyzeScreen(
                     .padding(14.dp),
             )
             Text(
-                text = "Tip: paste into chatgpt.com to continue the conversation.",
+                text = "Tip: scroll down in the report for the readings table. COPY includes AI findings + values. Paste into chatgpt.com to continue.",
                 color = TextMuted,
                 fontSize = 11.sp,
                 modifier = Modifier.padding(top = 8.dp),
