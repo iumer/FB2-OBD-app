@@ -362,6 +362,7 @@ class MainActivity : ComponentActivity() {
                             onWindowMinutes = viewModel::setAiAnalyzeWindowMinutes,
                             onSelectLog = viewModel::setAiAnalyzeSelectedLog,
                             onAnalyze = viewModel::runAiAnalysis,
+                            onClearReport = viewModel::clearAiAnalyzeResult,
                             onRefreshLogs = viewModel::refreshSavedLogs,
                             onOpenSettings = { screen = Screen.SETTINGS },
                             onBack = { screen = Screen.DIAG_HUB },
