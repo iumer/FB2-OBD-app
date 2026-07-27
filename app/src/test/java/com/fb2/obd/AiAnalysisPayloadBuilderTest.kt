@@ -33,6 +33,9 @@ class AiAnalysisPayloadBuilderTest {
         assertTrue(p.contains("MAF CRITICAL"))
         assertTrue(p.contains("Vehicle and session information"))
         assertTrue(p.contains("Key readings"))
+        assertTrue(p.contains("WORDING AND HONDA-SPECIFIC GUIDANCE"))
+        assertTrue(p.contains("ELD") || p.contains("electrical load detection"))
+        assertTrue(p.contains("selected analysis window"))
     }
 
     @Test
@@ -112,6 +115,46 @@ class AiAnalysisPayloadBuilderTest {
         val log = AiAnalysisPayloadBuilder.truncateSavedCsv(csv, windowMinutes = 1, nowMs = t0)
         assertEquals(2, log.rowCount) // last 1 minute: -30s and 0
         assertTrue(log.eventCount >= 1)
+        assertEquals(t0 - 30_000, log.firstTimestampMs)
+        assertEquals(t0, log.lastTimestampMs)
+        assertEquals(30L, log.actualDurationSeconds)
+    }
+
+    @Test
+    fun formatIsoUtc_usesYearFromEpoch() {
+        // 2026-07-27 20:04:10 UTC ≈ 1785182650255 (from real FB2 log)
+        val iso = AiAnalysisPayloadBuilder.formatIsoUtc(1_785_182_650_255L)
+        assertTrue(iso.startsWith("2026-"))
+        assertTrue(iso.contains("UTC"))
+    }
+
+    @Test
+    fun buildUserMessage_includesAppComputedWindowMeta() {
+        val truncated = AiAnalysisPayloadBuilder.TruncatedLog(
+            csvText = "# dashboard_snapshots\n1000,800,0,90,,,,,,,,,,,,,,\n1060000,900,10,91,,,,,,,,,,,,,,",
+            rowCount = 2,
+            eventCount = 0,
+            limited = true,
+            windowMinutesUsed = 1,
+            firstTimestampMs = 1_785_182_650_255L,
+            lastTimestampMs = 1_785_182_710_255L,
+            uniqueTimestampCount = 2,
+            nearDuplicateRowCount = 0,
+        )
+        val payload = AiAnalysisPayloadBuilder.buildUserMessage(
+            sourceLabel = "saved:FB2-log-test.csv",
+            windowMinutes = 1,
+            snapshotText = "rpm=900",
+            healthText = "(none)",
+            dtcText = "(none)",
+            log = truncated,
+        )
+        assertTrue(payload.userMessage.contains("Requested lookback window: 1 minutes"))
+        assertTrue(payload.userMessage.contains("Actual selected window duration (seconds): 60"))
+        assertTrue(payload.userMessage.contains("Selected window start (UTC, app-computed): 2026-"))
+        assertTrue(payload.userMessage.contains("Do not invent or re-convert"))
+        assertTrue(payload.userMessage.contains("Honda ELD") || payload.userMessage.contains("ELD"))
+        assertEquals(60L, payload.actualDurationSeconds)
     }
 
     @Test

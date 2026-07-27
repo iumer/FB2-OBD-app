@@ -61,6 +61,11 @@ class AiReportStore(
         readingsAppendix: String = "",
         createdMs: Long = System.currentTimeMillis(),
         isDemo: Boolean = false,
+        actualDurationSeconds: Long? = null,
+        windowStartUtc: String? = null,
+        windowEndUtc: String? = null,
+        snapshotRows: Int? = null,
+        uniqueTimestamps: Int? = null,
     ): SavedAiReport {
         dir.mkdirs()
         val stamp = FILE_FMT.format(Date(createdMs))
@@ -82,6 +87,11 @@ class AiReportStore(
             readingsAppendix = readingsAppendix,
             createdMs = createdMs,
             isDemo = isDemo,
+            actualDurationSeconds = actualDurationSeconds,
+            windowStartUtc = windowStartUtc,
+            windowEndUtc = windowEndUtc,
+            snapshotRows = snapshotRows,
+            uniqueTimestamps = uniqueTimestamps,
         )
         file.writeText(text)
         mirrorToDownloads(file, name)
@@ -116,11 +126,21 @@ class AiReportStore(
             readingsAppendix: String,
             createdMs: Long,
             isDemo: Boolean = false,
+            actualDurationSeconds: Long? = null,
+            windowStartUtc: String? = null,
+            windowEndUtc: String? = null,
+            snapshotRows: Int? = null,
+            uniqueTimestamps: Int? = null,
         ): String = buildString {
             appendLine("# FB2-OBD AI diagnostic report")
             appendLine("# created_ms=$createdMs")
             appendLine("# source=$sourceLabel")
-            appendLine("# window_minutes=$windowMinutes")
+            appendLine("# requested_window_minutes=$windowMinutes")
+            actualDurationSeconds?.let { appendLine("# actual_window_seconds=$it") }
+            windowStartUtc?.let { appendLine("# window_start_utc=$it") }
+            windowEndUtc?.let { appendLine("# window_end_utc=$it") }
+            snapshotRows?.let { appendLine("# snapshot_rows=$it") }
+            uniqueTimestamps?.let { appendLine("# unique_timestamps=$it") }
             appendLine("# model=$model")
             appendLine("# vehicle=Honda Civic FB2 2013 R18 PK UG AT (D/D3/D2/D1)")
             if (isDemo) {

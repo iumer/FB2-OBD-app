@@ -215,6 +215,32 @@ When sensors were selected or requested but did not produce valid values:
 - Explain that the scanner or app was unable to obtain usable values for them.
 - State that conclusions are based only on the readings actually received.
 
+WORDING AND HONDA-SPECIFIC GUIDANCE (CRITICAL)
+
+Timestamps and window scope
+- The user message includes APP-COMPUTED ISO UTC start/end times and the actual selected-window duration in seconds. Copy those values exactly into Vehicle / session information. Do NOT invent dates and do NOT re-convert epoch milliseconds yourself (that caused wrong years in past reports).
+- Speak only about the SELECTED ANALYSIS WINDOW. Prefer "during the selected analysis window". Never say "throughout the session" unless the payload explicitly states the full session was sent.
+- If the payload notes row-cap or size truncation, say the window was size-capped and the actual time span may be shorter than the requested minutes.
+- Report sample counts from the payload (snapshot rows / unique timestamps). Do not imply you reviewed the entire saved drive file.
+
+Charging / battery voltage (Honda FB2 / R18)
+- Low voltage while the engine is running is "low or reduced charging-system / system voltage" — NOT "battery charge appears weak" and NOT proof of battery capacity failure.
+- Always list Honda electrical load detection (ELD) / controlled alternator output as a common plausible explanation, alongside aging battery, intermittent alternator output, cable/ground voltage drop, and measurement offset.
+- Do not recommend replacing the alternator from OBD voltage alone. Prefer battery/alternator/ground/cable verification steps.
+- If numeric voltage is low but app events say CHARGING OK (or the reverse), trust the numbers and note the label conflict. Do not write "No conflicting data" when events disagree with numeric readings.
+
+Fuel trims
+- Negative STFT means the ECU is subtracting fuel (short-term correction). Do NOT call this "richness" or a rich-running fault without LTFT and stronger supporting evidence.
+- Prefer: "Mild negative short-term fuel correction (about X% to Y%). May be normal; LTFT is needed before concluding a consistent rich/lean condition."
+
+Gear and transmission
+- Distinguish ECU-reported gear (CSV gear column / snapshot) from app-estimated gear (GEAR event lines). If the gear column is empty, say ECU gear was unavailable. If GEAR events exist, you may mention estimated gear changes but label them estimated with limited reliability.
+- App health scores such as transmission_pct=100 mean only that limited available checks passed — NOT that transmission mechanical health is fully verified.
+- Prefer: "No abnormal behavior visible in limited RPM/speed/estimated-gear data; transmission mechanical health was not directly assessed."
+
+Repeated / identical snapshot rows
+- Consecutive nearly identical rows may be poll/cache repeats, not independent operating events. Prefer observed ranges and duration over treating every duplicate row as a fresh independent sample.
+
 OUTPUT FORMAT (MANDATORY — TWO PARTS)
 
 Your entire reply MUST contain exactly these two markers, in this order:
@@ -391,7 +417,20 @@ Before returning the reply, verify that:
         val eventCount: Int,
         val limited: Boolean,
         val windowMinutesUsed: Int,
-    )
+        val firstTimestampMs: Long? = null,
+        val lastTimestampMs: Long? = null,
+        val uniqueTimestampCount: Int = 0,
+        /** Consecutive snapshot lines with identical sensor fields (time ignored). */
+        val nearDuplicateRowCount: Int = 0,
+    ) {
+        /** Wall-clock span of selected snapshots in seconds (0 if unknown/single). */
+        val actualDurationSeconds: Long
+            get() {
+                val a = firstTimestampMs ?: return 0L
+                val b = lastTimestampMs ?: return 0L
+                return ((b - a).coerceAtLeast(0L) / 1000L)
+            }
+    }
 
     data class Payload(
         val systemPrompt: String = SYSTEM_PROMPT,
@@ -400,6 +439,10 @@ Before returning the reply, verify that:
         val sampleCount: Int,
         val limited: Boolean,
         val sourceLabel: String,
+        val firstTimestampMs: Long? = null,
+        val lastTimestampMs: Long? = null,
+        val actualDurationSeconds: Long = 0L,
+        val uniqueTimestampCount: Int = 0,
     )
 
     /** Parsed dual-output model reply (screen brief + full report body). */
@@ -441,6 +484,51 @@ Before returning the reply, verify that:
 
     fun clampWindowMinutes(minutes: Int): Int =
         minutes.coerceIn(MIN_WINDOW_MINUTES, MAX_WINDOW_MINUTES)
+
+    /** App-owned UTC timestamp for the model — do not let the model convert epochs. */
+    fun formatIsoUtc(epochMs: Long): String {
+        val fmt = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss 'UTC'", java.util.Locale.US)
+        fmt.timeZone = java.util.TimeZone.getTimeZone("UTC")
+        return fmt.format(java.util.Date(epochMs))
+    }
+
+    private fun snapshotSensorKey(line: String): String {
+        val comma = line.indexOf(',')
+        return if (comma >= 0) line.substring(comma + 1) else line
+    }
+
+    private fun nearDuplicateCount(snaps: List<Pair<Long, String>>): Int {
+        if (snaps.size < 2) return 0
+        var dups = 0
+        var prev = snapshotSensorKey(snaps.first().second)
+        for (i in 1 until snaps.size) {
+            val key = snapshotSensorKey(snaps[i].second)
+            if (key == prev) dups++ else prev = key
+        }
+        return dups
+    }
+
+    private fun toTruncated(
+        csv: String,
+        snaps: List<Pair<Long, String>>,
+        evs: List<Pair<Long, String>>,
+        limited: Boolean,
+        mins: Int,
+    ): TruncatedLog {
+        val first = snaps.firstOrNull()?.first
+        val last = snaps.lastOrNull()?.first
+        return TruncatedLog(
+            csvText = csv,
+            rowCount = snaps.size,
+            eventCount = evs.size,
+            limited = limited,
+            windowMinutesUsed = mins,
+            firstTimestampMs = first,
+            lastTimestampMs = last,
+            uniqueTimestampCount = snaps.map { it.first }.toSet().size,
+            nearDuplicateRowCount = nearDuplicateCount(snaps),
+        )
+    }
 
     /**
      * Keep rows with [timestampMs] within the last [windowMinutes], newest first,
@@ -491,13 +579,7 @@ Before returning the reply, verify that:
             limited = true
             csv = csv.take(maxChars) + "\n# …truncated…\n"
         }
-        return TruncatedLog(
-            csvText = csv,
-            rowCount = usedSnaps.size,
-            eventCount = usedEvs.size,
-            limited = limited,
-            windowMinutesUsed = mins,
-        )
+        return toTruncated(csv, usedSnaps, usedEvs, limited, mins)
     }
 
     /**
@@ -567,6 +649,9 @@ Before returning the reply, verify that:
         return buildString {
             appendLine("engine_pct=${h.enginePct} transmission_pct=${h.transmissionPct} vehicle_pct=${h.vehiclePct}")
             appendLine("engine_ok=${h.engineDataOk} transmission_ok=${h.transmissionDataOk}")
+            appendLine(
+                "note: pct scores are limited available-check scores only — not a full mechanical health certificate",
+            )
             appendLine("engine_notes:")
             h.engineNotes.forEach { appendLine("- $it") }
             appendLine("transmission_notes:")
@@ -583,8 +668,11 @@ Before returning the reply, verify that:
         log: TruncatedLog,
         isDemo: Boolean = false,
     ): Payload {
+        val requested = clampWindowMinutes(windowMinutes)
         val limitedNote = if (log.limited) {
-            "NOTE: Log window was truncated for size/time. Confidence may be limited.\n"
+            "NOTE: Selected window was truncated for size/time (row or char cap). " +
+                "Actual span may be shorter than the requested $requested minutes. " +
+                "Confidence may be limited.\n"
         } else {
             ""
         }
@@ -598,12 +686,23 @@ Before returning the reply, verify that:
         } else {
             ""
         }
+        val startIso = log.firstTimestampMs?.let { formatIsoUtc(it) }
+        val endIso = log.lastTimestampMs?.let { formatIsoUtc(it) }
         val user = buildString {
             appendLine("Analyze this Honda Civic FB2 session.")
             appendLine("Source: $sourceLabel")
             if (isDemo) appendLine("Mode: DEMO (simulated)")
-            appendLine("Requested window: ${clampWindowMinutes(windowMinutes)} minutes")
-            appendLine("Samples in window: ${log.rowCount} snapshots, ${log.eventCount} events")
+            appendLine("Requested lookback window: $requested minutes")
+            appendLine("Actual selected window duration (seconds): ${log.actualDurationSeconds}")
+            if (startIso != null && endIso != null) {
+                appendLine("Selected window start (UTC, app-computed): $startIso")
+                appendLine("Selected window end (UTC, app-computed): $endIso")
+                appendLine("Copy these UTC timestamps into the report. Do not invent or re-convert epoch times.")
+            }
+            appendLine("Snapshot rows in payload: ${log.rowCount}")
+            appendLine("Unique snapshot timestamps: ${log.uniqueTimestampCount}")
+            appendLine("Near-duplicate consecutive snapshot rows: ${log.nearDuplicateRowCount}")
+            appendLine("Event rows in payload: ${log.eventCount}")
             append(demoNote)
             append(limitedNote)
             append(thinNote)
@@ -611,6 +710,9 @@ Before returning the reply, verify that:
             appendLine("Reminders:")
             appendLine("- Reply with ===SCREEN_BRIEF=== then ===FULL_REPORT=== exactly as specified.")
             appendLine("- Judge from numeric CSV/snapshot values; do not echo app ZONE/ALERT labels as facts.")
+            appendLine("- Scope findings to the selected analysis window only.")
+            appendLine("- Low running voltage → charging-system/system voltage (include Honda ELD); not “weak battery charge”.")
+            appendLine("- Negative STFT → mild fuel correction, not proven “richness”.")
             if (isDemo) {
                 appendLine("- State clearly in Vehicle and session information that this is DEMO / simulated data.")
             }
@@ -635,6 +737,10 @@ Before returning the reply, verify that:
             sampleCount = log.rowCount,
             limited = log.limited || log.rowCount < 5,
             sourceLabel = sourceLabel,
+            firstTimestampMs = log.firstTimestampMs,
+            lastTimestampMs = log.lastTimestampMs,
+            actualDurationSeconds = log.actualDurationSeconds,
+            uniqueTimestampCount = log.uniqueTimestampCount,
         )
     }
 

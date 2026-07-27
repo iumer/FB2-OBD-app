@@ -36,6 +36,7 @@ class AiReportStoreTest {
         assertTrue(text.contains("rpm=1800.0"))
         assertTrue(text.contains("# dashboard_snapshots"))
         assertTrue(text.contains("source=live_window_5min"))
+        assertTrue(text.contains("requested_window_minutes=5"))
     }
 
     @Test
