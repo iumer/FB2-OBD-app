@@ -1,0 +1,193 @@
+# FB2-OBD AI diagnostic report
+# created_ms=1785519643935
+# source=demo_live_window_1min
+# requested_window_minutes=1
+# actual_window_seconds=0
+# snapshot_rows=0
+# unique_timestamps=0
+# model=gpt-4o-mini-2024-07-18
+# vehicle=Honda Civic FB2 2013 R18 PK UG AT (D/D3/D2/D1)
+# mode=demo
+# note: Readings are from DEMO (simulated), not a live ELM/vehicle connection.
+
+===== AI FINDINGS =====
+
+AI VEHICLE ANALYSIS REPORT
+
+VEHICLE
+- Vehicle identification: Honda Civic FB2
+- Log source: demo_live_window_1min
+- Log filename, if provided: Not applicable
+- Analysis start: Not applicable
+- Analysis end: Not applicable
+- Analysis duration: 0 seconds
+- Total records reviewed: 0
+- Valid readings analyzed: 0
+
+DATA AVAILABILITY
+- Sensors requested or selected: RPM, speed, coolant temperature, intake temperature, load percentage, throttle percentage, timing, MAF, MAP, short-term fuel trim, long-term fuel trim, battery voltage, gear, fuel loop status
+- Sensors with valid data: None
+- Sensors without usable data: All requested sensors
+- Missing, N/A, unsupported, or failed responses: All snapshot data is unavailable
+- Sampling and connection quality: No snapshot data available for analysis
+- Suspected logger, scanner, or ELM limitations: Data is from demo mode, which does not provide usable readings.
+
+Some sensors were selected in the app but did not produce usable readings during this analysis. This is not by itself evidence of a vehicle fault. It may be caused by vehicle PID support, the ELM adapter, scanner communication, polling behavior, or an app limitation. This report is based only on the valid readings actually received. No missing values were assumed or estimated.
+
+OVERALL ASSESSMENT
+- Overall condition based on available data: Insufficient data for assessment
+- Overall confidence: Low
+- Concise explanation: No valid readings were captured during the analysis window.
+- Important limitations: The analysis is limited due to the absence of snapshot data.
+
+WHAT LOOKS NORMAL
+- Supported findings only: None available.
+
+CONCERNS OR ITEMS TO MONITOR
+No clear fault was identified from the available readings.
+
+SAFE NEXT CHECKS
+- Recommend using the app in a live mode with a proper ELM connection to gather usable data.
+- Additional sensors or operating conditions that would improve confidence include monitoring during actual driving conditions with valid snapshot data.
+
+ANALYZED VALUES
+None available.
+
+UNAVAILABLE OR UNUSED VALUES
+- Sensor name: RPM
+  - Requested or selected status: Selected
+  - Reason it could not be analyzed: No snapshot data available
+  - Mark as unavailable, unsupported, invalid, or insufficient: Unavailable
+
+- Sensor name: Speed
+  - Requested or selected status: Selected
+  - Reason it could not be analyzed: No snapshot data available
+  - Mark as unavailable, unsupported, invalid, or insufficient: Unavailable
+
+- Sensor name: Coolant Temperature
+  - Requested or selected status: Selected
+  - Reason it could not be analyzed: No snapshot data available
+  - Mark as unavailable, unsupported, invalid, or insufficient: Unavailable
+
+- Sensor name: Intake Temperature
+  - Requested or selected status: Selected
+  - Reason it could not be analyzed: No snapshot data available
+  - Mark as unavailable, unsupported, invalid, or insufficient: Unavailable
+
+- Sensor name: Load Percentage
+  - Requested or selected status: Selected
+  - Reason it could not be analyzed: No snapshot data available
+  - Mark as unavailable, unsupported, invalid, or insufficient: Unavailable
+
+- Sensor name: Throttle Percentage
+  - Requested or selected status: Selected
+  - Reason it could not be analyzed: No snapshot data available
+  - Mark as unavailable, unsupported, invalid, or insufficient: Unavailable
+
+- Sensor name: MAF
+  - Requested or selected status: Selected
+  - Reason it could not be analyzed: No snapshot data available
+  - Mark as unavailable, unsupported, invalid, or insufficient: Unavailable
+
+- Sensor name: MAP
+  - Requested or selected status: Selected
+  - Reason it could not be analyzed: No snapshot data available
+  - Mark as unavailable, unsupported, invalid, or insufficient: Unavailable
+
+- Sensor name: Short-term Fuel Trim
+  - Requested or selected status: Selected
+  - Reason it could not be analyzed: No snapshot data available
+  - Mark as unavailable, unsupported, invalid, or insufficient: Unavailable
+
+- Sensor name: Long-term Fuel Trim
+  - Requested or selected status: Selected
+  - Reason it could not be analyzed: No snapshot data available
+  - Mark as unavailable, unsupported, invalid, or insufficient: Unavailable
+
+- Sensor name: Battery Voltage
+  - Requested or selected status: Selected
+  - Reason it could not be analyzed: No snapshot data available
+  - Mark as unavailable, unsupported, invalid, or insufficient: Unavailable
+
+- Sensor name: Gear
+  - Requested or selected status: Selected
+  - Reason it could not be analyzed: No snapshot data available
+  - Mark as unavailable, unsupported, invalid, or insufficient: Unavailable
+
+ANALYSIS NOTES
+- Assumptions, if any: None
+- Missing context: No snapshot data available for analysis
+- Data-quality limitations: Limited to demo mode with no usable readings
+- Conditions that reduced confidence: Absence of valid data
+- Features or systems that could not be evaluated: All requested sensors
+- Whether any app zone/event labels disagreed with numeric evidence: No numeric evidence available.
+
+This analysis used only the readings present in the supplied live session or log file. Missing, unavailable, N/A, unsupported, or failed sensor responses were not treated as vehicle faults and were not estimated. App ALERT/ZONE labels were treated as heuristics only; conclusions are limited to the valid numeric data that the app and connected scanner were able to obtain.
+
+===== READINGS SENT TO AI (audit table) =====
+
+NOTE: These readings are from DEMO (simulated), not a live ELM/vehicle connection.
+
+--- Window metadata (app-computed) ---
+requested_window_minutes=1
+actual_window_seconds=0
+snapshot_rows=0
+unique_timestamps=0
+
+--- Latest snapshot ---
+rpm=3912.0
+speed_kmh=105.0
+coolant1_c=92.0
+coolant2_c=null
+intake_c=32.0
+ambient_c=null
+load_pct=63.16558344804138
+throttle_pct=45.02951523493919
+timing=12.0
+maf_gps=16.633116689608276
+map_kpa=93.16558344804139
+stft_pct=1.4123389143606688
+ltft_pct=null
+battery_v=14.115377959582482
+fuel_loop=CLOSED LOOP
+gear=3 source=ESTIMATED
+
+--- App health notes ---
+engine_pct=100 transmission_pct=null vehicle_pct=100
+engine_ok=true transmission_ok=false
+note: pct scores are limited available-check scores only — not a full mechanical health certificate
+engine_notes:
+- LTFT n/s on this ECU (common on FB2)
+- Core engine parameters look OK from available sensors
+transmission_notes:
+- No TCM sensors answered (ATF / gear / slip n/s) — cannot score transmission yet
+- Run Transmission or Honda probe; Mode 22 IDs may need remapping for this FB2
+
+--- DTCs ---
+(no DTCs loaded — open Faults to refresh if needed)
+Readiness DTC count: 2
+
+--- Time-window CSV (requested 1 min, actual 0s, 0 rows) ---
+# events
+time_ms,category,message
+1785519586169,TRIP,Trip Start
+1785519586169,ELM,Demo Connected
+1785519586613,GEAR,Estimated gear 2 → 3
+1785519586971,DTC,DTC present: 2 code(s)
+1785519590983,GEAR,Estimated gear 3 → 4
+1785519594788,GEAR,Estimated gear 4 → 3
+1785519597330,GEAR,Estimated gear 3 → 2
+1785519598594,GEAR,Estimated gear 2 → 1
+1785519598857,FUEL,Fuel system OPEN LOOP → CLOSED LOOP
+1785519598857,ZONE,coolant COLD → GOOD (NORMAL)
+1785519603917,GEAR,Estimated gear 1 → 2
+1785519605694,GEAR,Estimated gear 2 → 3
+1785519610004,GEAR,Estimated gear 3 → 4
+1785519613789,GEAR,Estimated gear 4 → 3
+1785519616583,GEAR,Estimated gear 3 → 2
+1785519617593,GEAR,Estimated gear 2 → 1
+1785519623172,GEAR,Estimated gear 1 → 2
+1785519624934,GEAR,Estimated gear 2 → 3
+
+# dashboard_snapshots
+time_ms,rpm,speed_kmh,coolant1_c,coolant2_c,intake_c,ambient_c,load_pct,throttle_pct,timing,maf_gps,map_kpa,stft_pct,ltft_pct,ecu_v,gear,fuel_loop
