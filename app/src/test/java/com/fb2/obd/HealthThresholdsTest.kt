@@ -43,8 +43,10 @@ class HealthThresholdsTest {
         assertEquals(8.0, loaded.mafIdleGoodMax, 0.001)
         assertEquals(1.0, loaded.mafIdleWarnMin, 0.001)
         assertEquals(2.5, loaded.mafCruiseGoodMin, 0.001)
-        // Non-MAF fields still round-trip from the old file when present.
-        assertEquals(90.0, loaded.coolantGoodMax, 0.001)
-        assertTrue(file.readText().contains("\"schemaVersion\": 3") || file.readText().contains("\"schemaVersion\":3"))
+        // Non-MAF fields: coolant/battery voice migrated on schema < 4.
+        assertEquals(95.0, loaded.coolantGoodMax, 0.001)
+        assertEquals(104.0, loaded.coolantVoiceAbove, 0.001)
+        assertEquals(11.8, loaded.battVoiceCriticalBelow, 0.001)
+        assertTrue(file.readText().contains("\"schemaVersion\": 4") || file.readText().contains("\"schemaVersion\":4"))
     }
 }

@@ -19,17 +19,21 @@ class HealthThresholdStore(private val file: File) {
             // Force new defaults for MAF fields once; user can still retune afterward.
             fun maf(key: String, fallback: Double) =
                 if (schema >= SCHEMA_VERSION) d(key, fallback) else fallback
+            // schema < 4 kept older coolant voice (110) / goodMax (90) and no battVoiceCriticalBelow.
+            fun coolantOrBatt(key: String, fallback: Double) =
+                if (schema >= SCHEMA_VERSION) d(key, fallback) else fallback
             HealthThresholds(
                 coolantColdBelow = d("coolantColdBelow", d.coolantColdBelow),
-                coolantGoodMax = d("coolantGoodMax", d.coolantGoodMax),
-                coolantWarnMax = d("coolantWarnMax", d.coolantWarnMax),
-                coolantElevatedMax = d("coolantElevatedMax", d.coolantElevatedMax),
-                coolantVoiceAbove = d("coolantVoiceAbove", d.coolantVoiceAbove),
+                coolantGoodMax = coolantOrBatt("coolantGoodMax", d.coolantGoodMax),
+                coolantWarnMax = coolantOrBatt("coolantWarnMax", d.coolantWarnMax),
+                coolantElevatedMax = coolantOrBatt("coolantElevatedMax", d.coolantElevatedMax),
+                coolantVoiceAbove = coolantOrBatt("coolantVoiceAbove", d.coolantVoiceAbove),
                 battRunGoodMin = d("battRunGoodMin", d.battRunGoodMin),
                 battRunGoodMax = d("battRunGoodMax", d.battRunGoodMax),
                 battRunWarnMin = d("battRunWarnMin", d.battRunWarnMin),
                 battRunElevatedMin = d("battRunElevatedMin", d.battRunElevatedMin),
                 battRunCriticalAbove = d("battRunCriticalAbove", d.battRunCriticalAbove),
+                battVoiceCriticalBelow = coolantOrBatt("battVoiceCriticalBelow", d.battVoiceCriticalBelow),
                 battRestGoodAbove = d("battRestGoodAbove", d.battRestGoodAbove),
                 battRestWarnAbove = d("battRestWarnAbove", d.battRestWarnAbove),
                 battRestElevatedAbove = d("battRestElevatedAbove", d.battRestElevatedAbove),
@@ -89,6 +93,7 @@ class HealthThresholdStore(private val file: File) {
             put("battRunWarnMin", t.battRunWarnMin)
             put("battRunElevatedMin", t.battRunElevatedMin)
             put("battRunCriticalAbove", t.battRunCriticalAbove)
+            put("battVoiceCriticalBelow", t.battVoiceCriticalBelow)
             put("battRestGoodAbove", t.battRestGoodAbove)
             put("battRestWarnAbove", t.battRestWarnAbove)
             put("battRestElevatedAbove", t.battRestElevatedAbove)
@@ -134,8 +139,11 @@ class HealthThresholdStore(private val file: File) {
         file.writeText(o.toString(2))
     }
 
+    /** True when the user (or a prior schema migration) has a saved thresholds file. */
+    fun hasUserEdits(): Boolean = file.exists()
+
     companion object {
-        /** Bumped when default MAF bands were retuned for R18 idle/coast (~2–8 g/s). */
-        const val SCHEMA_VERSION = 3
+        /** Bumped for FB2 coolant 95/100/103/104 voice + battery voice ≤11.8V. */
+        const val SCHEMA_VERSION = 4
     }
 }

@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
@@ -68,7 +69,10 @@ import com.fb2.obd.obd.MetricStatus
 import com.fb2.obd.obd.ObdPid
 import com.fb2.obd.obd.PidCategory
 import com.fb2.obd.obd.PidDefinition
+import com.fb2.obd.obd.SnapshotFreshness
 import com.fb2.obd.obd.StandardPidCatalog
+import com.fb2.obd.obd.VehicleProfile
+import com.fb2.obd.obd.VehicleProfileConfig
 import com.fb2.obd.obd.VehicleSnapshot
 import com.fb2.obd.obd.isEffectivelyBlank
 import com.fb2.obd.ui.theme.Accent
@@ -86,15 +90,13 @@ import kotlin.math.roundToInt
 
 /** Column count — prefer wider tiles on car HUs (readable while driving). */
 private fun dashColumnsForWidth(maxWidth: Dp): Int = when {
-    maxWidth >= 1700.dp -> 5
-    maxWidth >= 1200.dp -> 4
-    maxWidth >= 800.dp -> 3
+    maxWidth >= 1700.dp -> 4
+    maxWidth >= 1100.dp -> 3
     else -> 2
 }
 
 private fun denseColumnsForWidth(maxWidth: Dp): Int = when {
     maxWidth >= 1400.dp -> 3
-    maxWidth >= 900.dp -> 2
     else -> 2
 }
 
@@ -112,10 +114,10 @@ private object DashType {
     val tileStatus = 11.sp
     val tileHint = 10.sp
 
-    val heroH = 78.dp
-    val heroLabel = 12.sp
-    val heroValue = 32.sp
-    val heroUnit = 13.sp
+    val heroH = 92.dp
+    val heroLabel = 11.sp
+    val heroValue = 30.sp
+    val heroUnit = 12.sp
     val heroBadge = 11.sp
 
     val tab = 14.sp
@@ -127,10 +129,8 @@ private fun Double?.fmt(digits: Int = 0): String = this?.let {
     if (digits == 0) it.roundToInt().toString() else "%.${digits}f".format(it)
 } ?: "--"
 
-/** All former Settings “Live pages” — swipe right on the dashboard. */
-private val DashPageTitles = listOf(
-    "Dash", "Custom", "Idle", "Fuel", "Trip", "Trans", "Perf", "G-force", "Health",
-)
+/** Default FB2 pages; Generic OBD2 drops Trans via [VehicleProfileConfig]. */
+private val DefaultDashPageTitles = VehicleProfileConfig.dashPageTitles(VehicleProfile.FB2)
 
 /**
  * Landscape diagnostic cluster optimized for dense sensor visibility:
@@ -142,6 +142,8 @@ fun DashboardScreen(
     modifier: Modifier = Modifier,
     showEstimatedGear: Boolean = true,
     loggingActive: Boolean = false,
+    pageTitles: List<String> = DefaultDashPageTitles,
+    profileBadge: String = VehicleProfile.FB2.badge,
     onConnectClick: () -> Unit = {},
     onSettingsClick: () -> Unit = {},
     onDiagnosticsClick: () -> Unit = {},
@@ -184,18 +186,19 @@ fun DashboardScreen(
     onLatchHealth: (String, MetricStatus) -> MetricStatus = { _, status -> status },
 ) {
     val s = state.snapshot
-    val pagerState = rememberPagerState(pageCount = { DashPageTitles.size })
+    val titles = pageTitles.ifEmpty { DefaultDashPageTitles }
+    val pagerState = rememberPagerState(pageCount = { titles.size })
     val scope = rememberCoroutineScope()
     var pickerTarget by remember { mutableStateOf<PickerTarget?>(null) }
     var editMetric by remember { mutableStateOf<EditableMetric?>(null) }
 
-    LaunchedEffect(pagerState.currentPage) {
-        when (pagerState.currentPage) {
-            1 -> onRefreshCustom()
-            2 -> onRefreshIdle()
-            3 -> onRefreshFuel()
-            5 -> onRefreshTrans()
-            8 -> onRefreshHealth()
+    LaunchedEffect(pagerState.currentPage, titles) {
+        when (titles.getOrNull(pagerState.currentPage)) {
+            "Custom" -> onRefreshCustom()
+            "Idle" -> onRefreshIdle()
+            "Fuel" -> onRefreshFuel()
+            "Trans" -> onRefreshTrans()
+            "Health" -> onRefreshHealth()
         }
     }
 
@@ -208,6 +211,7 @@ fun DashboardScreen(
         TopBar(
             state = state,
             loggingActive = loggingActive,
+            profileBadge = profileBadge,
             onConnectClick = onConnectClick,
             onSettingsClick = onSettingsClick,
             onDiagnosticsClick = onDiagnosticsClick,
@@ -226,13 +230,15 @@ fun DashboardScreen(
             },
             gearConfidencePct = s.gearConfidencePct,
             thresholds = healthThresholds,
+            rpmFreshAtMs = s.freshAtMs[SnapshotFreshness.KEY_RPM],
+            speedFreshAtMs = s.freshAtMs[SnapshotFreshness.KEY_SPEED],
             onEditRpm = { editMetric = EditableMetric.RPM },
         )
 
         PageTabs(
-            titles = DashPageTitles,
+            titles = titles,
             current = pagerState.currentPage,
-            onSelect = { page -> scope.launch { pagerState.animateScrollToPage(page) } },
+            onSelect = { page -> scope.launch { pagerState.scrollToPage(page) } },
         )
 
         HorizontalPager(
@@ -241,11 +247,12 @@ fun DashboardScreen(
                 .fillMaxWidth()
                 .weight(1f),
             userScrollEnabled = true,
+            beyondBoundsPageCount = 0,
         ) { page ->
             // Fixed page slot so swipe does not resize the hero strip above.
             Box(modifier = Modifier.fillMaxSize()) {
-                when (page) {
-                    0 -> MetricsPage(
+                when (titles.getOrNull(page)) {
+                    "Dash" -> MetricsPage(
                         snapshot = s,
                         healthSnapshot = state.decisionSnapshot.takeUnless { it.isEffectivelyBlank() } ?: s,
                         latchHealth = onLatchHealth,
@@ -263,7 +270,7 @@ fun DashboardScreen(
                         onDeepSearch = onDeepSearch,
                         onEditThresholds = { editMetric = it },
                     )
-                    1 -> DenseSensorGridPage(
+                    "Custom" -> DenseSensorGridPage(
                         title = "Custom sensors",
                         rows = customValues.entries.map { it.key to it.value }.ifEmpty {
                             listOf("Tip" to "Tap Manage to pick sensors from the catalog")
@@ -276,12 +283,12 @@ fun DashboardScreen(
                         snapshot = s,
                         onEditThresholds = { editMetric = it },
                     )
-                    2 -> DenseSensorGridPage(
+                    "Idle" -> DenseSensorGridPage(
                         title = "Cold start / rough idle",
                         tip = idleTips.firstOrNull(),
                         rows = idleValues.entries
                             .filter { !it.key.matches(Regex("^[0-9A-Fa-f]{4,}$")) }
-                            .take(24)
+                            .take(16)
                             .map { it.key to it.value }
                             .ifEmpty { listOf("Status" to "Probing…") },
                         action = "Probe" to onRefreshIdle,
@@ -291,7 +298,7 @@ fun DashboardScreen(
                         snapshot = s,
                         onEditThresholds = { editMetric = it },
                     )
-                    3 -> DenseSensorGridPage(
+                    "Fuel" -> DenseSensorGridPage(
                         title = "Fuel system",
                         rows = fuelValues.entries.map { it.key to it.value }
                             .ifEmpty { listOf("Status" to "Probing…") },
@@ -302,7 +309,7 @@ fun DashboardScreen(
                         snapshot = s,
                         onEditThresholds = { editMetric = it },
                     )
-                    4 -> TripScreen(
+                    "Trip" -> TripScreen(
                         distanceKm = trip.distanceKm,
                         kmPerL = trip.kmPerLiter,
                         cost = trip.cost,
@@ -313,7 +320,7 @@ fun DashboardScreen(
                         embedded = true,
                         modifier = Modifier.fillMaxSize(),
                     )
-                    5 -> DenseSensorGridPage(
+                    "Trans" -> DenseSensorGridPage(
                         title = "Transmission",
                         rows = transValues.entries.map { it.key to it.value }
                             .ifEmpty { listOf("Status" to "Probing…") },
@@ -324,14 +331,14 @@ fun DashboardScreen(
                         snapshot = s,
                         onEditThresholds = { editMetric = it },
                     )
-                    6 -> PerformanceScreen(
+                    "Perf" -> PerformanceScreen(
                         state = performance,
                         onReset = onResetPerformance,
                         phase = performance.phase,
                         embedded = true,
                         modifier = Modifier.fillMaxSize(),
                     )
-                    7 -> GForceScreen(
+                    "G-force" -> GForceScreen(
                         ax = gForceAx,
                         ay = gForceAy,
                         az = gForceAz,
@@ -391,6 +398,8 @@ private fun CompactHeroStrip(
     gearSource: GearSource,
     gearConfidencePct: Int? = null,
     thresholds: HealthThresholds = HealthThresholds.DEFAULT,
+    rpmFreshAtMs: Long? = null,
+    speedFreshAtMs: Long? = null,
     onEditRpm: (() -> Unit)? = null,
 ) {
     val rpmStatus = HealthEvaluator.rpm(rpm, thresholds)
@@ -402,7 +411,7 @@ private fun CompactHeroStrip(
             .height(DashType.heroH)
             .clip(RoundedCornerShape(12.dp))
             .background(Surface)
-            .padding(horizontal = 12.dp, vertical = 8.dp),
+            .padding(horizontal = 12.dp, vertical = 6.dp),
         horizontalArrangement = Arrangement.SpaceEvenly,
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -416,6 +425,7 @@ private fun CompactHeroStrip(
                 rpmStatus.health.color()
             },
             valueColor = if (rpmStatus.health == Health.UNKNOWN) TextPrimary else rpmStatus.health.color(),
+            freshAtMs = rpmFreshAtMs,
             modifier = Modifier
                 .weight(1f)
                 .then(
@@ -430,8 +440,8 @@ private fun CompactHeroStrip(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center,
             modifier = Modifier
-                .widthIn(min = 72.dp)
-                .fillMaxHeight(),
+                .widthIn(min = 84.dp)
+                .padding(horizontal = 4.dp),
         ) {
             Text(
                 "GEAR",
@@ -439,6 +449,7 @@ private fun CompactHeroStrip(
                 fontSize = DashType.heroLabel,
                 fontWeight = FontWeight.Bold,
                 style = tightTextStyle(DashType.heroLabel),
+                maxLines = 1,
             )
             Text(
                 text = if (gearSource == GearSource.NONE) "–" else (gear?.toString() ?: "–"),
@@ -446,6 +457,7 @@ private fun CompactHeroStrip(
                 fontSize = DashType.heroValue,
                 fontWeight = FontWeight.Bold,
                 style = tightTextStyle(DashType.heroValue),
+                maxLines = 1,
             )
             val badge = when (gearSource) {
                 GearSource.ECU -> "ECU" to GoodGreen
@@ -460,7 +472,15 @@ private fun CompactHeroStrip(
                 color = badge.second,
                 fontSize = DashType.heroBadge,
                 fontWeight = FontWeight.Bold,
-                style = tightTextStyle(DashType.heroBadge),
+                // Avoid Trim.Both — "%" descender was clipped on phones.
+                style = TextStyle(
+                    fontSize = DashType.heroBadge,
+                    lineHeight = 14.sp,
+                    platformStyle = PlatformTextStyle(includeFontPadding = false),
+                ),
+                maxLines = 1,
+                softWrap = false,
+                modifier = Modifier.padding(top = 2.dp, bottom = 1.dp),
             )
         }
         HeroDigit(
@@ -469,6 +489,7 @@ private fun CompactHeroStrip(
             unit = "km/h",
             accent = GoodGreen,
             valueColor = speedStatus.health.color(),
+            freshAtMs = speedFreshAtMs,
             modifier = Modifier.weight(1f),
         )
     }
@@ -481,6 +502,7 @@ private fun HeroDigit(
     unit: String,
     accent: Color,
     valueColor: Color = TextPrimary,
+    freshAtMs: Long? = null,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -488,13 +510,16 @@ private fun HeroDigit(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
-        Text(
-            label,
-            color = accent,
-            fontSize = DashType.heroLabel,
-            fontWeight = FontWeight.Bold,
-            style = tightTextStyle(DashType.heroLabel),
-        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            FreshnessHeartbeat(lastOkMs = freshAtMs, size = 7.dp)
+            Text(
+                text = " $label",
+                color = accent,
+                fontSize = DashType.heroLabel,
+                fontWeight = FontWeight.Bold,
+                style = tightTextStyle(DashType.heroLabel),
+            )
+        }
         Row(verticalAlignment = Alignment.Bottom) {
             Text(
                 text = value,
@@ -671,7 +696,8 @@ private fun MetricsPage(
     )
 
     val extras = extraPidIds.mapNotNull { id -> catalog.find { it.id.equals(id, true) } }
-    val emptySlots = (0 until 6).toList()
+    // Cap empty "+" slots — 6 blank tiles hurt scroll on weak HUs.
+    val emptySlots = (0 until 3).toList()
 
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val columns = dashColumnsForWidth(maxWidth)
@@ -682,7 +708,7 @@ private fun MetricsPage(
             verticalArrangement = Arrangement.spacedBy(DashType.tileGap),
             contentPadding = PaddingValues(bottom = 4.dp),
         ) {
-        items(baseTiles) { t ->
+        items(baseTiles, key = { it.label }) { t ->
             val overrideId = tileOverrides[t.label]
             val overridePid = overrideId?.let { id -> catalog.find { it.id.equals(id, true) } }
             if (overridePid != null) {
@@ -701,6 +727,8 @@ private fun MetricsPage(
                     muted = unsupported,
                     deepSearchHint = unsupported,
                     remappedHint = true,
+                    freshAtMs = SnapshotFreshness.keyForTileLabel(overridePid.label)
+                        ?.let { snapshot.freshAtMs[it] },
                     onDeepSearch = if (unsupported) {
                         { onDeepSearch(overridePid.label, overridePid.id) }
                     } else {
@@ -739,6 +767,9 @@ private fun MetricsPage(
                     statusLabel = if (showNs) null else t.status?.label,
                     muted = showNs,
                     deepSearchHint = showNs,
+                    freshAtMs = t.pid?.let { SnapshotFreshness.keyFor(it) }
+                        ?.let { snapshot.freshAtMs[it] }
+                        ?.takeUnless { showNs },
                     onDeepSearch = if (showNs) {
                         { onDeepSearch(t.label, t.pid?.request) }
                     } else {
@@ -768,6 +799,9 @@ private fun MetricsPage(
                 health = null,
                 muted = unsupported,
                 deepSearchHint = unsupported,
+                freshAtMs = SnapshotFreshness.keyForTileLabel(pid.label)
+                    ?.let { snapshot.freshAtMs[it] }
+                    ?.takeUnless { unsupported },
                 onDeepSearch = if (unsupported) {
                     { onDeepSearch(pid.label, pid.id) }
                 } else {
@@ -857,7 +891,7 @@ private fun DenseSensorGridPage(
                 verticalArrangement = Arrangement.spacedBy(DashType.tileGap),
                 contentPadding = PaddingValues(bottom = 4.dp),
             ) {
-            items(rows) { (label, value) ->
+            items(rows, key = { it.first }) { (label, value) ->
                 val recovered = deepFoundValues[label]
                 val effective = recovered ?: value
                 val unsupported = recovered == null &&
@@ -972,6 +1006,7 @@ private fun DenseTile(
     muted: Boolean = false,
     deepSearchHint: Boolean = false,
     remappedHint: Boolean = false,
+    freshAtMs: Long? = null,
     onDeepSearch: (() -> Unit)? = null,
     onRemap: (() -> Unit)? = null,
     onEditThresholds: (() -> Unit)? = null,
@@ -1021,7 +1056,10 @@ private fun DenseTile(
             .padding(horizontal = 10.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.SpaceBetween,
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
             if (health != null && health != Health.UNKNOWN) {
                 Box(
                     modifier = Modifier
@@ -1037,6 +1075,7 @@ private fun DenseTile(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     style = tightTextStyle(DashType.tileLabel),
+                    modifier = Modifier.weight(1f, fill = false),
                 )
             } else {
                 Text(
@@ -1047,8 +1086,15 @@ private fun DenseTile(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     style = tightTextStyle(DashType.tileLabel),
+                    modifier = Modifier.weight(1f, fill = false),
                 )
             }
+            // Torque-style freshness blink (separate from health traffic-light dot).
+            FreshnessHeartbeat(
+                lastOkMs = if (muted) null else freshAtMs,
+                size = 8.dp,
+                modifier = Modifier.padding(start = 6.dp),
+            )
         }
         Row(verticalAlignment = Alignment.Bottom) {
             Text(
@@ -1389,6 +1435,7 @@ private fun TopBarChip(text: String, color: Color, onClick: () -> Unit) {
 private fun TopBar(
     state: DashboardUiState,
     loggingActive: Boolean,
+    profileBadge: String = VehicleProfile.FB2.badge,
     onConnectClick: () -> Unit,
     onSettingsClick: () -> Unit,
     onDiagnosticsClick: () -> Unit,
@@ -1402,12 +1449,20 @@ private fun TopBar(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(
-            text = "FB2 DIAG",
-            color = Accent,
-            fontSize = DashType.topTitle,
-            fontWeight = FontWeight.Bold,
-        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = "FB2 DIAG",
+                color = Accent,
+                fontSize = DashType.topTitle,
+                fontWeight = FontWeight.Bold,
+            )
+            Text(
+                text = "  $profileBadge",
+                color = TextMuted,
+                fontSize = DashType.topChip,
+                fontWeight = FontWeight.Bold,
+            )
+        }
         Row(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.horizontalScroll(rememberScrollState()),

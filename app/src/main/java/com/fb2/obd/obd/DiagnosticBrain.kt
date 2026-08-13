@@ -10,7 +10,12 @@ class SignalSmoother(
     private val values = mutableMapOf<String, Double>()
 
     fun push(key: String, sample: Double?): Double? {
-        if (sample == null) return values[key]
+        // Intentional null (stale-cleared Dash field) must clear EMA — otherwise
+        // health/voice keep a hours-old Coolant/Battery after sanitize blanks UI.
+        if (sample == null) {
+            values.remove(key)
+            return null
+        }
         val prev = values[key]
         val next = if (prev == null) sample else prev + alpha * (sample - prev)
         values[key] = next
@@ -37,15 +42,15 @@ class DiagnosticBrain(
      */
     fun decisionSnapshot(snapshot: VehicleSnapshot): VehicleSnapshot {
         return snapshot.copy(
-            batteryVolts = smoother.push("batt", snapshot.batteryVolts) ?: snapshot.batteryVolts,
-            stftPct = smoother.push("stft", snapshot.stftPct) ?: snapshot.stftPct,
-            ltftPct = smoother.push("ltft", snapshot.ltftPct) ?: snapshot.ltftPct,
-            mapKpa = smoother.push("map", snapshot.mapKpa) ?: snapshot.mapKpa,
-            coolantC = smoother.push("cool1", snapshot.coolantC) ?: snapshot.coolantC,
-            coolant2C = smoother.push("cool2", snapshot.coolant2C) ?: snapshot.coolant2C,
-            timingAdvance = smoother.push("timing", snapshot.timingAdvance) ?: snapshot.timingAdvance,
-            mafGps = smoother.push("maf", snapshot.mafGps) ?: snapshot.mafGps,
-            intakeC = smoother.push("intake", snapshot.intakeC) ?: snapshot.intakeC,
+            batteryVolts = smoother.push("batt", snapshot.batteryVolts),
+            stftPct = smoother.push("stft", snapshot.stftPct),
+            ltftPct = smoother.push("ltft", snapshot.ltftPct),
+            mapKpa = smoother.push("map", snapshot.mapKpa),
+            coolantC = smoother.push("cool1", snapshot.coolantC),
+            coolant2C = smoother.push("cool2", snapshot.coolant2C),
+            timingAdvance = smoother.push("timing", snapshot.timingAdvance),
+            mafGps = smoother.push("maf", snapshot.mafGps),
+            intakeC = smoother.push("intake", snapshot.intakeC),
         )
     }
 

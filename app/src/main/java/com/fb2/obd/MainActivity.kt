@@ -127,6 +127,9 @@ class MainActivity : ComponentActivity() {
                 var ax by remember { mutableFloatStateOf(0f) }
                 var ay by remember { mutableFloatStateOf(0f) }
                 var az by remember { mutableFloatStateOf(9.81f) }
+                // Only push accel into Compose ~2 Hz — SENSOR_DELAY_UI was recomposing
+                // the whole Dash ~16 Hz even when G-force page is not visible.
+                val lastAccelUiMs = remember { java.util.concurrent.atomic.AtomicLong(0L) }
 
                 var tick by remember { mutableIntStateOf(0) }
                 LaunchedEffect(screen) {
@@ -141,16 +144,23 @@ class MainActivity : ComponentActivity() {
                     val sensor = sm.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
                     val listener = object : SensorEventListener {
                         override fun onSensorChanged(event: SensorEvent) {
-                            ax = event.values[0]
-                            ay = event.values[1]
-                            az = event.values[2]
-                            viewModel.updatePhoneSensors(ax, ay, az)
+                            val x = event.values[0]
+                            val y = event.values[1]
+                            val z = event.values[2]
+                            viewModel.updatePhoneSensors(x, y, z)
+                            val now = android.os.SystemClock.elapsedRealtime()
+                            val prev = lastAccelUiMs.get()
+                            if (now - prev >= 500L && lastAccelUiMs.compareAndSet(prev, now)) {
+                                ax = x
+                                ay = y
+                                az = z
+                            }
                         }
 
                         override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) = Unit
                     }
                     if (sensor != null) {
-                        sm.registerListener(listener, sensor, SensorManager.SENSOR_DELAY_UI)
+                        sm.registerListener(listener, sensor, SensorManager.SENSOR_DELAY_NORMAL)
                     }
                     onDispose { sm.unregisterListener(listener) }
                 }
@@ -242,6 +252,8 @@ class MainActivity : ComponentActivity() {
                         modifier = Modifier.fillMaxSize(),
                         showEstimatedGear = settings.showEstimatedGear,
                         loggingActive = settings.valueLogging,
+                        pageTitles = viewModel.dashPageTitles,
+                        profileBadge = settings.vehicleProfile.badge,
                         onConnectClick = {
                             val needed = requiredBtPermissions().filter {
                                 ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
@@ -328,6 +340,7 @@ class MainActivity : ComponentActivity() {
                     Screen.SETTINGS -> {
                         SettingsScreen(
                             settings = settings,
+                            onVehicleProfileChange = viewModel::setVehicleProfile,
                             onToggleEstimatedGear = viewModel::setShowEstimatedGear,
                             onToggleVoiceAlerts = viewModel::setVoiceAlerts,
                             onToggleDuckMedia = viewModel::setDuckMediaDuringAlerts,
@@ -355,6 +368,8 @@ class MainActivity : ComponentActivity() {
                         nav = diagnosticsNav,
                         onBack = { screen = Screen.DASHBOARD },
                         modifier = Modifier.fillMaxSize(),
+                        showHondaModules = viewModel.showHondaModules,
+                        blurb = com.fb2.obd.obd.VehicleProfileConfig.diagHubBlurb(settings.vehicleProfile),
                     )
 
                     Screen.AI_ANALYZE -> {
