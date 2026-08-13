@@ -62,6 +62,10 @@ non-obvious cloud specifics.
   **and** CAN headers (`ATSH`). Until recently the app never sent headers — that
   is an app/protocol gap, not proof the ELM adapter is broken. **Triple-tap** any
   `n/s` tile to run **Deep research** (`DeepSearchKnowledgeBase` + `DeepSensorSearch`).
+  Deep research **pauses live Mode 01 polling** while it runs (so ATSH thrash cannot
+  interleave and lag the Dash), walks the full strategy list when the ECU link is
+  up, and reports how many header strategies were **skipped** if the link is down
+  — it does not silently fail after the first try while showing “1/10”.
 - Coolant2 (`0167`), Ambient (`0146`), and LTFT (`0107`) frequently return
   `n/s` on this Civic because the ECM support bitmask omits them — usually an
   ECU limitation. Deep search still forces the PID and tries ECM headers.

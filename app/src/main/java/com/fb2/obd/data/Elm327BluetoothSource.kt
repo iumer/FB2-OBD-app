@@ -60,6 +60,20 @@ class Elm327BluetoothSource(
     @Volatile
     private var connection: Elm327Connection? = null
 
+    /** When true, the Mode 01 poll loop yields so deep search owns the serial link. */
+    @Volatile
+    private var pollingPaused: Boolean = false
+
+    override fun pausePolling() {
+        pollingPaused = true
+        logger.logDebug(ObdLogger.Dir.INFO, "ELM poll paused")
+    }
+
+    override fun resumePolling() {
+        pollingPaused = false
+        logger.logDebug(ObdLogger.Dir.INFO, "ELM poll resumed")
+    }
+
     private val polled = listOf(
         ObdPid.ENGINE_RPM,
         ObdPid.SPEED,
@@ -129,6 +143,13 @@ class Elm327BluetoothSource(
                 val freshness = SnapshotFreshness()
                 var cycles = 0
                 while (isActive) {
+                    // Deep search / exclusive probes own the RFCOMM socket — do not
+                    // interleave Mode 01 polls (that caused laggy/wrong Dash values).
+                    while (pollingPaused && isActive) {
+                        delay(40L)
+                    }
+                    if (!isActive) break
+
                     cycles++
                     var responded = 0
                     var timedOut = 0
