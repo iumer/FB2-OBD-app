@@ -79,6 +79,7 @@ import com.fb2.obd.obd.isEffectivelyBlank
 import com.fb2.obd.ui.dash.OptAThemeDash
 import com.fb2.obd.ui.dash.OptBThemeDash
 import com.fb2.obd.ui.dash.OptCThemeDash
+import com.fb2.obd.ui.dash.ThemedTopBar
 import com.fb2.obd.ui.theme.Accent
 import com.fb2.obd.ui.theme.Background
 import com.fb2.obd.ui.theme.CritRed
@@ -86,6 +87,7 @@ import com.fb2.obd.ui.theme.GoodGreen
 import com.fb2.obd.ui.theme.Surface
 import com.fb2.obd.ui.theme.TextMuted
 import com.fb2.obd.ui.theme.TextPrimary
+import com.fb2.obd.ui.theme.ThemePalette
 import com.fb2.obd.ui.theme.WarnAmber
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -196,8 +198,11 @@ fun DashboardScreen(
     val scope = rememberCoroutineScope()
     var pickerTarget by remember { mutableStateOf<PickerTarget?>(null) }
     var editMetric by remember { mutableStateOf<EditableMetric?>(null) }
+    val palette = remember(dashTheme) { ThemePalette.of(dashTheme) }
+    val immersive = dashTheme != DashTheme.CLASSIC
 
-    LaunchedEffect(pagerState.currentPage, titles) {
+    LaunchedEffect(pagerState.currentPage, titles, immersive) {
+        if (immersive) return@LaunchedEffect
         when (titles.getOrNull(pagerState.currentPage)) {
             "Custom" -> onRefreshCustom()
             "Idle" -> onRefreshIdle()
@@ -207,202 +212,212 @@ fun DashboardScreen(
         }
     }
 
+    val gearSrc = if (!showEstimatedGear && s.gearSource == GearSource.ESTIMATED) {
+        GearSource.NONE
+    } else {
+        s.gearSource
+    }
+    val healthSnap = state.decisionSnapshot.takeUnless { it.isEffectivelyBlank() } ?: s
+
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(Background)
+            .background(palette.background)
             .padding(horizontal = 10.dp, vertical = 6.dp),
     ) {
-        TopBar(
-            state = state,
-            loggingActive = loggingActive,
-            profileBadge = profileBadge,
-            onConnectClick = onConnectClick,
-            onSettingsClick = onSettingsClick,
-            onDiagnosticsClick = onDiagnosticsClick,
-            onToggleLogging = onToggleLogging,
-            onMinimizeClick = onMinimizeClick,
-        )
+        if (immersive) {
+            ThemedTopBar(
+                theme = dashTheme,
+                palette = palette,
+                state = state,
+                loggingActive = loggingActive,
+                onConnectClick = onConnectClick,
+                onSettingsClick = onSettingsClick,
+                onDiagnosticsClick = onDiagnosticsClick,
+                onToggleLogging = onToggleLogging,
+                onMinimizeClick = onMinimizeClick,
+            )
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f),
+            ) {
+                when (dashTheme) {
+                    DashTheme.OPT_A -> OptAThemeDash(
+                        snapshot = s,
+                        healthSnapshot = healthSnap,
+                        thresholds = healthThresholds,
+                        gearSource = gearSrc,
+                        gearConfidencePct = s.gearConfidencePct,
+                        dtcCount = dtcCount,
+                        healthScore = health,
+                        latchHealth = onLatchHealth,
+                        palette = palette,
+                    )
+                    DashTheme.OPT_B -> OptBThemeDash(
+                        snapshot = s,
+                        healthSnapshot = healthSnap,
+                        thresholds = healthThresholds,
+                        gearSource = gearSrc,
+                        dtcCount = dtcCount,
+                        healthScore = health,
+                        latchHealth = onLatchHealth,
+                        palette = palette,
+                    )
+                    DashTheme.OPT_C -> OptCThemeDash(
+                        snapshot = s,
+                        healthSnapshot = healthSnap,
+                        thresholds = healthThresholds,
+                        gearSource = gearSrc,
+                        gearConfidencePct = s.gearConfidencePct,
+                        dtcCount = dtcCount,
+                        healthScore = health,
+                        latchHealth = onLatchHealth,
+                        palette = palette,
+                    )
+                    DashTheme.CLASSIC -> Unit
+                }
+            }
+        } else {
+            TopBar(
+                state = state,
+                loggingActive = loggingActive,
+                profileBadge = profileBadge,
+                onConnectClick = onConnectClick,
+                onSettingsClick = onSettingsClick,
+                onDiagnosticsClick = onDiagnosticsClick,
+                onToggleLogging = onToggleLogging,
+                onMinimizeClick = onMinimizeClick,
+            )
 
-        val onDashPage = titles.getOrNull(pagerState.currentPage) == "Dash"
-        val useAltTheme = dashTheme != DashTheme.CLASSIC && onDashPage
-        if (!useAltTheme) {
             CompactHeroStrip(
                 rpm = s.rpm,
                 speedKmh = s.speedKmh,
                 gear = s.gear,
-                gearSource = if (!showEstimatedGear && s.gearSource == GearSource.ESTIMATED) {
-                    GearSource.NONE
-                } else {
-                    s.gearSource
-                },
+                gearSource = gearSrc,
                 gearConfidencePct = s.gearConfidencePct,
                 thresholds = healthThresholds,
                 rpmFreshAtMs = s.freshAtMs[SnapshotFreshness.KEY_RPM],
                 speedFreshAtMs = s.freshAtMs[SnapshotFreshness.KEY_SPEED],
                 onEditRpm = { editMetric = EditableMetric.RPM },
             )
-        }
 
-        PageTabs(
-            titles = titles,
-            current = pagerState.currentPage,
-            onSelect = { page -> scope.launch { pagerState.scrollToPage(page) } },
-        )
+            PageTabs(
+                titles = titles,
+                current = pagerState.currentPage,
+                onSelect = { page -> scope.launch { pagerState.scrollToPage(page) } },
+            )
 
-        HorizontalPager(
-            state = pagerState,
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f),
-            // OptA vertical wheels fight nested horizontal swipe — use tabs on OptA Dash.
-            userScrollEnabled = !(
-                dashTheme == DashTheme.OPT_A &&
-                    titles.getOrNull(pagerState.currentPage) == "Dash"
-                ),
-            beyondBoundsPageCount = 0,
-        ) { page ->
-            // Fixed page slot so swipe does not resize the hero strip above.
-            Box(modifier = Modifier.fillMaxSize()) {
-                when (titles.getOrNull(page)) {
-                    "Dash" -> {
-                        val gearSrc = if (!showEstimatedGear && s.gearSource == GearSource.ESTIMATED) {
-                            GearSource.NONE
-                        } else {
-                            s.gearSource
-                        }
-                        val healthSnap = state.decisionSnapshot.takeUnless { it.isEffectivelyBlank() } ?: s
-                        when (dashTheme) {
-                            DashTheme.CLASSIC -> MetricsPage(
-                                snapshot = s,
-                                healthSnapshot = healthSnap,
-                                latchHealth = onLatchHealth,
-                                extraPidIds = extraPidIds,
-                                extraValues = extraValues,
-                                tileOverrides = tileOverrides,
-                                deepFoundValues = deepFoundValues,
-                                catalog = catalog,
-                                thresholds = healthThresholds,
-                                dtcCount = dtcCount,
-                                healthScore = health,
-                                onEmptySlotClick = { pickerTarget = PickerTarget.ExtraSlot(it) },
-                                onRemapBaseTile = { label -> pickerTarget = PickerTarget.RemapBase(label) },
-                                onRemapExtra = { index -> pickerTarget = PickerTarget.ExtraSlot(index) },
-                                onDeepSearch = onDeepSearch,
-                                onEditThresholds = { editMetric = it },
-                            )
-                            DashTheme.OPT_A -> OptAThemeDash(
-                                snapshot = s,
-                                healthSnapshot = healthSnap,
-                                thresholds = healthThresholds,
-                                gearSource = gearSrc,
-                                gearConfidencePct = s.gearConfidencePct,
-                                dtcCount = dtcCount,
-                                healthScore = health,
-                                latchHealth = onLatchHealth,
-                            )
-                            DashTheme.OPT_B -> OptBThemeDash(
-                                snapshot = s,
-                                healthSnapshot = healthSnap,
-                                thresholds = healthThresholds,
-                                gearSource = gearSrc,
-                                dtcCount = dtcCount,
-                                healthScore = health,
-                                latchHealth = onLatchHealth,
-                            )
-                            DashTheme.OPT_C -> OptCThemeDash(
-                                snapshot = s,
-                                healthSnapshot = healthSnap,
-                                thresholds = healthThresholds,
-                                gearSource = gearSrc,
-                                gearConfidencePct = s.gearConfidencePct,
-                                dtcCount = dtcCount,
-                                healthScore = health,
-                                latchHealth = onLatchHealth,
-                            )
-                        }
+            HorizontalPager(
+                state = pagerState,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f),
+                userScrollEnabled = true,
+                beyondBoundsPageCount = 0,
+            ) { page ->
+                Box(modifier = Modifier.fillMaxSize()) {
+                    when (titles.getOrNull(page)) {
+                        "Dash" -> MetricsPage(
+                            snapshot = s,
+                            healthSnapshot = healthSnap,
+                            latchHealth = onLatchHealth,
+                            extraPidIds = extraPidIds,
+                            extraValues = extraValues,
+                            tileOverrides = tileOverrides,
+                            deepFoundValues = deepFoundValues,
+                            catalog = catalog,
+                            thresholds = healthThresholds,
+                            dtcCount = dtcCount,
+                            healthScore = health,
+                            onEmptySlotClick = { pickerTarget = PickerTarget.ExtraSlot(it) },
+                            onRemapBaseTile = { label -> pickerTarget = PickerTarget.RemapBase(label) },
+                            onRemapExtra = { index -> pickerTarget = PickerTarget.ExtraSlot(index) },
+                            onDeepSearch = onDeepSearch,
+                            onEditThresholds = { editMetric = it },
+                        )
+                        "Custom" -> DenseSensorGridPage(
+                            title = "Custom sensors",
+                            rows = customValues.entries.map { it.key to it.value }.ifEmpty {
+                                listOf("Tip" to "Tap Manage to pick sensors from the catalog")
+                            },
+                            action = "Probe" to onRefreshCustom,
+                            secondaryAction = "Manage" to onManageCustom,
+                            deepFoundValues = deepFoundValues,
+                            onDeepSearch = onDeepSearch,
+                            thresholds = healthThresholds,
+                            snapshot = s,
+                            onEditThresholds = { editMetric = it },
+                        )
+                        "Idle" -> DenseSensorGridPage(
+                            title = "Cold start / rough idle",
+                            tip = idleTips.firstOrNull(),
+                            rows = idleValues.entries
+                                .filter { !it.key.matches(Regex("^[0-9A-Fa-f]{4,}$")) }
+                                .take(16)
+                                .map { it.key to it.value }
+                                .ifEmpty { listOf("Status" to "Probing…") },
+                            action = "Probe" to onRefreshIdle,
+                            deepFoundValues = deepFoundValues,
+                            onDeepSearch = onDeepSearch,
+                            thresholds = healthThresholds,
+                            snapshot = s,
+                            onEditThresholds = { editMetric = it },
+                        )
+                        "Fuel" -> DenseSensorGridPage(
+                            title = "Fuel system",
+                            rows = fuelValues.entries.map { it.key to it.value }
+                                .ifEmpty { listOf("Status" to "Probing…") },
+                            action = "Refresh" to onRefreshFuel,
+                            deepFoundValues = deepFoundValues,
+                            onDeepSearch = onDeepSearch,
+                            thresholds = healthThresholds,
+                            snapshot = s,
+                            onEditThresholds = { editMetric = it },
+                        )
+                        "Trip" -> TripScreen(
+                            distanceKm = trip.distanceKm,
+                            kmPerL = trip.kmPerLiter,
+                            cost = trip.cost,
+                            idleSec = trip.idleSeconds,
+                            fuelPrice = trip.fuelPrice,
+                            onReset = onResetTrip,
+                            onFuelPriceChange = onSetFuelPrice,
+                            embedded = true,
+                            modifier = Modifier.fillMaxSize(),
+                        )
+                        "Trans" -> DenseSensorGridPage(
+                            title = "Transmission",
+                            rows = transValues.entries.map { it.key to it.value }
+                                .ifEmpty { listOf("Status" to "Probing…") },
+                            action = "Probe" to onRefreshTrans,
+                            deepFoundValues = deepFoundValues,
+                            onDeepSearch = onDeepSearch,
+                            thresholds = healthThresholds,
+                            snapshot = s,
+                            onEditThresholds = { editMetric = it },
+                        )
+                        "Perf" -> PerformanceScreen(
+                            state = performance,
+                            onReset = onResetPerformance,
+                            phase = performance.phase,
+                            embedded = true,
+                            modifier = Modifier.fillMaxSize(),
+                        )
+                        "G-force" -> GForceScreen(
+                            ax = gForceAx,
+                            ay = gForceAy,
+                            az = gForceAz,
+                            embedded = true,
+                            modifier = Modifier.fillMaxSize(),
+                        )
+                        else -> HealthScoresScreen(
+                            score = health,
+                            onRefresh = onRefreshHealth,
+                            embedded = true,
+                            modifier = Modifier.fillMaxSize(),
+                        )
                     }
-                    "Custom" -> DenseSensorGridPage(
-                        title = "Custom sensors",
-                        rows = customValues.entries.map { it.key to it.value }.ifEmpty {
-                            listOf("Tip" to "Tap Manage to pick sensors from the catalog")
-                        },
-                        action = "Probe" to onRefreshCustom,
-                        secondaryAction = "Manage" to onManageCustom,
-                        deepFoundValues = deepFoundValues,
-                        onDeepSearch = onDeepSearch,
-                        thresholds = healthThresholds,
-                        snapshot = s,
-                        onEditThresholds = { editMetric = it },
-                    )
-                    "Idle" -> DenseSensorGridPage(
-                        title = "Cold start / rough idle",
-                        tip = idleTips.firstOrNull(),
-                        rows = idleValues.entries
-                            .filter { !it.key.matches(Regex("^[0-9A-Fa-f]{4,}$")) }
-                            .take(16)
-                            .map { it.key to it.value }
-                            .ifEmpty { listOf("Status" to "Probing…") },
-                        action = "Probe" to onRefreshIdle,
-                        deepFoundValues = deepFoundValues,
-                        onDeepSearch = onDeepSearch,
-                        thresholds = healthThresholds,
-                        snapshot = s,
-                        onEditThresholds = { editMetric = it },
-                    )
-                    "Fuel" -> DenseSensorGridPage(
-                        title = "Fuel system",
-                        rows = fuelValues.entries.map { it.key to it.value }
-                            .ifEmpty { listOf("Status" to "Probing…") },
-                        action = "Refresh" to onRefreshFuel,
-                        deepFoundValues = deepFoundValues,
-                        onDeepSearch = onDeepSearch,
-                        thresholds = healthThresholds,
-                        snapshot = s,
-                        onEditThresholds = { editMetric = it },
-                    )
-                    "Trip" -> TripScreen(
-                        distanceKm = trip.distanceKm,
-                        kmPerL = trip.kmPerLiter,
-                        cost = trip.cost,
-                        idleSec = trip.idleSeconds,
-                        fuelPrice = trip.fuelPrice,
-                        onReset = onResetTrip,
-                        onFuelPriceChange = onSetFuelPrice,
-                        embedded = true,
-                        modifier = Modifier.fillMaxSize(),
-                    )
-                    "Trans" -> DenseSensorGridPage(
-                        title = "Transmission",
-                        rows = transValues.entries.map { it.key to it.value }
-                            .ifEmpty { listOf("Status" to "Probing…") },
-                        action = "Probe" to onRefreshTrans,
-                        deepFoundValues = deepFoundValues,
-                        onDeepSearch = onDeepSearch,
-                        thresholds = healthThresholds,
-                        snapshot = s,
-                        onEditThresholds = { editMetric = it },
-                    )
-                    "Perf" -> PerformanceScreen(
-                        state = performance,
-                        onReset = onResetPerformance,
-                        phase = performance.phase,
-                        embedded = true,
-                        modifier = Modifier.fillMaxSize(),
-                    )
-                    "G-force" -> GForceScreen(
-                        ax = gForceAx,
-                        ay = gForceAy,
-                        az = gForceAz,
-                        embedded = true,
-                        modifier = Modifier.fillMaxSize(),
-                    )
-                    else -> HealthScoresScreen(
-                        score = health,
-                        onRefresh = onRefreshHealth,
-                        embedded = true,
-                        modifier = Modifier.fillMaxSize(),
-                    )
                 }
             }
         }

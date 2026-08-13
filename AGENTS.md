@@ -69,8 +69,9 @@ non-obvious cloud specifics.
     deep search skips Mode 22/Honda strategies; estimated gear off by default;
     Mode 0A permanent DTCs on Faults. Use Generic as the safe fallback for any
     OBD-II car (Mira / Corolla / Civic X / etc.).
-- **Dash Theme** (Settings → Theme): Classic / OptA / OptB / OptC. Presentation
-  only — same snapshot, health, MIN bubble, AI analysis, alerts, logging.
+- **Dash Theme** (Settings → Theme dropdown): Classic / OptA / OptB / OptC.
+  Classic keeps Idle/Perf swipe tabs. Opt themes are immersive clusters (themed
+  chrome + colours; ☰ menu for Settings/DIAG/MIN/LOG). Same readings/alerts/AI.
 - Honda enhanced packs in `HondaPidCatalog` use Mode 22 placeholders
   (`2211xx`…`2219xx`). Real FB2 / market-specific ECUs often need different IDs
   **and** CAN headers (`ATSH`). Until recently the app never sent headers — that
