@@ -4,6 +4,7 @@ import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -13,6 +14,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
@@ -39,10 +42,17 @@ import com.fb2.obd.ui.theme.GoodGreen
 import com.fb2.obd.ui.theme.Surface
 import com.fb2.obd.ui.theme.TextMuted
 import com.fb2.obd.ui.theme.TextPrimary
+import com.fb2.obd.ui.theme.ThemePalette
 import com.fb2.obd.ui.theme.WarnAmber
 
 @Composable
-fun ScreenHeader(title: String, onBack: () -> Unit, action: (@Composable () -> Unit)? = null) {
+fun ScreenHeader(
+    title: String,
+    onBack: () -> Unit,
+    accent: androidx.compose.ui.graphics.Color = Accent,
+    surface: androidx.compose.ui.graphics.Color = Surface,
+    action: (@Composable () -> Unit)? = null,
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -53,13 +63,13 @@ fun ScreenHeader(title: String, onBack: () -> Unit, action: (@Composable () -> U
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
                 text = "\u2190 Back",
-                color = Accent,
+                color = accent,
                 fontSize = 15.sp,
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier
                     .clip(RoundedCornerShape(8.dp))
                     .clickable { onBack() }
-                    .background(Surface)
+                    .background(surface)
                     .padding(horizontal = 14.dp, vertical = 8.dp),
             )
             Text(
@@ -99,18 +109,24 @@ fun SettingsScreen(
     modifier: Modifier = Modifier,
     scrollState: ScrollState = rememberScrollState(),
 ) {
+    val palette = ThemePalette.of(settings.dashTheme)
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(Background)
+            .background(palette.background)
             .padding(16.dp)
             .verticalScroll(scrollState),
     ) {
-        ScreenHeader(title = "Settings", onBack = onBack)
+        ScreenHeader(
+            title = "Settings",
+            onBack = onBack,
+            accent = palette.accent,
+            surface = palette.surface,
+        )
 
         Text(
-            text = "Live pages are on Dash swipe tabs. Faults / deep scan / VIN open from DIAGNOSTICS.",
-            color = TextMuted,
+            text = "Classic: Dash swipe tabs. Opt themes: immersive cluster (☰ menu for Settings/DIAG/MIN/LOG). Faults/AI via DIAG.",
+            color = palette.textMuted,
             fontSize = 12.sp,
             modifier = Modifier.padding(bottom = 8.dp),
         )
@@ -122,28 +138,28 @@ fun SettingsScreen(
             fontSize = 12.sp,
             modifier = Modifier.padding(bottom = 8.dp),
         )
-        VehicleProfile.entries.forEach { profile ->
-            ProfileRow(
-                profile = profile,
-                selected = settings.vehicleProfile == profile,
-                onClick = { onVehicleProfileChange(profile) },
-            )
-        }
+        SettingDropdown(
+            label = settings.vehicleProfile.displayName,
+            subtitle = settings.vehicleProfile.subtitle,
+            accent = palette.accent,
+            options = VehicleProfile.entries.map { it.displayName to it.subtitle },
+            onSelectIndex = { onVehicleProfileChange(VehicleProfile.entries[it]) },
+        )
 
         SectionLabel("Theme")
         Text(
-            text = "Dash tab only. Classic / OptA / OptB / OptC — same readings, MIN, AI, alerts.",
+            text = "Classic keeps Idle/Perf tabs. OptA/B/C are full immersive looks (hamburger → Settings/DIAG/MIN/LOG).",
             color = TextMuted,
             fontSize = 12.sp,
             modifier = Modifier.padding(bottom = 8.dp),
         )
-        DashTheme.entries.forEach { theme ->
-            ThemeRow(
-                theme = theme,
-                selected = settings.dashTheme == theme,
-                onClick = { onDashThemeChange(theme) },
-            )
-        }
+        SettingDropdown(
+            label = settings.dashTheme.displayName,
+            subtitle = settings.dashTheme.subtitle,
+            accent = palette.accent,
+            options = DashTheme.entries.map { it.displayName to it.subtitle },
+            onSelectIndex = { onDashThemeChange(DashTheme.entries[it]) },
+        )
 
         SectionLabel("Gear")
         ToggleRow(
@@ -295,6 +311,55 @@ private fun SectionLabel(text: String) {
         fontWeight = FontWeight.Bold,
         modifier = Modifier.padding(top = 18.dp, bottom = 8.dp),
     )
+}
+
+
+@Composable
+private fun SettingDropdown(
+    label: String,
+    subtitle: String,
+    accent: androidx.compose.ui.graphics.Color,
+    options: List<Pair<String, String>>,
+    onSelectIndex: (Int) -> Unit,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = 10.dp),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(12.dp))
+                .background(Surface)
+                .clickable { expanded = true }
+                .padding(14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(label, color = TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                Text(subtitle, color = TextMuted, fontSize = 12.sp)
+            }
+            Text("▾", color = accent, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+        }
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            options.forEachIndexed { index, (title, sub) ->
+                DropdownMenuItem(
+                    text = {
+                        Column {
+                            Text(title, fontWeight = FontWeight.SemiBold)
+                            Text(sub, color = TextMuted, fontSize = 12.sp)
+                        }
+                    },
+                    onClick = {
+                        expanded = false
+                        onSelectIndex(index)
+                    },
+                )
+            }
+        }
+    }
 }
 
 @Composable

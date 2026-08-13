@@ -32,7 +32,7 @@ Keep these fixed. If a change might touch one of these areas, re-verify it.
 | I43 | Gear confidence % clipped on phone hero | Fixed | Taller hero; badge text without Trim.Both; wider gear column |
 | I44 | Battery voice too aggressive; ELM under-reads vs multimeter | Fixed | Voice only ≤11.8V; prefer ATRV over 0142; 3-sample ATRV median |
 | I45 | FB2 coolant bands/voice retune (green≤95 … alarm≥104) | Fixed | Defaults + schema 4 migration: 95/100/103 colours, voice ≥104 |
-| I46 | Want selectable Dash themes Classic/OptA/OptB/OptC | Fixed | Settings → Theme; presentation-only; one universal APK link |
+| I46 | Want selectable Dash themes Classic/OptA/OptB/OptC | Fixed | Settings dropdown Theme; immersive Opt chrome; Classic-only page tabs; sample-faithful OptA/B/C |
 | I09 | Debug log Share does nothing | Fixed | FileProvider share; HU fallback → Downloads/FB2-Diag + path dialog |
 | I10 | Value LOG Share broken / truncated (large CSV as EXTRA_TEXT) | Fixed | FileProvider CSV share; same HU save fallback |
 | I11 | Voice alerts must keep working with screen off (real ELM) | Fixed | `ObdMonitorForegroundService` + wake lock + AudioFocus |

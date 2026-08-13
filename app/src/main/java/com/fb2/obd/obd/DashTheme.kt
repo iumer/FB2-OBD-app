@@ -12,22 +12,22 @@ enum class DashTheme(
     CLASSIC(
         id = "classic",
         displayName = "Classic",
-        subtitle = "Current layout — digital RPM/Gear/Speed strip + sensor tile grid.",
+        subtitle = "Original multi-page Dash (Idle / Perf / Trip tabs).",
     ),
     OPT_A(
         id = "opt_a",
         displayName = "OptA",
-        subtitle = "Red Orbit — gear centre, RPM/Speed bars, scrollable metric wheels.",
+        subtitle = "Red Orbit — immersive red cluster + scroll wheels.",
     ),
     OPT_B(
         id = "opt_b",
         displayName = "OptB",
-        subtitle = "Twin Gauge — circular RPM + Speed with gear between them.",
+        subtitle = "Twin Gauge — circular RPM/Speed instrument cluster.",
     ),
     OPT_C(
         id = "opt_c",
         displayName = "OptC",
-        subtitle = "Pulse Deck — speed focus, RPM arc, rounded metric cards.",
+        subtitle = "Pulse Deck — orange pulse cluster + metric cards.",
     ),
     ;
 
