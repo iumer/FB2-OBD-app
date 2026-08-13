@@ -4,6 +4,14 @@ package com.fb2.obd.ui.dash
 
 import android.graphics.Paint
 import android.graphics.Typeface
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -11,6 +19,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -18,6 +27,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -29,15 +39,13 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
-import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
@@ -48,11 +56,15 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.launch
 import com.fb2.obd.obd.EditableMetric
 import com.fb2.obd.obd.GearSource
 import com.fb2.obd.obd.Health
@@ -485,8 +497,11 @@ fun OptCThemeDash(
                     ),
                 contentAlignment = Alignment.Center,
             ) {
-                PulseRpmGauge(fraction = rpmFrac, palette = palette)
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                PulseRpmGauge(fraction = rpmFrac, palette = palette, modifier = Modifier.size(168.dp))
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.padding(top = 8.dp),
+                ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         FreshnessHeartbeat(
                             lastOkMs = snapshot.freshAtMs[SnapshotFreshness.KEY_RPM],
@@ -497,17 +512,18 @@ fun OptCThemeDash(
                     Text(
                         text = snapshot.rpm?.roundToInt()?.toString() ?: "--",
                         color = palette.textPrimary,
-                        fontSize = 30.sp,
+                        fontSize = 34.sp,
                         fontWeight = FontWeight.Black,
                         fontFamily = DigitFace,
                     )
-                    Text("rpm", color = palette.accentSoft, fontSize = 11.sp)
+                    Text("rpm", color = palette.accentSoft, fontSize = 12.sp)
                 }
             }
 
             Box(
                 modifier = Modifier
                     .weight(0.32f)
+                    .fillMaxHeight()
                     .themeMetricGestures(
                         onRemap = { onRemapBase("Gear") },
                         onDeepSearch = { onDeepSearch("Gear", null) },
@@ -599,11 +615,13 @@ fun OptCThemeDash(
             Column(
                 modifier = Modifier
                     .weight(0.34f)
+                    .fillMaxHeight()
                     .themeMetricGestures(
                         onRemap = { onRemapBase("Speed") },
                         onDeepSearch = { onDeepSearch("Speed", "010D") },
                     ),
                 horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center,
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     FreshnessHeartbeat(
@@ -612,13 +630,16 @@ fun OptCThemeDash(
                     )
                     Text(" SPEED", color = palette.textMuted, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                 }
-                Box(contentAlignment = Alignment.Center) {
-                    Canvas(modifier = Modifier.size(width = 150.dp, height = 56.dp)) {
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier.height(72.dp).fillMaxWidth(),
+                ) {
+                    Canvas(modifier = Modifier.matchParentSize()) {
                         for (i in 0..6) {
                             drawLine(
                                 color = palette.accent.copy(alpha = 0.10f + i * 0.05f),
                                 start = Offset(0f, size.height * 0.2f + i * 5.5f),
-                                end = Offset(size.width * 0.38f, size.height * 0.2f + i * 5.5f),
+                                end = Offset(size.width * 0.28f, size.height * 0.2f + i * 5.5f),
                                 strokeWidth = 2.5f,
                             )
                         }
@@ -726,7 +747,7 @@ private fun OrbitValuePanel(
     }
 }
 
-/** 3-value fade/scale wheel matching Red Orbit sample. */
+/** Fixed-slot vertical slider — focus stays centered; values circulate in/out. */
 @Composable
 private fun OrbitWheel(
     metrics: List<DashThemeMetric>,
@@ -737,16 +758,25 @@ private fun OrbitWheel(
     modifier: Modifier = Modifier,
 ) {
     val pages = metrics.ifEmpty { listOf(DashThemeMetric("–", "--", "")) }
-    var center by remember(pages.size) {
-        mutableIntStateOf(if (pages.size > 1) 1 else 0)
+    // Track by label so live value updates never shift the selected slot
+    var centerLabel by remember {
+        mutableStateOf(pages.getOrNull(1)?.label ?: pages.first().label)
     }
-    var dragAcc by remember { mutableFloatStateOf(0f) }
+    val center = pages.indexOfFirst { it.label == centerLabel }.takeIf { it >= 0 } ?: 0
+    val scope = rememberCoroutineScope()
+    val dragPx = remember { Animatable(0f) }
+    val density = LocalDensity.current
 
     fun idx(delta: Int): Int {
         if (pages.isEmpty()) return 0
         var i = (center + delta) % pages.size
         if (i < 0) i += pages.size
         return i
+    }
+
+    fun step(dir: Int) {
+        val next = pages[idx(dir)]
+        centerLabel = next.label
     }
 
     Column(
@@ -758,63 +788,112 @@ private fun OrbitWheel(
                 ),
             )
             .border(2.dp, palette.accent.copy(alpha = 0.8f), RoundedCornerShape(999.dp))
-            .pointerInput(pages.size) {
+            .pointerInput(pages.size, centerLabel) {
                 detectVerticalDragGestures(
-                    onDragEnd = { dragAcc = 0f },
-                    onVerticalDrag = { _, dragAmount ->
-                        dragAcc += dragAmount
-                        if (dragAcc > 42f) {
-                            center = idx(-1)
-                            dragAcc = 0f
-                        } else if (dragAcc < -42f) {
-                            center = idx(1)
-                            dragAcc = 0f
+                    onDragEnd = {
+                        scope.launch {
+                            val threshold = with(density) { 28.dp.toPx() }
+                            when {
+                                dragPx.value > threshold -> step(-1)
+                                dragPx.value < -threshold -> step(1)
+                            }
+                            dragPx.animateTo(0f, spring(stiffness = 500f, dampingRatio = 0.85f))
+                        }
+                    },
+                    onVerticalDrag = { change, amount ->
+                        change.consume()
+                        scope.launch {
+                            dragPx.snapTo((dragPx.value + amount).coerceIn(-80f, 80f))
                         }
                     },
                 )
             }
-            .padding(vertical = 8.dp, horizontal = 3.dp),
+            .padding(vertical = 6.dp, horizontal = 2.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Text("▴", color = palette.accent.copy(alpha = 0.85f), fontSize = 12.sp, fontWeight = FontWeight.Bold)
-        Column(
-            modifier = Modifier.weight(1f).fillMaxWidth(),
-            verticalArrangement = Arrangement.SpaceEvenly,
-            horizontalAlignment = Alignment.CenterHorizontally,
+        Text("▴", color = palette.accent.copy(alpha = 0.9f), fontSize = 14.sp, fontWeight = FontWeight.Bold)
+        BoxWithConstraints(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth(),
         ) {
-            OrbitWheelItem(
-                metric = pages[idx(-1)],
-                focused = false,
-                palette = palette,
-                onRemapBase = onRemapBase,
-                onDeepSearch = onDeepSearch,
-                onEditThresholds = onEditThresholds,
-                modifier = Modifier.alpha(0.38f).scale(0.82f),
-            )
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(modifier = Modifier.width(5.dp).height(2.dp).background(palette.accent))
-                OrbitWheelItem(
-                    metric = pages[idx(0)],
-                    focused = true,
-                    palette = palette,
-                    onRemapBase = onRemapBase,
-                    onDeepSearch = onDeepSearch,
-                    onEditThresholds = onEditThresholds,
-                    modifier = Modifier.weight(1f).scale(1.05f),
+            val slotH = maxHeight / 3
+            // Sliding strip of 3 fixed slots — focus frame is always the middle band
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clip(RoundedCornerShape(8.dp)),
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .offset { IntOffset(0, dragPx.value.roundToInt()) },
+                ) {
+                    listOf(-1, 0, 1).forEach { delta ->
+                        val focused = delta == 0
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(slotH),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            AnimatedContent(
+                                targetState = pages[idx(delta)],
+                                transitionSpec = {
+                                    (slideInVertically { h -> h / 4 } + fadeIn()) togetherWith
+                                        (slideOutVertically { h -> -h / 4 } + fadeOut())
+                                },
+                                label = "orbit-slot-$delta",
+                                contentKey = { it.label },
+                                modifier = Modifier.fillMaxSize(),
+                            ) { metric ->
+                                OrbitWheelItem(
+                                    metric = metric,
+                                    focused = focused,
+                                    palette = palette,
+                                    onRemapBase = onRemapBase,
+                                    onDeepSearch = onDeepSearch,
+                                    onEditThresholds = onEditThresholds,
+                                )
+                            }
+                        }
+                    }
+                }
+                // Fixed focus chrome — never moves with content height
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.Center)
+                        .fillMaxWidth()
+                        .height(slotH)
+                        .padding(horizontal = 3.dp)
+                        .border(1.5.dp, palette.accent.copy(alpha = 0.85f), RoundedCornerShape(14.dp)),
                 )
-                Box(modifier = Modifier.width(5.dp).height(2.dp).background(palette.accent))
+                // Top/bottom fade → picker/slider look
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .height(slotH * 0.55f)
+                        .align(Alignment.TopCenter)
+                        .background(
+                            Brush.verticalGradient(
+                                listOf(palette.surface.copy(alpha = 0.92f), Color.Transparent),
+                            ),
+                        ),
+                )
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .height(slotH * 0.55f)
+                        .align(Alignment.BottomCenter)
+                        .background(
+                            Brush.verticalGradient(
+                                listOf(Color.Transparent, palette.surface.copy(alpha = 0.92f)),
+                            ),
+                        ),
+                )
             }
-            OrbitWheelItem(
-                metric = pages[idx(1)],
-                focused = false,
-                palette = palette,
-                onRemapBase = onRemapBase,
-                onDeepSearch = onDeepSearch,
-                onEditThresholds = onEditThresholds,
-                modifier = Modifier.alpha(0.38f).scale(0.82f),
-            )
         }
-        Text("▾", color = palette.accent.copy(alpha = 0.85f), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+        Text("▾", color = palette.accent.copy(alpha = 0.9f), fontSize = 14.sp, fontWeight = FontWeight.Bold)
     }
 }
 
@@ -829,53 +908,54 @@ private fun OrbitWheelItem(
     modifier: Modifier = Modifier,
 ) {
     val (remap, deep, edit) = metric.interaction(onRemapBase, onDeepSearch, onEditThresholds)
+    // Fixed-height cell so focus never jumps when labels/values change length
     Column(
         modifier = modifier
-            .then(
-                if (focused) {
-                    Modifier
-                        .padding(horizontal = 2.dp)
-                        .border(1.dp, palette.accent.copy(alpha = 0.7f), RoundedCornerShape(12.dp))
-                        .background(palette.accent.copy(alpha = 0.08f), RoundedCornerShape(12.dp))
-                        .padding(vertical = 4.dp, horizontal = 2.dp)
-                } else {
-                    Modifier.padding(vertical = 2.dp)
-                },
-            )
+            .fillMaxWidth()
+            .fillMaxHeight()
+            .padding(horizontal = 4.dp, vertical = 2.dp)
             .themeMetricGestures(remap, deep, edit),
         horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
     ) {
         ThemeIcon(
             iconKindForMetric(metric.label),
-            palette.accent.copy(alpha = if (focused) 1f else 0.7f),
-            size = if (focused) 14.dp else 11.dp,
+            palette.accent.copy(alpha = if (focused) 1f else 0.55f),
+            size = if (focused) 16.dp else 13.dp,
         )
         Spacer(modifier = Modifier.height(2.dp))
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            FreshnessHeartbeat(lastOkMs = metric.freshAtMs, size = if (focused) 6.dp else 4.dp)
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            FreshnessHeartbeat(lastOkMs = metric.freshAtMs, size = if (focused) 7.dp else 5.dp)
             Text(
                 text = " ${metric.label.uppercase()}",
-                color = palette.accentSoft.copy(alpha = if (focused) 1f else 0.75f),
-                fontSize = if (focused) 8.sp else 7.sp,
+                color = palette.accentSoft.copy(alpha = if (focused) 1f else 0.55f),
+                fontSize = if (focused) 11.sp else 10.sp,
                 fontWeight = FontWeight.Bold,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
+                textAlign = TextAlign.Center,
             )
         }
         Text(
-            text = metric.value,
+            text = buildString {
+                append(metric.value)
+                if (metric.unit.isNotEmpty()) append(' ').append(metric.unit)
+            },
             color = when {
                 metric.health == Health.UNKNOWN -> palette.textPrimary
                 else -> metric.health.color()
-            },
-            fontSize = if (focused) 18.sp else 13.sp,
-            fontWeight = FontWeight.Bold,
+            }.copy(alpha = if (focused) 1f else 0.55f),
+            fontSize = if (focused) 22.sp else 15.sp,
+            fontWeight = FontWeight.Black,
             fontFamily = DigitFace,
             maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            textAlign = TextAlign.Center,
         )
-        if (metric.unit.isNotEmpty()) {
-            Text(metric.unit, color = palette.textMuted, fontSize = if (focused) 9.sp else 8.sp)
-        }
     }
 }
 
@@ -1108,58 +1188,86 @@ private fun TwinBottomChip(
 }
 
 @Composable
-private fun PulseRpmGauge(fraction: Float, palette: ThemePalette) {
-    Canvas(modifier = Modifier.size(156.dp)) {
+private fun PulseRpmGauge(
+    fraction: Float,
+    palette: ThemePalette,
+    modifier: Modifier = Modifier,
+) {
+    Canvas(modifier = modifier.size(168.dp)) {
         val cx = size.width / 2f
         val cy = size.height / 2f
-        val r = size.minDimension * 0.42f
-        val stroke = Stroke(width = 13f, cap = StrokeCap.Round)
+        val r = size.minDimension * 0.44f
+        val start = 135f
+        val sweep = 270f
+        val f = fraction.coerceIn(0f, 1f)
+
+        // Outer halo
+        drawCircle(
+            color = palette.accent.copy(alpha = 0.08f),
+            radius = r + 14f,
+            center = Offset(cx, cy),
+        )
         drawArc(
             color = palette.track,
-            startAngle = 135f,
-            sweepAngle = 270f,
+            startAngle = start,
+            sweepAngle = sweep,
             useCenter = false,
             topLeft = Offset(cx - r, cy - r),
             size = Size(r * 2, r * 2),
-            style = stroke,
+            style = Stroke(width = 16f, cap = StrokeCap.Round),
         )
         drawArc(
-            brush = Brush.sweepGradient(
-                listOf(palette.accent.copy(alpha = 0.5f), palette.accent),
-                center = Offset(cx, cy),
-            ),
-            startAngle = 135f,
-            sweepAngle = 270f * fraction,
+            color = palette.accent.copy(alpha = 0.9f),
+            startAngle = start,
+            sweepAngle = sweep * f,
             useCenter = false,
             topLeft = Offset(cx - r, cy - r),
             size = Size(r * 2, r * 2),
-            style = stroke,
+            style = Stroke(width = 16f, cap = StrokeCap.Round),
         )
+
         val labelPaint = Paint().apply {
             color = palette.textMuted.toArgb()
             textAlign = Paint.Align.CENTER
-            textSize = 16f
+            textSize = 20f
             isAntiAlias = true
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
         }
         for (i in 0..7) {
-            val a = Math.toRadians(135.0 + 270.0 * i / 7.0)
-            val rOuter = r + 4f
-            val rInner = r - 10f
+            val a = Math.toRadians((start + sweep * i / 7.0))
+            val rOuter = r + 6f
+            val rInner = r - 12f
             drawLine(
-                color = palette.textMuted.copy(alpha = 0.8f),
+                color = palette.textPrimary.copy(alpha = 0.7f),
                 start = Offset(cx + rInner * cos(a).toFloat(), cy + rInner * sin(a).toFloat()),
                 end = Offset(cx + rOuter * cos(a).toFloat(), cy + rOuter * sin(a).toFloat()),
-                strokeWidth = 2.5f,
+                strokeWidth = if (i % 2 == 0) 3.5f else 2f,
             )
-            val lr = r - 22f
+            val lr = r - 26f
             drawContext.canvas.nativeCanvas.drawText(
                 i.toString(),
                 cx + lr * cos(a).toFloat(),
-                cy + lr * sin(a).toFloat() + 5f,
+                cy + lr * sin(a).toFloat() + 6f,
                 labelPaint,
             )
         }
+
+        // Orange tapered needle (Pulse Deck style — matches OptB weight, OptC color)
+        val na = Math.toRadians((start + sweep * f).toDouble())
+        val tip = Offset(cx + (r - 10f) * cos(na).toFloat(), cy + (r - 10f) * sin(na).toFloat())
+        val back = Offset(cx - 16f * cos(na).toFloat(), cy - 16f * sin(na).toFloat())
+        val perp = na + Math.PI / 2
+        fun needle(halfW: Float) = Path().apply {
+            moveTo(tip.x, tip.y)
+            lineTo((back.x + halfW * cos(perp)).toFloat(), (back.y + halfW * sin(perp)).toFloat())
+            lineTo((back.x - halfW * cos(perp)).toFloat(), (back.y - halfW * sin(perp)).toFloat())
+            close()
+        }
+        drawPath(needle(8f), color = palette.accent.copy(alpha = 0.25f))
+        drawPath(needle(4.5f), color = palette.accent)
+        drawCircle(color = Color(0xFF101820), radius = 12f, center = Offset(cx, cy))
+        drawCircle(color = palette.accent, radius = 7f, center = Offset(cx, cy))
+        drawCircle(color = Color.White.copy(alpha = 0.9f), radius = 2.8f, center = Offset(cx, cy))
     }
 }
 
@@ -1182,13 +1290,13 @@ private fun PulseCard(
             .padding(horizontal = 10.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        ThemeIcon(iconKindForMetric(m.label), palette.accent, size = 18.dp)
+        ThemeIcon(iconKindForMetric(m.label), palette.accent, size = 20.dp)
         Spacer(modifier = Modifier.width(8.dp))
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 m.label.uppercase(),
                 color = palette.textMuted,
-                fontSize = 10.sp,
+                fontSize = 11.sp,
                 fontWeight = FontWeight.Bold,
                 maxLines = 1,
             )
@@ -1198,7 +1306,7 @@ private fun PulseCard(
                     if (m.unit.isNotEmpty()) append(' ').append(m.unit)
                 },
                 color = palette.textPrimary,
-                fontSize = 17.sp,
+                fontSize = 20.sp,
                 fontWeight = FontWeight.Bold,
                 fontFamily = DigitFace,
                 maxLines = 1,
