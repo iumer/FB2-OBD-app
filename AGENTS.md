@@ -62,6 +62,10 @@ non-obvious cloud specifics.
   **and** CAN headers (`ATSH`). Until recently the app never sent headers — that
   is an app/protocol gap, not proof the ELM adapter is broken. **Triple-tap** any
   `n/s` tile to run **Deep research** (`DeepSearchKnowledgeBase` + `DeepSensorSearch`).
+  Deep research **pauses live Mode 01 polling** while it runs (so ATSH thrash cannot
+  interleave and lag the Dash), walks the full strategy list when the ECU link is
+  up, and reports how many header strategies were **skipped** if the link is down
+  — it does not silently fail after the first try while showing “1/10”.
 - Coolant2 (`0167`), Ambient (`0146`), and LTFT (`0107`) frequently return
   `n/s` on this Civic because the ECM support bitmask omits them — usually an
   ECU limitation. Deep search still forces the PID and tries ECM headers.
@@ -128,11 +132,24 @@ non-obvious cloud specifics.
   values. API key in Settings → AI analysis (`platform.openai.com` — Plus ≠ API).
   No conversational chat in-app.
 - **ELM idle drop:** cheap clones often hang mid-poll. The app uses short PID
-  timeouts (~650 ms poll / ~450 ms probe), skips repeatedly-failing PIDs, keeps
-  last-good Dash values, and retries RFCOMM forever with backoff (UI shows
-  `RETRY`). A blank reconnect frame must not wipe the Dash or fake `Engine Stop`.
+  timeouts (~650 ms poll / ~450 ms probe), skips repeatedly-failing **secondary**
+  PIDs, keeps last-good Dash values briefly, and retries RFCOMM forever with
+  backoff (UI shows `RETRY`). **RPM + Speed are never fail-streak-skipped**
+  (`PidPollPlanner`); secondary PIDs rotate (~4/cycle) so cycles stay short.
+  Speed older than ~2.5s without a fresh decode is cleared (`SnapshotFreshness`)
+  so the Dash does not freeze on a false km/h while RPM still updates. A blank
+  reconnect frame must not wipe the Dash or fake `Engine Stop`.
   **Battery** prefers `ATRV` (adapter rail voltage, Torque-style) every cycle even
   during `UNABLE` — do not gate ATRV on ECU bus health.
+  **Freshness LEDs:** each Dash tile / hero RPM+Speed shows a green heartbeat that
+  blinks when that field was successfully decoded (`VehicleSnapshot.freshAtMs`).
+  Dim while recent, dark when stale — same idea as Torque Pro’s green blink.
+  Safety fields (RPM/Speed/Coolant/Battery/MAF/MAP) clear to `n/s` after TTL;
+  estimated gear only when both RPM and Speed are fresh.
+  **Long-haul LOG:** session CSV is checkpointed to disk ~every 60s (and on STOP)
+  so a crash does not lose the whole drive. Snapshot rows throttled to ~1 Hz.
+  Bus-lost soft-recover caps at 3 then RFCOMM reconnect; ATRV-only is not a
+  healthy Mode 01 cycle. Dash-extra refresh does not softRecover every 5s.
 - **Screen off / background:** real ELM sessions start
   `ObdMonitorForegroundService` (`connectedDevice` FGS + sticky notification +
   `PARTIAL_WAKE_LOCK`). Demo mode must not start it. Voice alerts play a short

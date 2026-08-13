@@ -68,6 +68,7 @@ import com.fb2.obd.obd.MetricStatus
 import com.fb2.obd.obd.ObdPid
 import com.fb2.obd.obd.PidCategory
 import com.fb2.obd.obd.PidDefinition
+import com.fb2.obd.obd.SnapshotFreshness
 import com.fb2.obd.obd.StandardPidCatalog
 import com.fb2.obd.obd.VehicleSnapshot
 import com.fb2.obd.obd.isEffectivelyBlank
@@ -226,6 +227,8 @@ fun DashboardScreen(
             },
             gearConfidencePct = s.gearConfidencePct,
             thresholds = healthThresholds,
+            rpmFreshAtMs = s.freshAtMs[SnapshotFreshness.KEY_RPM],
+            speedFreshAtMs = s.freshAtMs[SnapshotFreshness.KEY_SPEED],
             onEditRpm = { editMetric = EditableMetric.RPM },
         )
 
@@ -391,6 +394,8 @@ private fun CompactHeroStrip(
     gearSource: GearSource,
     gearConfidencePct: Int? = null,
     thresholds: HealthThresholds = HealthThresholds.DEFAULT,
+    rpmFreshAtMs: Long? = null,
+    speedFreshAtMs: Long? = null,
     onEditRpm: (() -> Unit)? = null,
 ) {
     val rpmStatus = HealthEvaluator.rpm(rpm, thresholds)
@@ -416,6 +421,7 @@ private fun CompactHeroStrip(
                 rpmStatus.health.color()
             },
             valueColor = if (rpmStatus.health == Health.UNKNOWN) TextPrimary else rpmStatus.health.color(),
+            freshAtMs = rpmFreshAtMs,
             modifier = Modifier
                 .weight(1f)
                 .then(
@@ -469,6 +475,7 @@ private fun CompactHeroStrip(
             unit = "km/h",
             accent = GoodGreen,
             valueColor = speedStatus.health.color(),
+            freshAtMs = speedFreshAtMs,
             modifier = Modifier.weight(1f),
         )
     }
@@ -481,6 +488,7 @@ private fun HeroDigit(
     unit: String,
     accent: Color,
     valueColor: Color = TextPrimary,
+    freshAtMs: Long? = null,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -488,13 +496,16 @@ private fun HeroDigit(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
-        Text(
-            label,
-            color = accent,
-            fontSize = DashType.heroLabel,
-            fontWeight = FontWeight.Bold,
-            style = tightTextStyle(DashType.heroLabel),
-        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            FreshnessHeartbeat(lastOkMs = freshAtMs, size = 7.dp)
+            Text(
+                text = " $label",
+                color = accent,
+                fontSize = DashType.heroLabel,
+                fontWeight = FontWeight.Bold,
+                style = tightTextStyle(DashType.heroLabel),
+            )
+        }
         Row(verticalAlignment = Alignment.Bottom) {
             Text(
                 text = value,
@@ -701,6 +712,8 @@ private fun MetricsPage(
                     muted = unsupported,
                     deepSearchHint = unsupported,
                     remappedHint = true,
+                    freshAtMs = SnapshotFreshness.keyForTileLabel(overridePid.label)
+                        ?.let { snapshot.freshAtMs[it] },
                     onDeepSearch = if (unsupported) {
                         { onDeepSearch(overridePid.label, overridePid.id) }
                     } else {
@@ -739,6 +752,9 @@ private fun MetricsPage(
                     statusLabel = if (showNs) null else t.status?.label,
                     muted = showNs,
                     deepSearchHint = showNs,
+                    freshAtMs = t.pid?.let { SnapshotFreshness.keyFor(it) }
+                        ?.let { snapshot.freshAtMs[it] }
+                        ?.takeUnless { showNs },
                     onDeepSearch = if (showNs) {
                         { onDeepSearch(t.label, t.pid?.request) }
                     } else {
@@ -768,6 +784,9 @@ private fun MetricsPage(
                 health = null,
                 muted = unsupported,
                 deepSearchHint = unsupported,
+                freshAtMs = SnapshotFreshness.keyForTileLabel(pid.label)
+                    ?.let { snapshot.freshAtMs[it] }
+                    ?.takeUnless { unsupported },
                 onDeepSearch = if (unsupported) {
                     { onDeepSearch(pid.label, pid.id) }
                 } else {
@@ -972,6 +991,7 @@ private fun DenseTile(
     muted: Boolean = false,
     deepSearchHint: Boolean = false,
     remappedHint: Boolean = false,
+    freshAtMs: Long? = null,
     onDeepSearch: (() -> Unit)? = null,
     onRemap: (() -> Unit)? = null,
     onEditThresholds: (() -> Unit)? = null,
@@ -1021,7 +1041,10 @@ private fun DenseTile(
             .padding(horizontal = 10.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.SpaceBetween,
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
             if (health != null && health != Health.UNKNOWN) {
                 Box(
                     modifier = Modifier
@@ -1037,6 +1060,7 @@ private fun DenseTile(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     style = tightTextStyle(DashType.tileLabel),
+                    modifier = Modifier.weight(1f, fill = false),
                 )
             } else {
                 Text(
@@ -1047,8 +1071,15 @@ private fun DenseTile(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     style = tightTextStyle(DashType.tileLabel),
+                    modifier = Modifier.weight(1f, fill = false),
                 )
             }
+            // Torque-style freshness blink (separate from health traffic-light dot).
+            FreshnessHeartbeat(
+                lastOkMs = if (muted) null else freshAtMs,
+                size = 8.dp,
+                modifier = Modifier.padding(start = 6.dp),
+            )
         }
         Row(verticalAlignment = Alignment.Bottom) {
             Text(

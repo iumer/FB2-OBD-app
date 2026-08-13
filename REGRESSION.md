@@ -20,7 +20,13 @@ Keep these fixed. If a change might touch one of these areas, re-verify it.
 | I05 | MAF flagged CRITICAL while Torque shows normal | Fixed | Schema 3 R18 bands; coasting = `COAST OK`; PID `0110` SAE decode unit-tested |
 | I06 | Suspicion wrong PID/protocol for other sensors | Partially | Compare vs Torque trackLog; LTFT missing in **both** apps (ECU). Re-check if new mismatches appear |
 | I07 | Rough Idle page stuck on “Probing…” | Fixed | Live Dash prefill; Mode 01 first; skip Mode 22 if bus unhealthy; shorter probe timeout |
-| I08 | App very laggy / slow | Fixed | Timeouts ~650/450 ms; core-PID-only while recovering; less ATSP thrash |
+| I08 | App very laggy / slow | Fixed | Timeouts ~650/450 ms; core-PID-only while recovering; less ATSP thrash; **PID rotate** (heroes every cycle, ≤4 secondaries) |
+| I34 | Speed stuck / under-reads (e.g. 65 vs ~98 km/h) while RPM moves | Fixed | `PidPollPlanner` never fail-streak-skips RPM/Speed; `SnapshotFreshness` clears Speed after 2.5s stale; unit test recreates freeze |
+| I36 | Want Torque-style green blink when a value is freshly fetched | Fixed | `FreshnessHeartbeat` on hero + Dash tiles; `VehicleSnapshot.freshAtMs` from ELM/Demo |
+| I37 | Long-trip: LOG only in RAM until STOP (crash loses hours) | Fixed | Checkpoint CSV to disk every ~60s from LOG start; finalize on STOP |
+| I38 | Long-trip: UNABLE soft-recover loops forever (sticky Dash) | Fixed | ATRV-only ≠ healthy cycle; hard reconnect after 3 soft recovers |
+| I39 | Long-trip: Coolant/Battery/MAF/RPM sticky last-good | Fixed | Sanitize clears safety fields after TTL; smoother clears on null; EST gear needs fresh RPM+Speed |
+| I40 | Deep search shows 1/N then fails; Dash goes laggy during search | Fixed | Pause Mode 01 poll during deep search; walk full strategy list when bus OK; honest “Skipped N” when ECU link down |
 | I09 | Debug log Share does nothing | Fixed | FileProvider share; HU fallback → Downloads/FB2-Diag + path dialog |
 | I10 | Value LOG Share broken / truncated (large CSV as EXTRA_TEXT) | Fixed | FileProvider CSV share; same HU save fallback |
 | I11 | Voice alerts must keep working with screen off (real ELM) | Fixed | `ObdMonitorForegroundService` + wake lock + AudioFocus |
@@ -77,8 +83,9 @@ All three Gradle tasks must pass. Copy the APK into `dist/` so sideload artifact
 | `VoiceAlertRulesTest` | Voice critical thresholds |
 | `VoiceAlertDebouncerTest` | Per-key hold (coolant ~4s / battery ~25s) before sound |
 | `DiagnosticBrainTest` | EMA smoothing + zone hysteresis latch |
+| `SpeedFreshnessAndPollPlannerTest` | Hero RPM/Speed always polled; stale Speed cleared (65-vs-98 freeze) |
 | `AiAnalysisPayloadBuilderTest` | FB2 prompt + live/saved window truncation |
-| `DiagnosticEventTrackerTest` | Zone / fuel-loop events |
+| `DiagnosticEventTrackerTest` | Zone / fuel-loop events; battery ZONE hysteresis (no ELD flap spam) |
 | `DtcDecoderTest` | Mode 03/07 DTC frames |
 | `DeepSearchKnowledgeBaseTest` | Strategy order + demo ATRV/ambient recovery |
 | `FeatureExpansionTest` | Catalogs, readiness, VIN, trip, `n/s` overlay, probes |

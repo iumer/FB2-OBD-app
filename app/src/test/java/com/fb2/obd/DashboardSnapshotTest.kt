@@ -6,6 +6,7 @@ import com.android.resources.ScreenOrientation
 import com.fb2.obd.data.ConnectionState
 import com.fb2.obd.obd.GearEstimator
 import com.fb2.obd.obd.GearSource
+import com.fb2.obd.obd.SnapshotFreshness
 import com.fb2.obd.obd.VehicleSnapshot
 import com.fb2.obd.ui.DashboardScreen
 import com.fb2.obd.ui.theme.FB2Theme
@@ -28,7 +29,7 @@ class DashboardSnapshotTest {
     fun dashboard_liveDriving() {
         val speed = 96.0
         val rpm = 2450.0
-        val snapshot = VehicleSnapshot(
+        val base = VehicleSnapshot(
             rpm = rpm,
             speedKmh = speed,
             coolantC = 85.0,
@@ -48,6 +49,9 @@ class DashboardSnapshotTest {
             gearSource = GearSource.ESTIMATED,
             // Mirror the real FB2: these PIDs aren't supported by the ECU.
             unsupportedPids = setOf(0x67, 0x46, 0x07),
+        )
+        val snapshot = base.copy(
+            freshAtMs = SnapshotFreshness.mapForPresentFields(base, System.currentTimeMillis()),
         )
         val state = DashboardUiState(
             snapshot = snapshot,

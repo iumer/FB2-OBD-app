@@ -11,6 +11,7 @@ import com.fb2.obd.obd.ModuleScanResult
 import com.fb2.obd.obd.PidDefinition
 import com.fb2.obd.obd.PidProbeResult
 import com.fb2.obd.obd.ReadinessStatus
+import com.fb2.obd.obd.SnapshotFreshness
 import com.fb2.obd.obd.VehicleInfo
 import com.fb2.obd.obd.VehicleSnapshot
 import kotlinx.coroutines.flow.Flow
@@ -75,11 +76,13 @@ class DemoObdSource(
                 unsupportedPids = setOf(0x67, 0x46, 0x07), // Coolant2, Ambient, LTFT
             ).let { snap ->
                 val est = gearEstimator.estimateDetailed(speed, rpm)
-                snap.copy(
+                val withGear = snap.copy(
                     gear = est?.gear,
                     gearSource = if (est != null) GearSource.ESTIMATED else GearSource.NONE,
                     gearConfidencePct = est?.confidencePct,
                 )
+                val now = System.currentTimeMillis()
+                withGear.copy(freshAtMs = SnapshotFreshness.mapForPresentFields(withGear, now))
             }
             emit(snapshot)
             t += 1.0
@@ -184,7 +187,10 @@ class DemoObdSource(
         "221316" to 12.0, // total misfire
     )
 
-    override suspend fun probePids(pids: List<PidDefinition>) = pids.map { pid ->
+    override suspend fun probePids(
+        pids: List<PidDefinition>,
+        recoverFirst: Boolean,
+    ) = pids.map { pid ->
         when {
             pid.request.equals("0103", true) -> {
                 // Byte A = 0x02 → CLOSED LOOP
