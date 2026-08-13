@@ -17,10 +17,10 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
- * Classic Dash gesture contract:
+ * Classic + Opt theme Dash gesture contract (see [ThemeGestureLogic]):
  * - double-tap → remap / change value
  * - triple-tap → deep search
- * - long-press → threshold editor
+ * - long-press → deep search when available, else threshold editor
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -37,30 +37,35 @@ fun Modifier.themeMetricGestures(
     return this.combinedClickable(
         onClick = {
             val now = System.currentTimeMillis()
-            taps = if (now - lastTapMs < 520L) taps + 1 else 1
+            val result = ThemeGestureLogic.onTap(
+                previousTaps = taps,
+                lastTapMs = lastTapMs,
+                nowMs = now,
+                hasRemap = onRemap != null,
+            )
+            taps = result.taps
             lastTapMs = now
             pendingRemap?.cancel()
-            when {
-                taps >= 3 -> {
-                    taps = 0
-                    onDeepSearch?.invoke()
-                }
-                taps == 2 && onRemap != null -> {
+            when (result.action) {
+                ThemeGestureLogic.TapAction.DEEP_SEARCH -> onDeepSearch?.invoke()
+                ThemeGestureLogic.TapAction.SCHEDULE_REMAP -> {
+                    val delayMs = result.confirmRemapAfterMs ?: ThemeGestureLogic.REMAP_CONFIRM_DELAY_MS
                     pendingRemap = scope.launch {
-                        delay(280)
-                        if (taps == 2) {
+                        delay(delayMs)
+                        if (ThemeGestureLogic.confirmRemap(taps)) {
                             taps = 0
-                            onRemap()
+                            onRemap?.invoke()
                         }
                     }
                 }
+                ThemeGestureLogic.TapAction.NONE -> Unit
             }
         },
         onLongClick = {
-            // Prefer deep-search on hold when available (user request); else thresholds.
-            when {
-                onDeepSearch != null -> onDeepSearch()
-                onEditThresholds != null -> onEditThresholds()
+            when (ThemeGestureLogic.onHold(onDeepSearch != null, onEditThresholds != null)) {
+                ThemeGestureLogic.HoldAction.DEEP_SEARCH -> onDeepSearch?.invoke()
+                ThemeGestureLogic.HoldAction.EDIT_THRESHOLDS -> onEditThresholds?.invoke()
+                ThemeGestureLogic.HoldAction.NONE -> Unit
             }
         },
     )
