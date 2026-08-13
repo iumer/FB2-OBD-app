@@ -180,14 +180,14 @@ fun OptAThemeDash(
                 onDeepSearch = onDeepSearch,
                 onEditThresholds = onEditThresholds,
                 modifier = Modifier
-                    .weight(0.17f)
-                    .fillMaxHeight(0.94f),
+                    .weight(0.20f)
+                    .fillMaxHeight(0.96f),
             )
 
             Column(
                 modifier = Modifier
-                    .weight(0.25f)
-                    .padding(horizontal = 4.dp),
+                    .weight(0.23f)
+                    .padding(horizontal = 3.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 OrbitValuePanel(
@@ -207,7 +207,7 @@ fun OptAThemeDash(
 
             Column(
                 modifier = Modifier
-                    .weight(0.16f)
+                    .weight(0.14f)
                     .fillMaxHeight(0.82f)
                     .clip(CircleShape)
                     .background(
@@ -234,7 +234,7 @@ fun OptAThemeDash(
                 Text(
                     text = if (gearSource == GearSource.NONE) "–" else (snapshot.gear?.toString() ?: "–"),
                     color = palette.textPrimary,
-                    fontSize = 58.sp,
+                    fontSize = 52.sp,
                     fontWeight = FontWeight.Black,
                     fontFamily = DigitFace,
                     maxLines = 1,
@@ -266,8 +266,8 @@ fun OptAThemeDash(
 
             Column(
                 modifier = Modifier
-                    .weight(0.25f)
-                    .padding(horizontal = 4.dp),
+                    .weight(0.23f)
+                    .padding(horizontal = 3.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 OrbitValuePanel(
@@ -291,8 +291,8 @@ fun OptAThemeDash(
                 onDeepSearch = onDeepSearch,
                 onEditThresholds = onEditThresholds,
                 modifier = Modifier
-                    .weight(0.17f)
-                    .fillMaxHeight(0.94f),
+                    .weight(0.20f)
+                    .fillMaxHeight(0.96f),
             )
         }
     }
@@ -474,7 +474,7 @@ fun OptCThemeDash(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .weight(0.44f)
+                .weight(0.52f)
                 .clip(RoundedCornerShape(26.dp))
                 .background(
                     Brush.radialGradient(
@@ -483,12 +483,12 @@ fun OptCThemeDash(
                     ),
                 )
                 .border(1.dp, palette.accent.copy(alpha = 0.28f), RoundedCornerShape(26.dp))
-                .padding(10.dp),
+                .padding(8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Box(
+            BoxWithConstraints(
                 modifier = Modifier
-                    .weight(0.34f)
+                    .weight(0.38f)
                     .fillMaxHeight()
                     .themeMetricGestures(
                         onRemap = { onRemapBase("RPM") },
@@ -497,22 +497,24 @@ fun OptCThemeDash(
                     ),
                 contentAlignment = Alignment.Center,
             ) {
-                PulseRpmGauge(fraction = rpmFrac, palette = palette, modifier = Modifier.size(168.dp))
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    modifier = Modifier.padding(top = 8.dp),
-                ) {
+                val gaugeSize = minOf(maxWidth, maxHeight) * 0.96f
+                PulseRpmGauge(
+                    fraction = rpmFrac,
+                    palette = palette,
+                    modifier = Modifier.size(gaugeSize),
+                )
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         FreshnessHeartbeat(
                             lastOkMs = snapshot.freshAtMs[SnapshotFreshness.KEY_RPM],
                             size = 7.dp,
                         )
-                        Text(" RPM", color = palette.textMuted, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        Text(" RPM", color = palette.textMuted, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                     }
                     Text(
                         text = snapshot.rpm?.roundToInt()?.toString() ?: "--",
                         color = palette.textPrimary,
-                        fontSize = 34.sp,
+                        fontSize = 36.sp,
                         fontWeight = FontWeight.Black,
                         fontFamily = DigitFace,
                     )
@@ -522,7 +524,7 @@ fun OptCThemeDash(
 
             Box(
                 modifier = Modifier
-                    .weight(0.32f)
+                    .weight(0.28f)
                     .fillMaxHeight()
                     .themeMetricGestures(
                         onRemap = { onRemapBase("Gear") },
@@ -530,17 +532,17 @@ fun OptCThemeDash(
                     ),
                 contentAlignment = Alignment.Center,
             ) {
-                Canvas(modifier = Modifier.size(130.dp)) {
+                Canvas(modifier = Modifier.fillMaxSize(0.85f)) {
                     val cx = size.width / 2f
                     val cy = size.height / 2f
-                    // Side arcs + motion streaks (Pulse Deck)
+                    val r = size.minDimension * 0.42f
                     drawArc(
                         color = palette.accent.copy(alpha = 0.95f),
                         startAngle = 100f,
                         sweepAngle = 42f,
                         useCenter = false,
-                        topLeft = Offset(cx - 58f, cy - 58f),
-                        size = Size(116f, 116f),
+                        topLeft = Offset(cx - r, cy - r),
+                        size = Size(r * 2, r * 2),
                         style = Stroke(width = 6f, cap = StrokeCap.Round),
                     )
                     drawArc(
@@ -548,41 +550,22 @@ fun OptCThemeDash(
                         startAngle = 38f,
                         sweepAngle = 42f,
                         useCenter = false,
-                        topLeft = Offset(cx - 58f, cy - 58f),
-                        size = Size(116f, 116f),
+                        topLeft = Offset(cx - r, cy - r),
+                        size = Size(r * 2, r * 2),
                         style = Stroke(width = 6f, cap = StrokeCap.Round),
                     )
-                    drawArc(
-                        color = palette.accent.copy(alpha = 0.35f),
-                        startAngle = 95f,
-                        sweepAngle = 52f,
-                        useCenter = false,
-                        topLeft = Offset(cx - 68f, cy - 68f),
-                        size = Size(136f, 136f),
-                        style = Stroke(width = 2.5f, cap = StrokeCap.Round),
-                    )
-                    drawArc(
-                        color = palette.accent.copy(alpha = 0.35f),
-                        startAngle = 32f,
-                        sweepAngle = 52f,
-                        useCenter = false,
-                        topLeft = Offset(cx - 68f, cy - 68f),
-                        size = Size(136f, 136f),
-                        style = Stroke(width = 2.5f, cap = StrokeCap.Round),
-                    )
-                    // Motion streaks behind gear
                     for (i in 0..4) {
                         val y = cy - 20f + i * 10f
                         drawLine(
                             color = palette.accent.copy(alpha = 0.08f + i * 0.03f),
-                            start = Offset(cx - 70f, y),
-                            end = Offset(cx - 28f, y),
+                            start = Offset(cx - r - 8f, y),
+                            end = Offset(cx - r * 0.35f, y),
                             strokeWidth = 2.5f,
                         )
                         drawLine(
                             color = palette.accent.copy(alpha = 0.08f + i * 0.03f),
-                            start = Offset(cx + 28f, y),
-                            end = Offset(cx + 70f, y),
+                            start = Offset(cx + r * 0.35f, y),
+                            end = Offset(cx + r + 8f, y),
                             strokeWidth = 2.5f,
                         )
                     }
@@ -591,7 +574,7 @@ fun OptCThemeDash(
                     Text("GEAR", color = palette.accent, fontSize = 12.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
                     Text(
                         text = if (gearSource == GearSource.NONE) "–" else (snapshot.gear?.toString() ?: "–"),
-                        color = palette.accent,
+                        color = palette.textPrimary,
                         fontSize = 56.sp,
                         fontWeight = FontWeight.Black,
                         fontFamily = DigitFace,
@@ -661,7 +644,7 @@ fun OptCThemeDash(
 
         LazyVerticalGrid(
             columns = GridCells.Fixed(3),
-            modifier = Modifier.fillMaxWidth().weight(0.56f),
+            modifier = Modifier.fillMaxWidth().weight(0.48f),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
@@ -758,7 +741,6 @@ private fun OrbitWheel(
     modifier: Modifier = Modifier,
 ) {
     val pages = metrics.ifEmpty { listOf(DashThemeMetric("–", "--", "")) }
-    // Track by label so live value updates never shift the selected slot
     var centerLabel by remember {
         mutableStateOf(pages.getOrNull(1)?.label ?: pages.first().label)
     }
@@ -775,8 +757,7 @@ private fun OrbitWheel(
     }
 
     fun step(dir: Int) {
-        val next = pages[idx(dir)]
-        centerLabel = next.label
+        centerLabel = pages[idx(dir)].label
     }
 
     Column(
@@ -808,22 +789,18 @@ private fun OrbitWheel(
                     },
                 )
             }
-            .padding(vertical = 6.dp, horizontal = 2.dp),
+            .padding(vertical = 4.dp, horizontal = 2.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Text("▴", color = palette.accent.copy(alpha = 0.9f), fontSize = 14.sp, fontWeight = FontWeight.Bold)
+        Text("▴", color = palette.accent.copy(alpha = 0.9f), fontSize = 12.sp, fontWeight = FontWeight.Bold)
         BoxWithConstraints(
             modifier = Modifier
                 .weight(1f)
-                .fillMaxWidth(),
+                .fillMaxWidth()
+                .padding(horizontal = 2.dp),
         ) {
             val slotH = maxHeight / 3
-            // Sliding strip of 3 fixed slots — focus frame is always the middle band
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .clip(RoundedCornerShape(8.dp)),
-            ) {
+            Box(modifier = Modifier.fillMaxSize()) {
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
@@ -859,41 +836,18 @@ private fun OrbitWheel(
                         }
                     }
                 }
-                // Fixed focus chrome — never moves with content height
+                // Focus frame only — no heavy fade that eats the peek values
                 Box(
                     modifier = Modifier
                         .align(Alignment.Center)
                         .fillMaxWidth()
                         .height(slotH)
-                        .padding(horizontal = 3.dp)
-                        .border(1.5.dp, palette.accent.copy(alpha = 0.85f), RoundedCornerShape(14.dp)),
-                )
-                // Top/bottom fade → picker/slider look
-                Box(
-                    Modifier
-                        .fillMaxWidth()
-                        .height(slotH * 0.55f)
-                        .align(Alignment.TopCenter)
-                        .background(
-                            Brush.verticalGradient(
-                                listOf(palette.surface.copy(alpha = 0.92f), Color.Transparent),
-                            ),
-                        ),
-                )
-                Box(
-                    Modifier
-                        .fillMaxWidth()
-                        .height(slotH * 0.55f)
-                        .align(Alignment.BottomCenter)
-                        .background(
-                            Brush.verticalGradient(
-                                listOf(Color.Transparent, palette.surface.copy(alpha = 0.92f)),
-                            ),
-                        ),
+                        .padding(horizontal = 2.dp)
+                        .border(1.5.dp, palette.accent.copy(alpha = 0.9f), RoundedCornerShape(12.dp)),
                 )
             }
         }
-        Text("▾", color = palette.accent.copy(alpha = 0.9f), fontSize = 14.sp, fontWeight = FontWeight.Bold)
+        Text("▾", color = palette.accent.copy(alpha = 0.9f), fontSize = 12.sp, fontWeight = FontWeight.Bold)
     }
 }
 
@@ -908,32 +862,29 @@ private fun OrbitWheelItem(
     modifier: Modifier = Modifier,
 ) {
     val (remap, deep, edit) = metric.interaction(onRemapBase, onDeepSearch, onEditThresholds)
-    // Fixed-height cell so focus never jumps when labels/values change length
     Column(
         modifier = modifier
             .fillMaxWidth()
             .fillMaxHeight()
-            .padding(horizontal = 4.dp, vertical = 2.dp)
+            .padding(horizontal = 3.dp)
             .themeMetricGestures(remap, deep, edit),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
-        ThemeIcon(
-            iconKindForMetric(metric.label),
-            palette.accent.copy(alpha = if (focused) 1f else 0.55f),
-            size = if (focused) 16.dp else 13.dp,
-        )
-        Spacer(modifier = Modifier.height(2.dp))
         Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.Center,
             modifier = Modifier.fillMaxWidth(),
         ) {
-            FreshnessHeartbeat(lastOkMs = metric.freshAtMs, size = if (focused) 7.dp else 5.dp)
+            if (focused) {
+                ThemeIcon(iconKindForMetric(metric.label), palette.accent, size = 12.dp)
+                Spacer(modifier = Modifier.width(3.dp))
+            }
+            FreshnessHeartbeat(lastOkMs = metric.freshAtMs, size = if (focused) 6.dp else 5.dp)
             Text(
                 text = " ${metric.label.uppercase()}",
-                color = palette.accentSoft.copy(alpha = if (focused) 1f else 0.55f),
-                fontSize = if (focused) 11.sp else 10.sp,
+                color = if (focused) palette.accent else palette.accentSoft.copy(alpha = 0.85f),
+                fontSize = if (focused) 12.sp else 11.sp,
                 fontWeight = FontWeight.Bold,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
@@ -948,12 +899,13 @@ private fun OrbitWheelItem(
             color = when {
                 metric.health == Health.UNKNOWN -> palette.textPrimary
                 else -> metric.health.color()
-            }.copy(alpha = if (focused) 1f else 0.55f),
-            fontSize = if (focused) 22.sp else 15.sp,
+            }.copy(alpha = if (focused) 1f else 0.8f),
+            fontSize = if (focused) 24.sp else 16.sp,
             fontWeight = FontWeight.Black,
             fontFamily = DigitFace,
             maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
+            overflow = TextOverflow.Visible,
+            softWrap = false,
             textAlign = TextAlign.Center,
         )
     }
