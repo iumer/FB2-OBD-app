@@ -68,6 +68,10 @@ non-obvious cloud specifics.
     deep search skips Mode 22/Honda strategies; estimated gear off by default;
     Mode 0A permanent DTCs on Faults. Use Generic as the safe fallback for any
     OBD-II car (Mira / Corolla / Civic X / etc.).
+- **Dashboard look** (Settings → Dashboard look): Classic tile grid (default),
+  **Red Orbit** (red rounded cluster, gear centre, RPM/Speed bars, scrollable
+  metric wheels), **Twin Gauge** (circular RPM/Speed), **Pulse Deck** (speed
+  focus + rounded cards). Presentation-only; same snapshot/health/alerts.
 - Honda enhanced packs in `HondaPidCatalog` use Mode 22 placeholders
   (`2211xx`…`2219xx`). Real FB2 / market-specific ECUs often need different IDs
   **and** CAN headers (`ATSH`). Until recently the app never sent headers — that

@@ -23,7 +23,9 @@ import com.fb2.obd.data.OpenAiClient
 import com.fb2.obd.data.SavedAiReport
 import com.fb2.obd.data.SavedLogFile
 import com.fb2.obd.data.SessionLogStore
+import com.fb2.obd.data.DashboardLookStore
 import com.fb2.obd.data.VehicleProfileStore
+import com.fb2.obd.obd.DashboardLook
 import com.fb2.obd.data.VoiceAlerter
 import com.fb2.obd.obd.AiAnalysisPayloadBuilder
 import com.fb2.obd.obd.ColdStartIdleCatalog
@@ -99,6 +101,8 @@ data class SettingsState(
      */
     val duckMediaDuringAlerts: Boolean = false,
     val vehicleProfile: VehicleProfile = VehicleProfile.DEFAULT,
+    /** Phone Dash presentation — Classic grid or an alternative look. */
+    val dashboardLook: DashboardLook = DashboardLook.DEFAULT,
 )
 
 /** UI state for one-shot Analyze via AI. */
@@ -185,6 +189,7 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
     val settings: StateFlow<SettingsState> = _settings.asStateFlow()
 
     private val profileStore = VehicleProfileStore(app)
+    private val dashboardLookStore = DashboardLookStore(app)
     val vehicleProfile: VehicleProfile get() = _settings.value.vehicleProfile
     val dashPageTitles: List<String> get() = VehicleProfileConfig.dashPageTitles(vehicleProfile)
     val showHondaModules: Boolean get() = VehicleProfileConfig.showHondaModules(vehicleProfile)
@@ -436,6 +441,7 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
         _settings.value = SettingsState(
             showEstimatedGear = VehicleProfileConfig.defaultShowEstimatedGear(loadedProfile),
             vehicleProfile = loadedProfile,
+            dashboardLook = dashboardLookStore.load(),
         )
         tripComputer.fuelPricePerLiter = _settings.value.fuelPricePerLiter
         _maintenance.value = MaintenanceStore(File(filesDir, "maintenance.json")).load()
@@ -978,6 +984,12 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
 
     fun setShowEstimatedGear(enabled: Boolean) {
         _settings.update { it.copy(showEstimatedGear = enabled) }
+    }
+
+    fun setDashboardLook(look: DashboardLook) {
+        if (look == _settings.value.dashboardLook) return
+        dashboardLookStore.save(look)
+        _settings.update { it.copy(dashboardLook = look) }
     }
 
     fun setVoiceAlerts(enabled: Boolean) {
