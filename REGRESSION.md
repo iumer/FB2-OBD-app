@@ -68,9 +68,12 @@ Run from repo root (`/workspace`):
 ./gradlew lintDebug
 ./gradlew assembleDebug
 cp app/build/outputs/apk/debug/app-debug.apk dist/FB2-Diag-debug.apk
+# Also publish to branch `latest` so the stable sideload URL stays current:
+#   https://raw.githubusercontent.com/iumer/FB2-OBD-app/latest/dist/FB2-Diag-debug.apk
 ```
 
-All three Gradle tasks must pass. Copy the APK into `dist/` so sideload artifacts stay current.
+All three Gradle tasks must pass. Copy the APK into `dist/` so sideload artifacts stay current,
+then update the `latest` branch APK (same path) so the bookmarkable download link does not change.
 
 ### Unit-test map (what “green” covers)
 
