@@ -25,6 +25,11 @@ non-obvious cloud specifics.
 - Lint: `./gradlew lintDebug`
 - Build APK: `./gradlew assembleDebug` → `app/build/outputs/apk/debug/app-debug.apk`
   (also copy to `dist/FB2-Diag-debug.apk` for sideload).
+- **Always-latest sideload URL (do not invent branch-specific raw links for the user):**
+  https://raw.githubusercontent.com/iumer/FB2-OBD-app/latest/dist/FB2-Diag-debug.apk  
+  After every APK rebuild, **publish** `dist/FB2-Diag-debug.apk` (and `FB2-Diag-hu.apk`)
+  to branch `latest` at path `dist/` (force-push orphan/update is OK). Tell the user
+  that same URL — never a `cursor/...` branch raw link unless they ask for a specific PR build.
 
 ### Running / demoing the UI
 
