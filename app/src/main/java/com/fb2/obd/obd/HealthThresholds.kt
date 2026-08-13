@@ -6,19 +6,28 @@ package com.fb2.obd.obd
  */
 data class HealthThresholds(
     val coolantColdBelow: Double = 70.0,
-    val coolantGoodMax: Double = 90.0,
-    val coolantWarnMax: Double = 98.0,
+    /** Green / NORMAL up to this (°C). FB2: 95. */
+    val coolantGoodMax: Double = 95.0,
+    /** Yellow / WARM up to this. FB2: 100. */
+    val coolantWarnMax: Double = 100.0,
+    /** Orange / HOT up to this; above = red OVERHEAT. FB2: 103. */
     val coolantElevatedMax: Double = 103.0,
-    /** Voice alert only above this (red tile starts earlier at elevatedMax). */
-    val coolantVoiceAbove: Double = 110.0,
+    /** Voice + beep at or above this (°C). FB2: 104. */
+    val coolantVoiceAbove: Double = 104.0,
 
     /** Engine running — green charging band (Honda ELD often sits ~13.2–14.5). */
     val battRunGoodMin: Double = 13.2,
     val battRunGoodMax: Double = 14.8,
     val battRunWarnMin: Double = 12.9,
-    /** Orange band floor while running (below warn, above critical). */
+    /** Orange band floor while running (below warn, above critical colour). */
     val battRunElevatedMin: Double = 12.6,
     val battRunCriticalAbove: Double = 15.0,
+    /**
+     * Spoken "Battery critical" only at or below this (V) while running.
+     * Tile colours still use the bands above; cheap ELM ATRV often under-reads
+     * vs a multimeter on the posts, so voice is reserved for true deep discharge.
+     */
+    val battVoiceCriticalBelow: Double = 11.8,
     /** Extra volts required to leave a worse band (hysteresis). */
     val battHysteresisV: Double = 0.15,
 
@@ -98,6 +107,7 @@ data class HealthThresholds(
             battRunWarnMin = 12.6,
             battRunElevatedMin = 12.2,
             battRunCriticalAbove = 15.5,
+            battVoiceCriticalBelow = 11.8,
             mafIdleGoodMin = 1.0,
             mafIdleGoodMax = 12.0,
             mafIdleWarnMin = 0.5,
@@ -184,7 +194,7 @@ fun HealthThresholds.fieldsFor(metric: EditableMetric): List<ThresholdEditField>
         ThresholdEditField("coolantGoodMax", "Green up to", "Normal", coolantGoodMax, Health.GOOD),
         ThresholdEditField("coolantWarnMax", "Yellow up to", "Warm", coolantWarnMax, Health.WARN),
         ThresholdEditField("coolantElevatedMax", "Orange up to", "Hot (above = red)", coolantElevatedMax, Health.ELEVATED),
-        ThresholdEditField("coolantVoiceAbove", "Voice above", "Spoken alert", coolantVoiceAbove, Health.CRITICAL),
+        ThresholdEditField("coolantVoiceAbove", "Voice at/above", "Spoken alert", coolantVoiceAbove, Health.CRITICAL),
     )
     EditableMetric.BATTERY -> listOf(
         ThresholdEditField("battRunGoodMin", "Running green from", "Charging OK min", battRunGoodMin, Health.GOOD),
@@ -192,6 +202,7 @@ fun HealthThresholds.fieldsFor(metric: EditableMetric): List<ThresholdEditField>
         ThresholdEditField("battRunWarnMin", "Running yellow from", "Low charge", battRunWarnMin, Health.WARN),
         ThresholdEditField("battRunElevatedMin", "Running orange from", "Weak alt", battRunElevatedMin, Health.ELEVATED),
         ThresholdEditField("battRunCriticalAbove", "Running red above", "Overcharge", battRunCriticalAbove, Health.CRITICAL),
+        ThresholdEditField("battVoiceCriticalBelow", "Voice at/below", "Spoken alert (V)", battVoiceCriticalBelow, Health.CRITICAL),
         ThresholdEditField("battRestGoodAbove", "Resting green above", "Engine off", battRestGoodAbove, Health.GOOD),
         ThresholdEditField("battRestWarnAbove", "Resting yellow above", "Weak rest", battRestWarnAbove, Health.WARN),
         ThresholdEditField("battRestElevatedAbove", "Resting orange above", "Below = flat", battRestElevatedAbove, Health.ELEVATED),
@@ -263,6 +274,7 @@ fun HealthThresholds.withField(id: String, value: Double): HealthThresholds = wh
     "battRunWarnMin" -> copy(battRunWarnMin = value)
     "battRunElevatedMin" -> copy(battRunElevatedMin = value)
     "battRunCriticalAbove" -> copy(battRunCriticalAbove = value)
+    "battVoiceCriticalBelow" -> copy(battVoiceCriticalBelow = value)
     "battRestGoodAbove" -> copy(battRestGoodAbove = value)
     "battRestWarnAbove" -> copy(battRestWarnAbove = value)
     "battRestElevatedAbove" -> copy(battRestElevatedAbove = value)

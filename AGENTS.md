@@ -103,8 +103,11 @@ non-obvious cloud specifics.
   **DTCs** (from readiness / Mode 01 PID 01, refreshed ~12s), and **Health**
   (`HealthScore.vehiclePct`). Load & Throttle are display-only (always green).
 - Colour bands / voice thresholds live in `HealthThresholds` (long-press editor).
-  Coolant **voice** alerts only above `coolantVoiceAbove` (default 110°C), even
-  though the red tile starts earlier (`> coolantElevatedMax`, default 103°C).
+  Coolant **voice** alerts at/above `coolantVoiceAbove` (FB2 default **104°C**).
+  Colour bands (FB2): green ≤95, yellow ≤100, orange ≤103, red ≥104.
+  Battery **voice** only at/below `battVoiceCriticalBelow` (default **11.8V**);
+  tile colours still use ELD-aware charging bands. Voltage is ATRV (OBD-plug rail),
+  median-filtered — cheap clones can under-read vs a post multimeter.
 - **Diagnostic brain (OEM-style):** `DiagnosticBrain` EMA-smooths noisy sensors
   for health/voice decisions while the UI still shows raw values. Zone colours
   use `AlertPolicy.latchHealth` hysteresis so bands do not flicker. Voice is

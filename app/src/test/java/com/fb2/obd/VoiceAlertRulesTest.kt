@@ -14,27 +14,35 @@ class VoiceAlertRulesTest {
     @Test
     fun coolantOverheat_speaksCoolantCritical() {
         val alerts = VoiceAlertRules.evaluate(
-            VehicleSnapshot(rpm = 2000.0, coolantC = 112.0, batteryVolts = 14.2),
+            VehicleSnapshot(rpm = 2000.0, coolantC = 104.0, batteryVolts = 14.2),
         )
         assertTrue(alerts.any { it.phrase.equals("Coolant critical", ignoreCase = true) })
     }
 
     @Test
     fun coolantRedButBelowVoice_noAlert() {
-        // Red tile starts >103°C, but voice only above 110°C.
+        // Orange/red tile can start at >103°C; voice only at/above 104°C.
         val alerts = VoiceAlertRules.evaluate(
-            VehicleSnapshot(rpm = 2000.0, coolantC = 106.0, batteryVolts = 14.2),
+            VehicleSnapshot(rpm = 2000.0, coolantC = 103.0, batteryVolts = 14.2),
         )
         assertFalse(alerts.any { it.key.startsWith("coolant") })
     }
 
     @Test
     fun batteryCriticalAboveIdle_speaksBatteryCritical() {
-        // Honda ELD: idle low voltage is not CRITICAL. Above-idle + very low = ALT WEAK.
+        // Voice only at/below 11.8V — not for ALT WEAK tile colour at ~12.5.
+        val alerts = VoiceAlertRules.evaluate(
+            VehicleSnapshot(rpm = 2000.0, coolantC = 90.0, batteryVolts = 11.8),
+        )
+        assertTrue(alerts.any { it.key == "battery" && it.phrase.equals("Battery critical", ignoreCase = true) })
+    }
+
+    @Test
+    fun batteryAltWeakColour_noVoiceUntil118() {
         val alerts = VoiceAlertRules.evaluate(
             VehicleSnapshot(rpm = 2000.0, coolantC = 90.0, batteryVolts = 12.0),
         )
-        assertTrue(alerts.any { it.key == "battery" && it.phrase.equals("Battery critical", ignoreCase = true) })
+        assertFalse(alerts.any { it.key == "battery" })
     }
 
     @Test

@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
@@ -113,10 +114,10 @@ private object DashType {
     val tileStatus = 11.sp
     val tileHint = 10.sp
 
-    val heroH = 78.dp
-    val heroLabel = 12.sp
-    val heroValue = 32.sp
-    val heroUnit = 13.sp
+    val heroH = 92.dp
+    val heroLabel = 11.sp
+    val heroValue = 30.sp
+    val heroUnit = 12.sp
     val heroBadge = 11.sp
 
     val tab = 14.sp
@@ -410,7 +411,7 @@ private fun CompactHeroStrip(
             .height(DashType.heroH)
             .clip(RoundedCornerShape(12.dp))
             .background(Surface)
-            .padding(horizontal = 12.dp, vertical = 8.dp),
+            .padding(horizontal = 12.dp, vertical = 6.dp),
         horizontalArrangement = Arrangement.SpaceEvenly,
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -439,8 +440,8 @@ private fun CompactHeroStrip(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center,
             modifier = Modifier
-                .widthIn(min = 72.dp)
-                .fillMaxHeight(),
+                .widthIn(min = 84.dp)
+                .padding(horizontal = 4.dp),
         ) {
             Text(
                 "GEAR",
@@ -448,6 +449,7 @@ private fun CompactHeroStrip(
                 fontSize = DashType.heroLabel,
                 fontWeight = FontWeight.Bold,
                 style = tightTextStyle(DashType.heroLabel),
+                maxLines = 1,
             )
             Text(
                 text = if (gearSource == GearSource.NONE) "–" else (gear?.toString() ?: "–"),
@@ -455,6 +457,7 @@ private fun CompactHeroStrip(
                 fontSize = DashType.heroValue,
                 fontWeight = FontWeight.Bold,
                 style = tightTextStyle(DashType.heroValue),
+                maxLines = 1,
             )
             val badge = when (gearSource) {
                 GearSource.ECU -> "ECU" to GoodGreen
@@ -469,7 +472,15 @@ private fun CompactHeroStrip(
                 color = badge.second,
                 fontSize = DashType.heroBadge,
                 fontWeight = FontWeight.Bold,
-                style = tightTextStyle(DashType.heroBadge),
+                // Avoid Trim.Both — "%" descender was clipped on phones.
+                style = TextStyle(
+                    fontSize = DashType.heroBadge,
+                    lineHeight = 14.sp,
+                    platformStyle = PlatformTextStyle(includeFontPadding = false),
+                ),
+                maxLines = 1,
+                softWrap = false,
+                modifier = Modifier.padding(top = 2.dp, bottom = 1.dp),
             )
         }
         HeroDigit(

@@ -15,7 +15,7 @@ class VoiceAlertDebouncerTest {
         val debouncer = VoiceAlertDebouncer()
         // Coolant voice is fast (~4s) — use that to prove hold without waiting 25s for battery.
         val bad = VoiceAlertRules.evaluate(
-            VehicleSnapshot(rpm = 2000.0, coolantC = 112.0, batteryVolts = 14.2),
+            VehicleSnapshot(rpm = 2000.0, coolantC = 105.0, batteryVolts = 14.2),
         )
         assertTrue("rules should flag coolant", bad.any { it.key == "coolant" })
 
@@ -36,7 +36,7 @@ class VoiceAlertDebouncerTest {
     fun sustainedFault_confirmsAfterHold() {
         val debouncer = VoiceAlertDebouncer()
         val bad = VoiceAlertRules.evaluate(
-            VehicleSnapshot(rpm = 2000.0, coolantC = 90.0, batteryVolts = 12.0),
+            VehicleSnapshot(rpm = 2000.0, coolantC = 90.0, batteryVolts = 11.5),
         )
         assertTrue(bad.any { it.key == "battery" })
         val hold = AlertPolicy.voiceHoldMs("battery")
@@ -52,7 +52,7 @@ class VoiceAlertDebouncerTest {
     fun recoveryResetsHoldClock() {
         val debouncer = VoiceAlertDebouncer()
         val bad = VoiceAlertRules.evaluate(
-            VehicleSnapshot(rpm = 2000.0, coolantC = 90.0, batteryVolts = 12.0),
+            VehicleSnapshot(rpm = 2000.0, coolantC = 90.0, batteryVolts = 11.5),
         )
         val good = VoiceAlertRules.evaluate(
             VehicleSnapshot(rpm = 2000.0, coolantC = 90.0, batteryVolts = 14.2),

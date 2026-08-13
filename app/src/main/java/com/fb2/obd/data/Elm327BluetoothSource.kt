@@ -64,6 +64,9 @@ class Elm327BluetoothSource(
     @Volatile
     private var pollingPaused: Boolean = false
 
+    /** Rolling ATRV samples for median filter (cheap clones spit occasional false lows). */
+    private val atrvWindow = ArrayDeque<Double>(3)
+
     override fun pausePolling() {
         pollingPaused = true
         logger.logDebug(ObdLogger.Dir.INFO, "ELM poll paused")
@@ -160,10 +163,12 @@ class Elm327BluetoothSource(
                     val cycleStartMs = System.currentTimeMillis()
 
                     // ATRV first every cycle — adapter rail voltage does NOT need the ECU.
-                    // Skipping it during busLost was why Battery went n/s while Torque still worked.
+                    // Prefer ATRV over Mode 01 0142 (ECU module V can differ / lag; Torque uses ATRV).
+                    var atrvThisCycle: Double? = null
                     if (cycles == 1 || snapshot.batteryVolts == null || cycles % 2 == 0) {
                         readAtrv(conn)?.let { v ->
                             responded++
+                            atrvThisCycle = v
                             snapshot = snapshot.copy(batteryVolts = v)
                             freshness.markOk(SnapshotFreshness.KEY_BATTERY, cycleStartMs)
                         }
@@ -212,8 +217,13 @@ class Elm327BluetoothSource(
                             responded++
                             mode01Ok = true
                             failStreak[pid] = 0
-                            snapshot = snapshot.merge(pid, value)
-                            freshness.markPid(pid, cycleStartMs)
+                            // Do not let 0142 overwrite a fresh ATRV reading this cycle.
+                            if (pid == ObdPid.CONTROL_MODULE_VOLTAGE && atrvThisCycle != null) {
+                                freshness.markPid(pid, cycleStartMs)
+                            } else {
+                                snapshot = snapshot.merge(pid, value)
+                                freshness.markPid(pid, cycleStartMs)
+                            }
                             if (pid == ObdPid.ENGINE_RPM) rpmUpdated = true
                         } else {
                             // Frame arrived but didn't decode — still counts as link alive.
@@ -230,9 +240,10 @@ class Elm327BluetoothSource(
 
                     // Extra ATRV refresh if 0142 never answered this cycle.
                     val voltFail = failStreak[ObdPid.CONTROL_MODULE_VOLTAGE] ?: 0
-                    if (snapshot.batteryVolts == null || voltFail >= 2) {
+                    if (atrvThisCycle == null && (snapshot.batteryVolts == null || voltFail >= 2)) {
                         readAtrv(conn)?.let { v ->
                             responded++
+                            atrvThisCycle = v
                             snapshot = snapshot.copy(batteryVolts = v)
                             freshness.markOk(SnapshotFreshness.KEY_BATTERY, System.currentTimeMillis())
                         }
@@ -551,9 +562,14 @@ class Elm327BluetoothSource(
             conn.exec("ATRV", Elm327Connection.ATRV_TIMEOUT_MS)
         }.getOrNull() ?: return null
         if (isUnable(raw)) return null
-        return ObdResponseParser.parseAtVoltage(raw)?.also {
-            logger.logDebug(ObdLogger.Dir.INFO, "ATRV battery=$it V")
-        }
+        val v = ObdResponseParser.parseAtVoltage(raw) ?: return null
+        // Median of last 3 ATRV samples — cheap clones sometimes spit a single
+        // false low (11–12V) while the post still measures 13–14V.
+        atrvWindow.addLast(v)
+        while (atrvWindow.size > 3) atrvWindow.removeFirst()
+        val median = atrvWindow.sorted()[atrvWindow.size / 2]
+        logger.logDebug(ObdLogger.Dir.INFO, "ATRV battery raw=$v median=$median V (n=${atrvWindow.size})")
+        return median
     }
 
     private fun isUnable(raw: String): Boolean =
