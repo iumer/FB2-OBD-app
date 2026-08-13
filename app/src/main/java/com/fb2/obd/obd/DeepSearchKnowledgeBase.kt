@@ -40,6 +40,18 @@ data class DeepSearchStrategy(
             !request.startsWith("22") &&
             setup.none { it.startsWith("ATSH") && !it.equals("ATSH7DF", true) }
 
+    /**
+     * Honda Mode 22 / TCM-enhanced recipe — excluded from Generic OBD2 deep search
+     * so we never thrash ATSH for manufacturer PIDs on non-Honda cars.
+     */
+    val isHondaSpecific: Boolean
+        get() = request.uppercase().startsWith("22") ||
+            id.contains("honda", ignoreCase = true) ||
+            title.contains("Honda", ignoreCase = true) ||
+            title.contains("TCM", ignoreCase = true) ||
+            rationale.contains("Honda", ignoreCase = true) ||
+            rationale.contains("TCM", ignoreCase = true)
+
     companion object {
         val DEFAULT_TEARDOWN = listOf(
             "ATAR",      // auto receive

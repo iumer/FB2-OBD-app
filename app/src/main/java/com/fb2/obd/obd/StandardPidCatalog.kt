@@ -5,7 +5,8 @@ package com.fb2.obd.obd
  * Honda-profile probe. Entries with known formulas decode to engineering units;
  * the rest decode the first data byte as a raw value so they remain usable.
  *
- * Coverage: PIDs 0x01–0xA4 that are commonly listed in the standard (100+).
+ * Coverage: SAE J1979 Mode 01 live PIDs commonly listed through ~0xB6
+ * (support bitmasks still decide what each car actually answers).
  */
 object StandardPidCatalog {
 
@@ -94,6 +95,12 @@ object StandardPidCatalog {
         entry(0x33, "Barometric pressure", "kPa", PidCategory.AIR, 1, ::a),
         entry(0x34, "O2 S1 AFR", "AFR", PidCategory.FUEL, 4, ::afr),
         entry(0x35, "O2 S2 AFR", "AFR", PidCategory.FUEL, 4, ::afr),
+        entry(0x36, "O2 S3 AFR", "AFR", PidCategory.FUEL, 4, ::afr),
+        entry(0x37, "O2 S4 AFR", "AFR", PidCategory.FUEL, 4, ::afr),
+        entry(0x38, "O2 S5 AFR", "AFR", PidCategory.FUEL, 4, ::afr),
+        entry(0x39, "O2 S6 AFR", "AFR", PidCategory.FUEL, 4, ::afr),
+        entry(0x3A, "O2 S7 AFR", "AFR", PidCategory.FUEL, 4, ::afr),
+        entry(0x3B, "O2 S8 AFR", "AFR", PidCategory.FUEL, 4, ::afr),
         entry(0x3C, "Catalyst temp B1S1", "\u00B0C", PidCategory.TEMPS, 2) { d ->
             if (d.size >= 2) (d[0] * 256 + d[1]) / 10.0 - 40.0 else null
         },
@@ -122,6 +129,8 @@ object StandardPidCatalog {
         entry(0x4C, "Commanded throttle", "%", PidCategory.ENGINE, 1, ::pct),
         entry(0x4D, "Time with MIL on", "min", PidCategory.EMISSIONS, 2, ::ab256),
         entry(0x4E, "Time since codes clear", "min", PidCategory.EMISSIONS, 2, ::ab256),
+        entry(0x4F, "Max values (equiv/O2/MAP/MAF)", "", PidCategory.OTHER, 4, ::a),
+        entry(0x50, "Max AFR / air flow", "", PidCategory.AIR, 4, ::a),
         entry(0x51, "Fuel type", "", PidCategory.FUEL, 1, ::a),
         entry(0x52, "Ethanol fuel %", "%", PidCategory.FUEL, 1, ::pct),
         entry(0x53, "Abs EVAP vapor pressure", "kPa", PidCategory.EMISSIONS, 2) { d ->
@@ -152,17 +161,25 @@ object StandardPidCatalog {
             if (d.isNotEmpty()) d[0] - 125.0 else null
         },
         entry(0x63, "Engine reference torque", "Nm", PidCategory.ENGINE, 2, ::ab256),
+        entry(0x64, "Engine percent torque data", "%", PidCategory.ENGINE, 5) { d ->
+            if (d.isNotEmpty()) d[0] - 125.0 else null
+        },
+        entry(0x65, "Auxiliary inputs / outputs", "", PidCategory.OTHER, 2, ::a),
         entry(0x66, "MAF sensor A/B", "g/s", PidCategory.AIR, 5, ::maf),
         entry(0x67, "Coolant temp sensors", "\u00B0C", PidCategory.TEMPS, 3) { d ->
             if (d.size >= 3 && (d[0] and 0x02) != 0) (d[2] - 40).toDouble() else null
         },
         entry(0x68, "Intake air temp sensors", "\u00B0C", PidCategory.TEMPS, 7, ::a40),
+        entry(0x69, "Commanded EGR / EGR error", "%", PidCategory.EMISSIONS, 7, ::pct),
+        entry(0x6A, "Commanded diesel intake air flow", "%", PidCategory.AIR, 5, ::pct),
+        entry(0x6B, "Exhaust gas recirculation temp", "\u00B0C", PidCategory.TEMPS, 5, ::a40),
+        entry(0x6C, "Commanded throttle actuator", "%", PidCategory.ENGINE, 5, ::pct),
+        entry(0x6D, "Fuel pressure control system", "kPa", PidCategory.FUEL, 6, ::ab256),
+        entry(0x6E, "Injection pressure control system", "kPa", PidCategory.FUEL, 5, ::ab256),
         entry(0x6F, "Turbo compressor inlet pressure", "kPa", PidCategory.AIR, 3, ::a),
         entry(0x70, "Boost pressure control", "kPa", PidCategory.AIR, 9, ::a),
-        entry(0x72, "Wastegate control", "%", PidCategory.AIR, 5, ::pct),
-        entry(0x7F, "Engine run time", "s", PidCategory.ENGINE, 13, ::ab256),
-        entry(0x83, "NOx sensor", "ppm", PidCategory.EMISSIONS, 5, ::ab256),
         entry(0x71, "Variable geometry turbo control", "%", PidCategory.AIR, 5, ::pct),
+        entry(0x72, "Wastegate control", "%", PidCategory.AIR, 5, ::pct),
         entry(0x73, "Exhaust pressure", "kPa", PidCategory.AIR, 5, ::ab256),
         entry(0x74, "Turbo RPM A", "rpm", PidCategory.AIR, 5, ::ab256),
         entry(0x75, "Turbo RPM B", "rpm", PidCategory.AIR, 5, ::ab256),
@@ -179,9 +196,11 @@ object StandardPidCatalog {
         entry(0x7C, "DPF / NOx aftertreatment", "", PidCategory.EMISSIONS, 9, ::a),
         entry(0x7D, "NOx reagent system", "", PidCategory.EMISSIONS, 1, ::a),
         entry(0x7E, "PM sensor bank 1/2", "", PidCategory.EMISSIONS, 10, ::a),
+        entry(0x7F, "Engine run time", "s", PidCategory.ENGINE, 13, ::ab256),
         entry(0x80, "AECU runtime", "s", PidCategory.ENGINE, 4, ::ab256),
         entry(0x81, "AECU runtime (alt)", "s", PidCategory.ENGINE, 5, ::ab256),
         entry(0x82, "NOx sensor (alt)", "ppm", PidCategory.EMISSIONS, 5, ::ab256),
+        entry(0x83, "NOx sensor", "ppm", PidCategory.EMISSIONS, 5, ::ab256),
         entry(0x84, "Manifold surface temp", "\u00B0C", PidCategory.TEMPS, 5, ::a40),
         entry(0x85, "NOx reagent system temp", "\u00B0C", PidCategory.TEMPS, 5, ::a40),
         entry(0x86, "PM sensor", "", PidCategory.EMISSIONS, 5, ::a),

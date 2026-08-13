@@ -70,6 +70,8 @@ import com.fb2.obd.obd.PidCategory
 import com.fb2.obd.obd.PidDefinition
 import com.fb2.obd.obd.SnapshotFreshness
 import com.fb2.obd.obd.StandardPidCatalog
+import com.fb2.obd.obd.VehicleProfile
+import com.fb2.obd.obd.VehicleProfileConfig
 import com.fb2.obd.obd.VehicleSnapshot
 import com.fb2.obd.obd.isEffectivelyBlank
 import com.fb2.obd.ui.theme.Accent
@@ -128,10 +130,8 @@ private fun Double?.fmt(digits: Int = 0): String = this?.let {
     if (digits == 0) it.roundToInt().toString() else "%.${digits}f".format(it)
 } ?: "--"
 
-/** All former Settings “Live pages” — swipe right on the dashboard. */
-private val DashPageTitles = listOf(
-    "Dash", "Custom", "Idle", "Fuel", "Trip", "Trans", "Perf", "G-force", "Health",
-)
+/** Default FB2 pages; Generic OBD2 drops Trans via [VehicleProfileConfig]. */
+private val DefaultDashPageTitles = VehicleProfileConfig.dashPageTitles(VehicleProfile.FB2)
 
 /**
  * Landscape diagnostic cluster optimized for dense sensor visibility:
@@ -143,6 +143,8 @@ fun DashboardScreen(
     modifier: Modifier = Modifier,
     showEstimatedGear: Boolean = true,
     loggingActive: Boolean = false,
+    pageTitles: List<String> = DefaultDashPageTitles,
+    profileBadge: String = VehicleProfile.FB2.badge,
     onConnectClick: () -> Unit = {},
     onSettingsClick: () -> Unit = {},
     onDiagnosticsClick: () -> Unit = {},
@@ -185,18 +187,19 @@ fun DashboardScreen(
     onLatchHealth: (String, MetricStatus) -> MetricStatus = { _, status -> status },
 ) {
     val s = state.snapshot
-    val pagerState = rememberPagerState(pageCount = { DashPageTitles.size })
+    val titles = pageTitles.ifEmpty { DefaultDashPageTitles }
+    val pagerState = rememberPagerState(pageCount = { titles.size })
     val scope = rememberCoroutineScope()
     var pickerTarget by remember { mutableStateOf<PickerTarget?>(null) }
     var editMetric by remember { mutableStateOf<EditableMetric?>(null) }
 
-    LaunchedEffect(pagerState.currentPage) {
-        when (pagerState.currentPage) {
-            1 -> onRefreshCustom()
-            2 -> onRefreshIdle()
-            3 -> onRefreshFuel()
-            5 -> onRefreshTrans()
-            8 -> onRefreshHealth()
+    LaunchedEffect(pagerState.currentPage, titles) {
+        when (titles.getOrNull(pagerState.currentPage)) {
+            "Custom" -> onRefreshCustom()
+            "Idle" -> onRefreshIdle()
+            "Fuel" -> onRefreshFuel()
+            "Trans" -> onRefreshTrans()
+            "Health" -> onRefreshHealth()
         }
     }
 
@@ -209,6 +212,7 @@ fun DashboardScreen(
         TopBar(
             state = state,
             loggingActive = loggingActive,
+            profileBadge = profileBadge,
             onConnectClick = onConnectClick,
             onSettingsClick = onSettingsClick,
             onDiagnosticsClick = onDiagnosticsClick,
@@ -233,7 +237,7 @@ fun DashboardScreen(
         )
 
         PageTabs(
-            titles = DashPageTitles,
+            titles = titles,
             current = pagerState.currentPage,
             onSelect = { page -> scope.launch { pagerState.animateScrollToPage(page) } },
         )
@@ -247,8 +251,8 @@ fun DashboardScreen(
         ) { page ->
             // Fixed page slot so swipe does not resize the hero strip above.
             Box(modifier = Modifier.fillMaxSize()) {
-                when (page) {
-                    0 -> MetricsPage(
+                when (titles.getOrNull(page)) {
+                    "Dash" -> MetricsPage(
                         snapshot = s,
                         healthSnapshot = state.decisionSnapshot.takeUnless { it.isEffectivelyBlank() } ?: s,
                         latchHealth = onLatchHealth,
@@ -266,7 +270,7 @@ fun DashboardScreen(
                         onDeepSearch = onDeepSearch,
                         onEditThresholds = { editMetric = it },
                     )
-                    1 -> DenseSensorGridPage(
+                    "Custom" -> DenseSensorGridPage(
                         title = "Custom sensors",
                         rows = customValues.entries.map { it.key to it.value }.ifEmpty {
                             listOf("Tip" to "Tap Manage to pick sensors from the catalog")
@@ -279,7 +283,7 @@ fun DashboardScreen(
                         snapshot = s,
                         onEditThresholds = { editMetric = it },
                     )
-                    2 -> DenseSensorGridPage(
+                    "Idle" -> DenseSensorGridPage(
                         title = "Cold start / rough idle",
                         tip = idleTips.firstOrNull(),
                         rows = idleValues.entries
@@ -294,7 +298,7 @@ fun DashboardScreen(
                         snapshot = s,
                         onEditThresholds = { editMetric = it },
                     )
-                    3 -> DenseSensorGridPage(
+                    "Fuel" -> DenseSensorGridPage(
                         title = "Fuel system",
                         rows = fuelValues.entries.map { it.key to it.value }
                             .ifEmpty { listOf("Status" to "Probing…") },
@@ -305,7 +309,7 @@ fun DashboardScreen(
                         snapshot = s,
                         onEditThresholds = { editMetric = it },
                     )
-                    4 -> TripScreen(
+                    "Trip" -> TripScreen(
                         distanceKm = trip.distanceKm,
                         kmPerL = trip.kmPerLiter,
                         cost = trip.cost,
@@ -316,7 +320,7 @@ fun DashboardScreen(
                         embedded = true,
                         modifier = Modifier.fillMaxSize(),
                     )
-                    5 -> DenseSensorGridPage(
+                    "Trans" -> DenseSensorGridPage(
                         title = "Transmission",
                         rows = transValues.entries.map { it.key to it.value }
                             .ifEmpty { listOf("Status" to "Probing…") },
@@ -327,14 +331,14 @@ fun DashboardScreen(
                         snapshot = s,
                         onEditThresholds = { editMetric = it },
                     )
-                    6 -> PerformanceScreen(
+                    "Perf" -> PerformanceScreen(
                         state = performance,
                         onReset = onResetPerformance,
                         phase = performance.phase,
                         embedded = true,
                         modifier = Modifier.fillMaxSize(),
                     )
-                    7 -> GForceScreen(
+                    "G-force" -> GForceScreen(
                         ax = gForceAx,
                         ay = gForceAy,
                         az = gForceAz,
@@ -1420,6 +1424,7 @@ private fun TopBarChip(text: String, color: Color, onClick: () -> Unit) {
 private fun TopBar(
     state: DashboardUiState,
     loggingActive: Boolean,
+    profileBadge: String = VehicleProfile.FB2.badge,
     onConnectClick: () -> Unit,
     onSettingsClick: () -> Unit,
     onDiagnosticsClick: () -> Unit,
@@ -1433,12 +1438,20 @@ private fun TopBar(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(
-            text = "FB2 DIAG",
-            color = Accent,
-            fontSize = DashType.topTitle,
-            fontWeight = FontWeight.Bold,
-        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = "FB2 DIAG",
+                color = Accent,
+                fontSize = DashType.topTitle,
+                fontWeight = FontWeight.Bold,
+            )
+            Text(
+                text = "  $profileBadge",
+                color = TextMuted,
+                fontSize = DashType.topChip,
+                fontWeight = FontWeight.Bold,
+            )
+        }
         Row(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.horizontalScroll(rememberScrollState()),

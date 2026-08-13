@@ -26,6 +26,8 @@ interface ObdSource {
 
     suspend fun readStoredDtcs(): List<Dtc> = emptyList()
     suspend fun readPendingDtcs(): List<Dtc> = emptyList()
+    /** Mode 0A permanent DTCs (not cleared by Mode 04 on many ECUs). */
+    suspend fun readPermanentDtcs(): List<Dtc> = emptyList()
     suspend fun clearDtcs(): Boolean = false
     suspend fun command(raw: String): String? = null
 

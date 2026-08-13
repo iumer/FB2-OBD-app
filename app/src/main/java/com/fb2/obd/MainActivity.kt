@@ -242,6 +242,8 @@ class MainActivity : ComponentActivity() {
                         modifier = Modifier.fillMaxSize(),
                         showEstimatedGear = settings.showEstimatedGear,
                         loggingActive = settings.valueLogging,
+                        pageTitles = viewModel.dashPageTitles,
+                        profileBadge = settings.vehicleProfile.badge,
                         onConnectClick = {
                             val needed = requiredBtPermissions().filter {
                                 ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
@@ -328,6 +330,7 @@ class MainActivity : ComponentActivity() {
                     Screen.SETTINGS -> {
                         SettingsScreen(
                             settings = settings,
+                            onVehicleProfileChange = viewModel::setVehicleProfile,
                             onToggleEstimatedGear = viewModel::setShowEstimatedGear,
                             onToggleVoiceAlerts = viewModel::setVoiceAlerts,
                             onToggleDuckMedia = viewModel::setDuckMediaDuringAlerts,
@@ -355,6 +358,8 @@ class MainActivity : ComponentActivity() {
                         nav = diagnosticsNav,
                         onBack = { screen = Screen.DASHBOARD },
                         modifier = Modifier.fillMaxSize(),
+                        showHondaModules = viewModel.showHondaModules,
+                        blurb = com.fb2.obd.obd.VehicleProfileConfig.diagHubBlurb(settings.vehicleProfile),
                     )
 
                     Screen.AI_ANALYZE -> {

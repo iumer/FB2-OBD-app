@@ -31,9 +31,10 @@ object DeepSensorSearch {
         label: String,
         pid: PidDefinition? = null,
         requestHint: String? = null,
+        profile: VehicleProfile = VehicleProfile.FB2,
         onProgress: (index: Int, total: Int, title: String) -> Unit = { _, _, _ -> },
     ): DeepSearchReport {
-        val all = DeepSearchKnowledgeBase.strategiesFor(pid, label, requestHint)
+        val all = VehicleProfileConfig.deepSearchStrategies(profile, pid, label, requestHint)
         val notes = mutableListOf(DeepSearchKnowledgeBase.explainLikelyCause(label, pid))
         if (all.isEmpty()) {
             return DeepSearchReport(

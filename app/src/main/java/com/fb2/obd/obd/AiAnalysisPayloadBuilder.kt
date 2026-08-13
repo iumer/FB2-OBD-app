@@ -667,6 +667,8 @@ Before returning the reply, verify that:
         dtcText: String,
         log: TruncatedLog,
         isDemo: Boolean = false,
+        vehicleLabel: String = "Honda Civic FB2",
+        includeHondaEldHint: Boolean = true,
     ): Payload {
         val requested = clampWindowMinutes(windowMinutes)
         val limitedNote = if (log.limited) {
@@ -689,7 +691,7 @@ Before returning the reply, verify that:
         val startIso = log.firstTimestampMs?.let { formatIsoUtc(it) }
         val endIso = log.lastTimestampMs?.let { formatIsoUtc(it) }
         val user = buildString {
-            appendLine("Analyze this Honda Civic FB2 session.")
+            appendLine("Analyze this $vehicleLabel session.")
             appendLine("Source: $sourceLabel")
             if (isDemo) appendLine("Mode: DEMO (simulated)")
             appendLine("Requested lookback window: $requested minutes")
@@ -711,7 +713,11 @@ Before returning the reply, verify that:
             appendLine("- Reply with ===SCREEN_BRIEF=== then ===FULL_REPORT=== exactly as specified.")
             appendLine("- Judge from numeric CSV/snapshot values; do not echo app ZONE/ALERT labels as facts.")
             appendLine("- Scope findings to the selected analysis window only.")
-            appendLine("- Low running voltage → charging-system/system voltage (include Honda ELD); not “weak battery charge”.")
+            if (includeHondaEldHint) {
+                appendLine("- Low running voltage → charging-system/system voltage (include Honda ELD); not “weak battery charge”.")
+            } else {
+                appendLine("- Low running voltage → charging-system / alternator / battery / cable drop; not “weak battery charge” alone.")
+            }
             appendLine("- Negative STFT → mild fuel correction, not proven “richness”.")
             if (isDemo) {
                 appendLine("- State clearly in Vehicle and session information that this is DEMO / simulated data.")
