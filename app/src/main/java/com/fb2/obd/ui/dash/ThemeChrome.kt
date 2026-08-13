@@ -9,10 +9,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.DropdownMenu
@@ -26,158 +24,284 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.fb2.obd.DashboardUiState
-import com.fb2.obd.data.ConnectionState
 import com.fb2.obd.obd.DashTheme
-import com.fb2.obd.ui.theme.ThemePalette
+import com.fb2.obd.ui.theme.LocalThemePalette
 
-/**
- * Immersive theme chrome matching the OptA/B/C samples.
- * Hamburger opens actions (Settings / DIAG / MIN / LOG / Connect).
- */
 @Composable
 fun ThemedTopBar(
     theme: DashTheme,
-    palette: ThemePalette,
-    state: DashboardUiState,
-    loggingActive: Boolean,
-    onConnectClick: () -> Unit,
-    onSettingsClick: () -> Unit,
-    onDiagnosticsClick: () -> Unit,
-    onToggleLogging: () -> Unit,
-    onMinimizeClick: () -> Unit,
+    connected: Boolean,
+    onOpenSettings: () -> Unit,
+    onOpenDiag: () -> Unit,
+    onOpenMin: () -> Unit,
+    onOpenLogs: () -> Unit,
+    onConnect: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
-    val status = connectionLabel(state)
-    var menuOpen by remember { mutableStateOf(false) }
+    when (theme) {
+        DashTheme.OPT_A -> OptAHeader(connected, onOpenSettings, onOpenDiag, onOpenMin, onOpenLogs, onConnect, modifier)
+        DashTheme.OPT_B -> OptBHeader(connected, onOpenSettings, onOpenDiag, onOpenMin, onOpenLogs, onConnect, modifier)
+        DashTheme.OPT_C -> OptCHeader(connected, onOpenSettings, onOpenDiag, onOpenMin, onOpenLogs, onConnect, modifier)
+        DashTheme.CLASSIC -> Unit
+    }
+}
 
+@Composable
+private fun OptAHeader(
+    connected: Boolean,
+    onOpenSettings: () -> Unit,
+    onOpenDiag: () -> Unit,
+    onOpenMin: () -> Unit,
+    onOpenLogs: () -> Unit,
+    onConnect: () -> Unit,
+    modifier: Modifier,
+) {
+    val p = LocalThemePalette.current
     Row(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
-            .padding(bottom = 8.dp),
+            .background(Color(0xFF0A0A0A))
+            .padding(horizontal = 10.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween,
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Box {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            ThemeIcon(
+                ThemeIconKind.BLUETOOTH,
+                if (connected) Color(0xFF4AD8FF) else Color(0xFF666666),
+                size = 18.dp,
+            )
+            Column {
+                Text("FB2 DIAG", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Black, letterSpacing = 1.sp)
                 Text(
-                    text = "☰",
-                    color = palette.accent,
-                    fontSize = 22.sp,
+                    if (connected) "ELM327 · LINKED" else "ELM327 · OFFLINE",
+                    color = if (connected) Color(0xFF5EEBA0) else Color(0xFFFF6B6B),
+                    fontSize = 9.sp,
                     fontWeight = FontWeight.Bold,
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(8.dp))
-                        .clickable { menuOpen = true }
-                        .padding(horizontal = 8.dp, vertical = 4.dp),
-                )
-                DropdownMenu(
-                    expanded = menuOpen,
-                    onDismissRequest = { menuOpen = false },
-                ) {
-                    DropdownMenuItem(
-                        text = { Text("Settings") },
-                        onClick = { menuOpen = false; onSettingsClick() },
-                    )
-                    DropdownMenuItem(
-                        text = { Text("Diagnostics") },
-                        onClick = { menuOpen = false; onDiagnosticsClick() },
-                    )
-                    DropdownMenuItem(
-                        text = { Text(if (loggingActive) "Stop log" else "Start log") },
-                        onClick = { menuOpen = false; onToggleLogging() },
-                    )
-                    DropdownMenuItem(
-                        text = { Text("Minimize") },
-                        onClick = { menuOpen = false; onMinimizeClick() },
-                    )
-                    DropdownMenuItem(
-                        text = { Text("Connect / devices") },
-                        onClick = { menuOpen = false; onConnectClick() },
-                    )
-                }
-            }
-            if (theme == DashTheme.OPT_B || theme == DashTheme.OPT_A) {
-                Spacer(modifier = Modifier.width(8.dp))
-                Box(
-                    modifier = Modifier
-                        .size(8.dp)
-                        .clip(CircleShape)
-                        .background(status.dot),
-                )
-                Text(
-                    text = "  ${status.label}",
-                    color = palette.textMuted,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 0.6.sp,
                 )
             }
         }
-
-        Text(
-            text = "FB2 DIAG",
-            color = palette.brand,
-            fontSize = when (theme) {
-                DashTheme.OPT_C -> 20.sp
-                else -> 18.sp
-            },
-            fontWeight = FontWeight.Black,
+        Spacer(Modifier.weight(1f))
+        ThemeMenuButton(
+            accent = p.accent,
+            border = p.accent.copy(alpha = 0.45f),
+            onOpenSettings = onOpenSettings,
+            onOpenDiag = onOpenDiag,
+            onOpenMin = onOpenMin,
+            onOpenLogs = onOpenLogs,
+            onConnect = onConnect,
         )
+    }
+}
 
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier
-                .clip(RoundedCornerShape(999.dp))
-                .clickable(onClick = onConnectClick)
-                .border(1.dp, palette.accent.copy(alpha = 0.45f), RoundedCornerShape(999.dp))
-                .padding(horizontal = 10.dp, vertical = 5.dp),
-        ) {
-            when (theme) {
-                DashTheme.OPT_A -> {
-                    Text("⬡", color = palette.accent, fontSize = 12.sp)
-                    Text(" ELM327", color = palette.textMuted, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                }
-                DashTheme.OPT_B -> {
-                    Text("⚙", color = palette.accent, fontSize = 13.sp)
-                    Text("  ⋮", color = palette.textMuted, fontSize = 14.sp)
-                }
-                else -> {
-                    Text("◉", color = palette.accent, fontSize = 12.sp)
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Box(
-                        modifier = Modifier
-                            .size(7.dp)
-                            .clip(CircleShape)
-                            .background(status.dot),
-                    )
-                    Text(
-                        text = " ${status.label}",
-                        color = palette.textPrimary,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                    )
-                }
-            }
+@Composable
+private fun OptBHeader(
+    connected: Boolean,
+    onOpenSettings: () -> Unit,
+    onOpenDiag: () -> Unit,
+    onOpenMin: () -> Unit,
+    onOpenLogs: () -> Unit,
+    onConnect: () -> Unit,
+    modifier: Modifier,
+) {
+    val p = LocalThemePalette.current
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .background(Color(0xFF050505))
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            "FB2 DIAG",
+            color = Color.White,
+            fontSize = 18.sp,
+            fontWeight = FontWeight.Black,
+            letterSpacing = 2.sp,
+            fontFamily = FontFamily.SansSerif,
+        )
+        Spacer(Modifier.weight(1f))
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            MilLamp(on = !connected)
+            OverflowMenu(
+                accent = p.accent,
+                onOpenSettings = onOpenSettings,
+                onOpenDiag = onOpenDiag,
+                onOpenMin = onOpenMin,
+                onOpenLogs = onOpenLogs,
+                onConnect = onConnect,
+            )
         }
     }
 }
 
-private data class StatusChip(val label: String, val dot: androidx.compose.ui.graphics.Color)
+@Composable
+private fun OptCHeader(
+    connected: Boolean,
+    onOpenSettings: () -> Unit,
+    onOpenDiag: () -> Unit,
+    onOpenMin: () -> Unit,
+    onOpenLogs: () -> Unit,
+    onConnect: () -> Unit,
+    modifier: Modifier,
+) {
+    val p = LocalThemePalette.current
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .background(Color(0xFF070707))
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            buildAnnotatedString {
+                withStyle(SpanStyle(color = Color.White, fontWeight = FontWeight.Black)) { append("FB2") }
+                append(" ")
+                withStyle(SpanStyle(color = Color(0xFFFF6A00), fontWeight = FontWeight.Black)) { append("DIAG") }
+            },
+            fontSize = 20.sp,
+            letterSpacing = 1.5.sp,
+        )
+        Spacer(Modifier.weight(1f))
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            ThemeIcon(
+                ThemeIconKind.BLUETOOTH,
+                if (connected) Color(0xFFFF8A3D) else Color(0xFF666666),
+                size = 18.dp,
+            )
+            ThemeIcon(
+                ThemeIconKind.OBD,
+                if (connected) Color(0xFFFF8A3D) else Color(0xFF666666),
+                size = 20.dp,
+            )
+            ThemeMenuButton(
+                accent = p.accent,
+                border = p.accent.copy(alpha = 0.45f),
+                onOpenSettings = onOpenSettings,
+                onOpenDiag = onOpenDiag,
+                onOpenMin = onOpenMin,
+                onOpenLogs = onOpenLogs,
+                onConnect = onConnect,
+            )
+        }
+    }
+}
 
-private fun connectionLabel(state: DashboardUiState): StatusChip {
-    val live = state.connection == ConnectionState.CONNECTED && state.sourceIsLive && !state.reconnecting
-    return when {
-        state.reconnecting ||
-            (state.connection == ConnectionState.CONNECTING && state.sourceIsLive) ->
-            StatusChip("RETRY", ThemePalette.of(DashTheme.CLASSIC).warn)
-        live -> StatusChip("CONNECTED", ThemePalette.of(DashTheme.CLASSIC).good)
-        state.connection == ConnectionState.CONNECTED && !state.sourceIsLive ->
-            StatusChip("DEMO", ThemePalette.of(DashTheme.CLASSIC).warn)
-        state.connection == ConnectionState.CONNECTING ->
-            StatusChip("…", ThemePalette.of(DashTheme.CLASSIC).accent)
-        state.connection == ConnectionState.ERROR ->
-            StatusChip("ERR", ThemePalette.of(DashTheme.CLASSIC).critical)
-        else -> StatusChip("OFF", ThemePalette.of(DashTheme.CLASSIC).textMuted)
+@Composable
+private fun MilLamp(on: Boolean) {
+    Box(
+        modifier = Modifier
+            .size(22.dp)
+            .clip(CircleShape)
+            .background(if (on) Color(0xFF3A1010) else Color(0xFF1A1A1A))
+            .border(1.5.dp, if (on) Color(0xFFFF3B3B) else Color(0xFF444444), CircleShape),
+        contentAlignment = Alignment.Center,
+    ) {
+        Box(
+            Modifier
+                .size(10.dp)
+                .clip(CircleShape)
+                .background(if (on) Color(0xFFFF2A2A) else Color(0xFF2A2A2A)),
+        )
+    }
+}
+
+@Composable
+private fun OverflowMenu(
+    accent: Color,
+    onOpenSettings: () -> Unit,
+    onOpenDiag: () -> Unit,
+    onOpenMin: () -> Unit,
+    onOpenLogs: () -> Unit,
+    onConnect: () -> Unit,
+) {
+    var open by remember { mutableStateOf(false) }
+    Box {
+        Text(
+            "⋮",
+            color = Color.White,
+            fontSize = 22.sp,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier
+                .clickable { open = true }
+                .padding(4.dp),
+        )
+        ThemeDropdown(
+            open = open,
+            onDismiss = { open = false },
+            accent = accent,
+            onOpenSettings = onOpenSettings,
+            onOpenDiag = onOpenDiag,
+            onOpenMin = onOpenMin,
+            onOpenLogs = onOpenLogs,
+            onConnect = onConnect,
+        )
+    }
+}
+
+@Composable
+private fun ThemeMenuButton(
+    accent: Color,
+    border: Color,
+    onOpenSettings: () -> Unit,
+    onOpenDiag: () -> Unit,
+    onOpenMin: () -> Unit,
+    onOpenLogs: () -> Unit,
+    onConnect: () -> Unit,
+) {
+    var open by remember { mutableStateOf(false) }
+    Box {
+        Box(
+            modifier = Modifier
+                .size(36.dp)
+                .clip(RoundedCornerShape(10.dp))
+                .background(Color(0xFF141414))
+                .border(1.dp, border, RoundedCornerShape(10.dp))
+                .clickable { open = true },
+            contentAlignment = Alignment.Center,
+        ) {
+            Text("☰", color = accent, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+        }
+        ThemeDropdown(
+            open = open,
+            onDismiss = { open = false },
+            accent = accent,
+            onOpenSettings = onOpenSettings,
+            onOpenDiag = onOpenDiag,
+            onOpenMin = onOpenMin,
+            onOpenLogs = onOpenLogs,
+            onConnect = onConnect,
+        )
+    }
+}
+
+@Composable
+private fun ThemeDropdown(
+    open: Boolean,
+    onDismiss: () -> Unit,
+    accent: Color,
+    onOpenSettings: () -> Unit,
+    onOpenDiag: () -> Unit,
+    onOpenMin: () -> Unit,
+    onOpenLogs: () -> Unit,
+    onConnect: () -> Unit,
+) {
+    DropdownMenu(expanded = open, onDismissRequest = onDismiss) {
+        DropdownMenuItem(text = { Text("Settings") }, onClick = { onDismiss(); onOpenSettings() })
+        DropdownMenuItem(text = { Text("DIAG") }, onClick = { onDismiss(); onOpenDiag() })
+        DropdownMenuItem(text = { Text("MIN") }, onClick = { onDismiss(); onOpenMin() })
+        DropdownMenuItem(text = { Text("LOG") }, onClick = { onDismiss(); onOpenLogs() })
+        DropdownMenuItem(
+            text = { Text("Connect", color = accent) },
+            onClick = { onDismiss(); onConnect() },
+        )
     }
 }

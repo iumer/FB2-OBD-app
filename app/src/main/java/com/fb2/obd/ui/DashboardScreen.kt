@@ -230,14 +230,12 @@ fun DashboardScreen(
         if (immersive) {
             ThemedTopBar(
                 theme = dashTheme,
-                palette = palette,
-                state = state,
-                loggingActive = loggingActive,
-                onConnectClick = onConnectClick,
-                onSettingsClick = onSettingsClick,
-                onDiagnosticsClick = onDiagnosticsClick,
-                onToggleLogging = onToggleLogging,
-                onMinimizeClick = onMinimizeClick,
+                connected = state.connection == ConnectionState.CONNECTED && state.sourceIsLive,
+                onOpenSettings = onSettingsClick,
+                onOpenDiag = onDiagnosticsClick,
+                onOpenMin = onMinimizeClick,
+                onOpenLogs = onToggleLogging,
+                onConnect = onConnectClick,
             )
             Box(
                 modifier = Modifier
