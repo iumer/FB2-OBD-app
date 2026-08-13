@@ -417,6 +417,8 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
     private var lastDashLogMs: Long = 0L
     /** Throttle dashboard_snapshots section (~1 Hz) so long trips don't ring-evict early. */
     private var lastSnapshotLogMs: Long = 0L
+    /** Throttle trip / perf / health / AA publish so Demo doesn't fan-out 4 StateFlows every tick. */
+    private var lastHeavyUiMs: Long = 0L
     /** Active on-disk checkpoint for the current LOG session (null when not logging). */
     private var activeCheckpointPath: String? = null
     private var lastCheckpointMs: Long = 0L
@@ -1082,26 +1084,38 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
                 val decision = diagnosticBrain.decisionSnapshot(snapshot)
                 snapshot.speedKmh?.let { accelTimer.onSample(now, it) }
                 tripComputer.onSample(now, snapshot.speedKmh, snapshot.mafGps, null)
-                _trip.update {
-                    TripState(
-                        tripComputer.distanceKm,
-                        tripComputer.kmPerLiter,
-                        tripComputer.litersPer100Km,
-                        tripComputer.tripCost,
-                        tripComputer.idleSeconds,
-                        tripComputer.fuelPricePerLiter,
-                    )
-                }
-                _performance.update {
-                    it.copy(
-                        current = accelTimer.current,
-                        best = accelTimer.best,
-                        currentSpeedKmh = snapshot.speedKmh,
-                        phase = accelTimer.phase,
-                    )
-                }
-                _health.update {
-                    scoreHealth(snapshot = decision)
+                val heavyDue = now - lastHeavyUiMs >= 1_000L
+                if (heavyDue) {
+                    lastHeavyUiMs = now
+                    _trip.update {
+                        TripState(
+                            tripComputer.distanceKm,
+                            tripComputer.kmPerLiter,
+                            tripComputer.litersPer100Km,
+                            tripComputer.tripCost,
+                            tripComputer.idleSeconds,
+                            tripComputer.fuelPricePerLiter,
+                        )
+                    }
+                    _performance.update {
+                        it.copy(
+                            current = accelTimer.current,
+                            best = accelTimer.best,
+                            currentSpeedKmh = snapshot.speedKmh,
+                            phase = accelTimer.phase,
+                        )
+                    }
+                    _health.update {
+                        scoreHealth(snapshot = decision)
+                    }
+                } else {
+                    // Keep perf phase/speed somewhat current without full health recalc.
+                    _performance.update {
+                        it.copy(
+                            currentSpeedKmh = snapshot.speedKmh,
+                            phase = accelTimer.phase,
+                        )
+                    }
                 }
                 voiceAlerter.onSnapshot(
                     snapshot = decision,
@@ -1134,7 +1148,9 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
                 if (source.isLive) {
                     ensureElmMonitor(ObdMonitorForegroundService.STATUS_LIVE)
                 }
-                publishCarDash()
+                if (heavyDue) {
+                    publishCarDash()
+                }
                 // Sample main Dash only into the session CSV.
                 if (ObdLogger.valueLoggingEnabled) {
                     logDashValues(snapshot)

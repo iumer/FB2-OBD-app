@@ -28,6 +28,7 @@ Keep these fixed. If a change might touch one of these areas, re-verify it.
 | I39 | Long-trip: Coolant/Battery/MAF/RPM sticky last-good | Fixed | Sanitize clears safety fields after TTL; smoother clears on null; EST gear needs fresh RPM+Speed |
 | I40 | Deep search shows 1/N then fails; Dash goes laggy during search | Fixed | Pause Mode 01 poll during deep search; walk full strategy list when bus OK; honest “Skipped N” when ECU link down |
 | I41 | Need FB2 vs Generic OBD2 profiles (no Honda junk on other cars) | Fixed | Settings → Vehicle profile; SAE-only catalog/pages/DIAG/deep search for Generic; Mode 0A permanent DTCs |
+| I42 | Dash swipe/scroll laggy in Demo (and weak car HUs) | Fixed | Static freshness LEDs; Demo 800 ms; pager beyondBounds=0; accel UI 2 Hz; throttle trip/health/AA; fewer columns/slots |
 | I09 | Debug log Share does nothing | Fixed | FileProvider share; HU fallback → Downloads/FB2-Diag + path dialog |
 | I10 | Value LOG Share broken / truncated (large CSV as EXTRA_TEXT) | Fixed | FileProvider CSV share; same HU save fallback |
 | I11 | Voice alerts must keep working with screen off (real ELM) | Fixed | `ObdMonitorForegroundService` + wake lock + AudioFocus |

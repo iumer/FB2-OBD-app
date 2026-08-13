@@ -1,8 +1,6 @@
 package com.fb2.obd.ui
 
-import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -15,11 +13,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableLongStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -29,7 +22,6 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.foundation.Canvas
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -46,7 +38,6 @@ import com.fb2.obd.ui.theme.Surface
 import com.fb2.obd.ui.theme.TextMuted
 import com.fb2.obd.ui.theme.TextPrimary
 import com.fb2.obd.ui.theme.WarnAmber
-import kotlinx.coroutines.delay
 import kotlin.math.roundToInt
 
 fun Health.color(): Color = when (this) {
@@ -59,39 +50,26 @@ fun Health.color(): Color = when (this) {
 }
 
 /**
- * Torque-style green heartbeat: flashes bright when [lastOkMs] updates (fresh
- * ECU/GPS decode), stays dim while recent, goes dark when stale / never seen.
+ * Torque-style green freshness LED.
+ *
+ * Intentionally **static** (no per-tile timers / Animatable). Low-RAM car HUs
+ * stuttered because ~15 tiles each ran a 200 ms clock + pulse while Demo/ELM
+ * already recomposes the Dash. Brightness still tracks [lastOkMs] on parent recomposes.
  */
 @Composable
 fun FreshnessHeartbeat(
     lastOkMs: Long?,
     modifier: Modifier = Modifier,
     size: Dp = 8.dp,
+    nowMs: Long = System.currentTimeMillis(),
 ) {
-    val pulse = remember { Animatable(0.25f) }
-    var nowMs by remember { mutableLongStateOf(System.currentTimeMillis()) }
-
-    LaunchedEffect(Unit) {
-        while (true) {
-            delay(200L)
-            nowMs = System.currentTimeMillis()
-        }
-    }
-    LaunchedEffect(lastOkMs) {
-        if (lastOkMs != null) {
-            pulse.snapTo(1f)
-            pulse.animateTo(0.45f, animationSpec = tween(durationMillis = 320))
-        } else {
-            pulse.snapTo(0.12f)
-        }
-    }
-
     val age = lastOkMs?.let { nowMs - it }
     val active = age != null && age < SnapshotFreshness.LED_ACTIVE_MS
     val alpha = when {
         lastOkMs == null -> 0.12f
         !active -> 0.14f
-        else -> pulse.value.coerceIn(0.35f, 1f)
+        age != null && age < 700L -> 1f
+        else -> 0.72f
     }
 
     Box(
@@ -117,11 +95,7 @@ fun CircularGauge(
     arcColor: Color = Accent,
 ) {
     val fraction = ((value ?: 0.0) / maxValue).coerceIn(0.0, 1.0).toFloat()
-    val animated by animateFloatAsState(
-        targetValue = fraction,
-        animationSpec = tween(durationMillis = 220),
-        label = "gauge",
-    )
+    // Snap — animated sweeps fight scroll jank on low-RAM HUs.
     val sweepTotal = 270f
     val startAngle = 135f
 
@@ -143,7 +117,7 @@ fun CircularGauge(
                     listOf(arcColor, arcColor, WarnAmber, CritRed),
                 ),
                 startAngle = startAngle,
-                sweepAngle = sweepTotal * animated,
+                sweepAngle = sweepTotal * fraction,
                 useCenter = false,
                 topLeft = Offset.Zero,
                 size = arcSize,
