@@ -120,6 +120,25 @@ class SpeedFreshnessAndPollPlannerTest {
         assertNull(cleared.gear)
         assertEquals(GearSource.NONE, cleared.gearSource)
         assertEquals(1900.0, cleared.rpm!!, 0.01)
+        assertNull(cleared.freshAtMs[SnapshotFreshness.KEY_SPEED])
+    }
+
+    @Test
+    fun freshness_mapForPresentFields_marksDemoSensors() {
+        val snap = VehicleSnapshot(rpm = 2000.0, speedKmh = 90.0, batteryVolts = 14.0)
+        val map = SnapshotFreshness.mapForPresentFields(snap, nowMs = 55L)
+        assertEquals(55L, map[SnapshotFreshness.KEY_RPM])
+        assertEquals(55L, map[SnapshotFreshness.KEY_SPEED])
+        assertEquals(55L, map[SnapshotFreshness.KEY_BATTERY])
+        assertNull(map[SnapshotFreshness.KEY_LTFT])
+    }
+
+    @Test
+    fun keyForTileLabel_mapsDashLabels() {
+        assertEquals(SnapshotFreshness.KEY_BATTERY, SnapshotFreshness.keyForTileLabel("Battery"))
+        assertEquals(SnapshotFreshness.KEY_SPEED, SnapshotFreshness.keyForTileLabel("Speed"))
+        assertEquals(SnapshotFreshness.KEY_COOLANT, SnapshotFreshness.keyForTileLabel("Coolant 1"))
+        assertNull(SnapshotFreshness.keyForTileLabel("Health"))
     }
 
     @Test

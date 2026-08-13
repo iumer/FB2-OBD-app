@@ -1,5 +1,6 @@
 package com.fb2.obd.ui
 
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -10,10 +11,15 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -30,6 +36,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.fb2.obd.obd.GearSource
 import com.fb2.obd.obd.Health
+import com.fb2.obd.obd.SnapshotFreshness
 import com.fb2.obd.ui.theme.Accent
 import com.fb2.obd.ui.theme.ColdBlue
 import com.fb2.obd.ui.theme.CritRed
@@ -39,6 +46,7 @@ import com.fb2.obd.ui.theme.Surface
 import com.fb2.obd.ui.theme.TextMuted
 import com.fb2.obd.ui.theme.TextPrimary
 import com.fb2.obd.ui.theme.WarnAmber
+import kotlinx.coroutines.delay
 import kotlin.math.roundToInt
 
 fun Health.color(): Color = when (this) {
@@ -48,6 +56,50 @@ fun Health.color(): Color = when (this) {
     Health.ELEVATED -> HotOrange
     Health.CRITICAL -> CritRed
     Health.UNKNOWN -> TextMuted
+}
+
+/**
+ * Torque-style green heartbeat: flashes bright when [lastOkMs] updates (fresh
+ * ECU/GPS decode), stays dim while recent, goes dark when stale / never seen.
+ */
+@Composable
+fun FreshnessHeartbeat(
+    lastOkMs: Long?,
+    modifier: Modifier = Modifier,
+    size: Dp = 8.dp,
+) {
+    val pulse = remember { Animatable(0.25f) }
+    var nowMs by remember { mutableLongStateOf(System.currentTimeMillis()) }
+
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(200L)
+            nowMs = System.currentTimeMillis()
+        }
+    }
+    LaunchedEffect(lastOkMs) {
+        if (lastOkMs != null) {
+            pulse.snapTo(1f)
+            pulse.animateTo(0.45f, animationSpec = tween(durationMillis = 320))
+        } else {
+            pulse.snapTo(0.12f)
+        }
+    }
+
+    val age = lastOkMs?.let { nowMs - it }
+    val active = age != null && age < SnapshotFreshness.LED_ACTIVE_MS
+    val alpha = when {
+        lastOkMs == null -> 0.12f
+        !active -> 0.14f
+        else -> pulse.value.coerceIn(0.35f, 1f)
+    }
+
+    Box(
+        modifier = modifier
+            .size(size)
+            .clip(CircleShape)
+            .background(GoodGreen.copy(alpha = alpha)),
+    )
 }
 
 /**

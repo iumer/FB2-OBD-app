@@ -22,7 +22,7 @@ Keep these fixed. If a change might touch one of these areas, re-verify it.
 | I07 | Rough Idle page stuck on “Probing…” | Fixed | Live Dash prefill; Mode 01 first; skip Mode 22 if bus unhealthy; shorter probe timeout |
 | I08 | App very laggy / slow | Fixed | Timeouts ~650/450 ms; core-PID-only while recovering; less ATSP thrash; **PID rotate** (heroes every cycle, ≤4 secondaries) |
 | I34 | Speed stuck / under-reads (e.g. 65 vs ~98 km/h) while RPM moves | Fixed | `PidPollPlanner` never fail-streak-skips RPM/Speed; `SnapshotFreshness` clears Speed after 2.5s stale; unit test recreates freeze |
-| I35 | Battery ZONE / CHARGE event spam + laggy UX (ELD chatter) | Fixed | Event tracker uses `AlertPolicy.latchHealth` hysteresis (same as Dash tiles) |
+| I36 | Want Torque-style green blink when a value is freshly fetched | Fixed | `FreshnessHeartbeat` on hero + Dash tiles; `VehicleSnapshot.freshAtMs` from ELM/Demo |
 | I09 | Debug log Share does nothing | Fixed | FileProvider share; HU fallback → Downloads/FB2-Diag + path dialog |
 | I10 | Value LOG Share broken / truncated (large CSV as EXTRA_TEXT) | Fixed | FileProvider CSV share; same HU save fallback |
 | I11 | Voice alerts must keep working with screen off (real ELM) | Fixed | `ObdMonitorForegroundService` + wake lock + AudioFocus |
