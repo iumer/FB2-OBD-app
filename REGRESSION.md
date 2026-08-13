@@ -26,6 +26,7 @@ Keep these fixed. If a change might touch one of these areas, re-verify it.
 | I37 | Long-trip: LOG only in RAM until STOP (crash loses hours) | Fixed | Checkpoint CSV to disk every ~60s from LOG start; finalize on STOP |
 | I38 | Long-trip: UNABLE soft-recover loops forever (sticky Dash) | Fixed | ATRV-only ≠ healthy cycle; hard reconnect after 3 soft recovers |
 | I39 | Long-trip: Coolant/Battery/MAF/RPM sticky last-good | Fixed | Sanitize clears safety fields after TTL; smoother clears on null; EST gear needs fresh RPM+Speed |
+| I40 | Deep search shows 1/N then fails; Dash goes laggy during search | Fixed | Pause Mode 01 poll during deep search; walk full strategy list when bus OK; honest “Skipped N” when ECU link down |
 | I09 | Debug log Share does nothing | Fixed | FileProvider share; HU fallback → Downloads/FB2-Diag + path dialog |
 | I10 | Value LOG Share broken / truncated (large CSV as EXTRA_TEXT) | Fixed | FileProvider CSV share; same HU save fallback |
 | I11 | Voice alerts must keep working with screen off (real ELM) | Fixed | `ObdMonitorForegroundService` + wake lock + AudioFocus |
