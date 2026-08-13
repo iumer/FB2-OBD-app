@@ -19,6 +19,9 @@ data class SavedLogFile(
 /**
  * Persists each logging session as its own timestamped CSV so previous drives
  * are not overwritten when the user starts a new log.
+ *
+ * Long hauls also use [writeCheckpoint] so a crash mid-drive still leaves a
+ * recoverable CSV on disk (not only RAM until STOP LOG).
  */
 class SessionLogStore(private val dir: File) {
 
@@ -63,6 +66,40 @@ class SessionLogStore(private val dir: File) {
             fileName = file.name,
             absolutePath = file.absolutePath,
             startedMs = startedMs,
+            sizeBytes = file.length(),
+        )
+    }
+
+    /**
+     * Create (or reopen) the in-progress session file for periodic checkpoints.
+     * Name is stable for the session so each flush overwrites the same path.
+     */
+    fun beginCheckpointFile(startedMs: Long, isDemo: Boolean = false): SavedLogFile {
+        dir.mkdirs()
+        val stamp = FILE_FMT.format(Date(startedMs))
+        val prefix = if (isDemo) "FB2-log-demo" else "FB2-log"
+        val name = "$prefix-$stamp.csv"
+        val file = File(dir, name)
+        if (!file.exists()) {
+            file.writeText("")
+        }
+        return SavedLogFile(
+            fileName = file.name,
+            absolutePath = file.absolutePath,
+            startedMs = startedMs,
+            sizeBytes = file.length(),
+        )
+    }
+
+    /** Overwrite the active session file with the latest CSV (crash-safe for long trips). */
+    fun writeCheckpoint(absolutePath: String, csv: String): SavedLogFile? {
+        val file = File(absolutePath)
+        file.parentFile?.mkdirs()
+        file.writeText(csv)
+        return SavedLogFile(
+            fileName = file.name,
+            absolutePath = file.absolutePath,
+            startedMs = file.lastModified(),
             sizeBytes = file.length(),
         )
     }

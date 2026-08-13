@@ -134,6 +134,36 @@ class SpeedFreshnessAndPollPlannerTest {
     }
 
     @Test
+    fun freshness_clearsStaleCoolantAndBattery() {
+        val fresh = SnapshotFreshness(staleAfterMs = 2_500L)
+        fresh.markOk(SnapshotFreshness.KEY_COOLANT, 0L)
+        fresh.markOk(SnapshotFreshness.KEY_BATTERY, 0L)
+        fresh.markOk(SnapshotFreshness.KEY_RPM, 0L)
+        val snap = VehicleSnapshot(rpm = 1800.0, coolantC = 90.0, batteryVolts = 12.5)
+        val out = fresh.sanitize(snap, nowMs = 5_000L, rpmUpdatedThisCycle = true)
+        assertNull(out.coolantC)
+        assertNull(out.batteryVolts)
+        assertNull(out.rpm) // RPM also past TTL
+    }
+
+    @Test
+    fun freshness_estimatedGearRequiresFreshRpmAndSpeed() {
+        val fresh = SnapshotFreshness(staleAfterMs = 2_500L)
+        fresh.markOk(SnapshotFreshness.KEY_SPEED, 4_000L)
+        // RPM never marked / stale
+        val snap = VehicleSnapshot(
+            rpm = 2000.0,
+            speedKmh = 90.0,
+            gear = 5,
+            gearSource = GearSource.ESTIMATED,
+            gearConfidencePct = 80,
+        )
+        val out = fresh.sanitize(snap, nowMs = 4_100L, rpmUpdatedThisCycle = false)
+        assertEquals(GearSource.NONE, out.gearSource)
+        assertNull(out.gear)
+    }
+
+    @Test
     fun keyForTileLabel_mapsDashLabels() {
         assertEquals(SnapshotFreshness.KEY_BATTERY, SnapshotFreshness.keyForTileLabel("Battery"))
         assertEquals(SnapshotFreshness.KEY_SPEED, SnapshotFreshness.keyForTileLabel("Speed"))
@@ -154,8 +184,10 @@ class SpeedFreshnessAndPollPlannerTest {
 
         // ECU answers again at 92 km/h (log jump 63→92).
         fresh.markOk(SnapshotFreshness.KEY_SPEED, 70_000L)
+        fresh.markOk(SnapshotFreshness.KEY_RPM, 70_000L)
         snap = snap.copy(speedKmh = 92.0, rpm = 1861.0)
         snap = fresh.sanitize(snap, nowMs = 70_000L, rpmUpdatedThisCycle = true)
         assertEquals(92.0, snap.speedKmh!!, 0.01)
+        assertEquals(1861.0, snap.rpm!!, 0.01)
     }
 }

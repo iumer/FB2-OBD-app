@@ -403,6 +403,11 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
     private var readinessJob: Job? = null
     /** Throttle Dash CSV samples (~1 Hz). */
     private var lastDashLogMs: Long = 0L
+    /** Throttle dashboard_snapshots section (~1 Hz) so long trips don't ring-evict early. */
+    private var lastSnapshotLogMs: Long = 0L
+    /** Active on-disk checkpoint for the current LOG session (null when not logging). */
+    private var activeCheckpointPath: String? = null
+    private var lastCheckpointMs: Long = 0L
     private var currentSource: ObdSource? = null
     /** Last TCM probe hit count — used so Health doesn't claim 100% with zero TCM data. */
     private var lastTcmSupportedCount: Int = 0
@@ -520,11 +525,20 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
             ObdLogger.logDebug(ObdLogger.Dir.INFO, "VALUE LOG session start — main Dash only")
         }
         lastDashLogMs = 0L
+        lastSnapshotLogMs = 0L
+        lastCheckpointMs = 0L
+        // Stable on-disk file from the first second — crash mid-trip still leaves a CSV.
+        val checkpoint = sessionLogStore.beginCheckpointFile(sessionStartedMs, sessionLoggingIsDemo)
+        activeCheckpointPath = checkpoint.absolutePath
+        ObdLogger.logDebug(ObdLogger.Dir.INFO, "VALUE LOG checkpoint file ${checkpoint.fileName}")
         logDashValues(_uiState.value.snapshot, force = true)
+        checkpointLogToDisk(force = true)
         // Lightly refresh user-added Dash (+) tiles so extras stay current in the CSV.
+        // Also flush the session CSV to disk on a long-haul-safe interval.
         loggingJob = viewModelScope.launch {
             while (isActive && ObdLogger.valueLoggingEnabled) {
                 refreshDashExtrasForLog()
+                checkpointLogToDisk(force = false)
                 delay(5_000L)
             }
         }
@@ -547,11 +561,19 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
             ObdLogger.tabValueRows().none { it.tab.equals("Dash", true) }
         if (!wasOn && empty) {
             sessionLoggingIsDemo = false
+            activeCheckpointPath = null
             return null
         }
         val csv = ObdLogger.valuesCsv(isDemo = isDemo)
         val started = if (sessionStartedMs > 0L) sessionStartedMs else System.currentTimeMillis()
-        val saved = sessionLogStore.saveSession(csv, started, isDemo = isDemo)
+        val path = activeCheckpointPath
+        val saved = if (path != null) {
+            sessionLogStore.writeCheckpoint(path, csv)
+                ?: sessionLogStore.saveSession(csv, started, isDemo = isDemo)
+        } else {
+            sessionLogStore.saveSession(csv, started, isDemo = isDemo)
+        }
+        activeCheckpointPath = null
         ObdLogger.logDebug(ObdLogger.Dir.INFO, "VALUE LOG saved ${saved.fileName}")
         ObdLogger.sessionStartMs = 0L
         sessionLoggingIsDemo = false
@@ -573,6 +595,23 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
             }
         }
         return saved
+    }
+
+    /** Flush in-memory LOG buffer to the session CSV (every ~60s, or [force]). */
+    private fun checkpointLogToDisk(force: Boolean) {
+        if (!ObdLogger.valueLoggingEnabled) return
+        val path = activeCheckpointPath ?: return
+        val now = System.currentTimeMillis()
+        if (!force && now - lastCheckpointMs < CHECKPOINT_INTERVAL_MS) return
+        lastCheckpointMs = now
+        val isDemo = sessionLoggingIsDemo
+        runCatching {
+            val csv = ObdLogger.valuesCsv(isDemo = isDemo)
+            sessionLogStore.writeCheckpoint(path, csv)
+            ObdLogger.logDebug(ObdLogger.Dir.INFO, "VALUE LOG checkpoint ${csv.length} chars")
+        }.onFailure {
+            ObdLogger.logDebug(ObdLogger.Dir.INFO, "VALUE LOG checkpoint failed: ${it.message}")
+        }
     }
 
     fun setGithubUploadToken(token: String) {
@@ -793,7 +832,10 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
         if (ids.isEmpty()) return
         val pids = ids.mapNotNull { id -> pidCatalog.find { it.id.equals(id, true) } }
         if (pids.isEmpty()) return
-        val results = LiveSnapshotOverlay.apply(source.probePids(pids), _uiState.value.snapshot)
+        val results = LiveSnapshotOverlay.apply(
+            source.probePids(pids, recoverFirst = false),
+            _uiState.value.snapshot,
+        )
         val live = results.associate { r -> r.pid.id to LiveSnapshotOverlay.formatDisplay(r) }
         _dashExtraValues.update { it + live }
         logDashValues(_uiState.value.snapshot, force = true)
@@ -963,10 +1005,13 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
                 } else {
                     incoming
                 }
-                ObdLogger.logSnapshot(incoming)
+                val now = System.currentTimeMillis()
+                if (ObdLogger.valueLoggingEnabled && now - lastSnapshotLogMs >= 1_000L) {
+                    lastSnapshotLogMs = now
+                    ObdLogger.logSnapshot(incoming, now)
+                }
                 // Smooth noisy sensors for health/voice; UI still shows raw [snapshot].
                 val decision = diagnosticBrain.decisionSnapshot(snapshot)
-                val now = System.currentTimeMillis()
                 snapshot.speedKmh?.let { accelTimer.onSample(now, it) }
                 tripComputer.onSample(now, snapshot.speedKmh, snapshot.mafGps, null)
                 _trip.update {
@@ -1450,5 +1495,10 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
         logUploadManager.stop()
         voiceAlerter.shutdown()
         super.onCleared()
+    }
+
+    companion object {
+        /** How often the live LOG buffer is flushed to the session CSV on disk. */
+        private const val CHECKPOINT_INTERVAL_MS = 60_000L
     }
 }

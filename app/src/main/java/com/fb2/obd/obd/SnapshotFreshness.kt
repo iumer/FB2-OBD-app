@@ -4,11 +4,10 @@ package com.fb2.obd.obd
  * Tracks which live fields were freshly decoded this cycle vs sticky last-good.
  *
  * Drive logs showed Speed frozen for ~60–200s while RPM/load/throttle kept
- * moving — classic last-good reuse after Speed PID timeouts. When a hero
- * field goes longer than [staleAfterMs] without a successful decode while
- * RPM is still updating, clear it so the Dash shows `n/s` instead of a lie.
- *
- * Timestamps also drive the Torque-style green heartbeat LED on the Dash.
+ * moving — classic last-good reuse after Speed PID timeouts. Safety-critical
+ * fields (RPM, Speed, Coolant, Battery, MAF, MAP) are cleared after their TTL
+ * so the Dash shows `n/s` instead of a lie. Timestamps also drive Torque-style
+ * green heartbeat LEDs.
  */
 class SnapshotFreshness(
     private val staleAfterMs: Long = STALE_AFTER_MS,
@@ -38,20 +37,69 @@ class SnapshotFreshness(
         rpmUpdatedThisCycle: Boolean,
     ): VehicleSnapshot {
         var out = snapshot
-        val speedOkAt = lastOkMs[KEY_SPEED]
-        if (speedOkAt != null && nowMs - speedOkAt > staleAfterMs) {
-            // Only blank speed when the bus is otherwise alive (RPM still moving).
-            if (rpmUpdatedThisCycle || snapshot.rpm != null) {
-                lastOkMs.remove(KEY_SPEED)
-                out = out.copy(
-                    speedKmh = null,
-                    // Gear from stale speed is worse than showing no gear.
-                    gear = null,
-                    gearSource = GearSource.NONE,
-                    gearConfidencePct = null,
-                )
-            }
+        val busAlive = rpmUpdatedThisCycle || snapshot.rpm != null ||
+            snapshot.batteryVolts != null || snapshot.mafGps != null
+
+        fun isStale(key: String, ttl: Long = staleAfterMs): Boolean {
+            val okAt = lastOkMs[key] ?: return false
+            return nowMs - okAt > ttl
         }
+
+        fun clearKey(key: String) {
+            lastOkMs.remove(key)
+        }
+
+        // Speed: clear when stale and bus otherwise alive (matches 65-vs-98 freeze).
+        if (isStale(KEY_SPEED) && busAlive) {
+            clearKey(KEY_SPEED)
+            out = out.copy(
+                speedKmh = null,
+                gear = null,
+                gearSource = GearSource.NONE,
+                gearConfidencePct = null,
+            )
+        }
+
+        // RPM: sticky RPM + live Speed invents wrong gears on long hauls.
+        if (isStale(KEY_RPM) && (out.speedKmh != null || out.coolantC != null || out.batteryVolts != null)) {
+            clearKey(KEY_RPM)
+            out = out.copy(
+                rpm = null,
+                gear = null,
+                gearSource = GearSource.NONE,
+                gearConfidencePct = null,
+            )
+        }
+
+        // Coolant / Battery / MAF / MAP: never show hours-old "OK" numbers.
+        if (isStale(KEY_COOLANT)) {
+            clearKey(KEY_COOLANT)
+            out = out.copy(coolantC = null)
+        }
+        if (isStale(KEY_BATTERY, ttl = BATTERY_STALE_AFTER_MS)) {
+            clearKey(KEY_BATTERY)
+            out = out.copy(batteryVolts = null)
+        }
+        if (isStale(KEY_MAF)) {
+            clearKey(KEY_MAF)
+            out = out.copy(mafGps = null)
+        }
+        if (isStale(KEY_MAP)) {
+            clearKey(KEY_MAP)
+            out = out.copy(mapKpa = null)
+        }
+
+        // Gear estimate needs both RPM and Speed fresh in this window.
+        val rpmFresh = lastOkMs[KEY_RPM]?.let { nowMs - it <= staleAfterMs } == true
+        val speedFresh = lastOkMs[KEY_SPEED]?.let { nowMs - it <= staleAfterMs } == true
+        if (out.gearSource == GearSource.ESTIMATED && !(rpmFresh && speedFresh)) {
+            out = out.copy(
+                gear = null,
+                gearSource = GearSource.NONE,
+                gearConfidencePct = null,
+            )
+        }
+
         return out.copy(freshAtMs = snapshotMap())
     }
 
@@ -77,6 +125,9 @@ class SnapshotFreshness(
 
         /** ~2–3 slow ELM cycles; short enough to avoid 65-vs-98 freezes. */
         const val STALE_AFTER_MS = 2_500L
+
+        /** ATRV may skip odd cycles — allow a bit longer before blanking volts. */
+        const val BATTERY_STALE_AFTER_MS = 4_000L
 
         /** LED stays lit (dim) while fresher than this; then goes dark. */
         const val LED_ACTIVE_MS = 1_800L

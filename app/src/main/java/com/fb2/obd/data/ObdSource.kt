@@ -36,7 +36,10 @@ interface ObdSource {
     suspend fun readMode06(): List<Mode06Result> = emptyList()
 
     /** Probe a list of PIDs; returns support + sample value when possible. */
-    suspend fun probePids(pids: List<PidDefinition>): List<PidProbeResult> = emptyList()
+    suspend fun probePids(
+        pids: List<PidDefinition>,
+        recoverFirst: Boolean = true,
+    ): List<PidProbeResult> = emptyList()
 
     /** Probe all Honda enhanced packs and return per-module results. */
     suspend fun probeHondaModules(): List<ModuleScanResult> = emptyList()
