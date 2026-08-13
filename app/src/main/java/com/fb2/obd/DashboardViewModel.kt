@@ -10,6 +10,7 @@ import com.fb2.obd.data.AiAnalysisStore
 import com.fb2.obd.data.AiReportStore
 import com.fb2.obd.data.ConnectionState
 import com.fb2.obd.data.DashTileOverrideStore
+import com.fb2.obd.data.DemoFlavour
 import com.fb2.obd.data.DemoObdSource
 import com.fb2.obd.data.HealthThresholdStore
 import com.fb2.obd.data.MaintenanceEntry
@@ -22,12 +23,17 @@ import com.fb2.obd.data.OpenAiClient
 import com.fb2.obd.data.SavedAiReport
 import com.fb2.obd.data.SavedLogFile
 import com.fb2.obd.data.SessionLogStore
+import com.fb2.obd.data.DashThemeStore
+import com.fb2.obd.data.VehicleProfileStore
+import com.fb2.obd.obd.DashTheme
 import com.fb2.obd.data.VoiceAlerter
 import com.fb2.obd.obd.AiAnalysisPayloadBuilder
 import com.fb2.obd.obd.ColdStartIdleCatalog
 import com.fb2.obd.obd.DeepSearchReport
 import com.fb2.obd.obd.DeepSensorSearch
 import com.fb2.obd.obd.DiagnosticBrain
+import com.fb2.obd.obd.VehicleProfile
+import com.fb2.obd.obd.VehicleProfileConfig
 import com.fb2.obd.obd.DiagnosticEventTracker
 import com.fb2.obd.obd.Dtc
 import com.fb2.obd.obd.FreezeFrame
@@ -94,6 +100,9 @@ data class SettingsState(
      * inverse as “CarPlay / Android Auto connected” = Yes).
      */
     val duckMediaDuringAlerts: Boolean = false,
+    val vehicleProfile: VehicleProfile = VehicleProfile.DEFAULT,
+    /** Phone Dash presentation theme (Classic / OptA / OptB / OptC). */
+    val dashTheme: DashTheme = DashTheme.DEFAULT,
 )
 
 /** UI state for one-shot Analyze via AI. */
@@ -113,6 +122,7 @@ data class FaultsState(
     val loading: Boolean = false,
     val stored: List<Dtc> = emptyList(),
     val pending: List<Dtc> = emptyList(),
+    val permanent: List<Dtc> = emptyList(),
     val message: String? = null,
     val hasRead: Boolean = false,
 )
@@ -177,6 +187,12 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
 
     private val _settings = MutableStateFlow(SettingsState())
     val settings: StateFlow<SettingsState> = _settings.asStateFlow()
+
+    private val profileStore = VehicleProfileStore(app)
+    private val dashThemeStore = DashThemeStore(app)
+    val vehicleProfile: VehicleProfile get() = _settings.value.vehicleProfile
+    val dashPageTitles: List<String> get() = VehicleProfileConfig.dashPageTitles(vehicleProfile)
+    val showHondaModules: Boolean get() = VehicleProfileConfig.showHondaModules(vehicleProfile)
 
     private val _faults = MutableStateFlow(FaultsState())
     val faults: StateFlow<FaultsState> = _faults.asStateFlow()
@@ -273,8 +289,8 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
     private val _deepFoundValues = MutableStateFlow<Map<String, String>>(emptyMap())
     val deepFoundValues: StateFlow<Map<String, String>> = _deepFoundValues.asStateFlow()
 
-    val pidCatalog: List<PidDefinition> =
-        StandardPidCatalog.all + HondaPidCatalog.allPids
+    val pidCatalog: List<PidDefinition>
+        get() = VehicleProfileConfig.pidCatalog(vehicleProfile)
 
     fun requestDeepSearch(label: String, pidId: String? = null) {
         _deepSearch.value = DeepSearchUiState(
@@ -314,6 +330,7 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
                 label = label,
                 pid = pid,
                 requestHint = pidId,
+                profile = vehicleProfile,
             ) { i, total, title ->
                 _deepSearch.update { st ->
                     st.copy(progress = "Trying $i / $total — $title")
@@ -403,6 +420,13 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
     private var readinessJob: Job? = null
     /** Throttle Dash CSV samples (~1 Hz). */
     private var lastDashLogMs: Long = 0L
+    /** Throttle dashboard_snapshots section (~1 Hz) so long trips don't ring-evict early. */
+    private var lastSnapshotLogMs: Long = 0L
+    /** Throttle trip / perf / health / AA publish so Demo doesn't fan-out 4 StateFlows every tick. */
+    private var lastHeavyUiMs: Long = 0L
+    /** Active on-disk checkpoint for the current LOG session (null when not logging). */
+    private var activeCheckpointPath: String? = null
+    private var lastCheckpointMs: Long = 0L
     private var currentSource: ObdSource? = null
     /** Last TCM probe hit count — used so Health doesn't claim 100% with zero TCM data. */
     private var lastTcmSupportedCount: Int = 0
@@ -413,9 +437,21 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
 
     init {
         ObdLogger.valueLoggingEnabled = false
+        val loadedProfile = profileStore.load()
+        _settings.value = SettingsState(
+            showEstimatedGear = VehicleProfileConfig.defaultShowEstimatedGear(loadedProfile),
+            vehicleProfile = loadedProfile,
+            dashTheme = dashThemeStore.load(),
+        )
         tripComputer.fuelPricePerLiter = _settings.value.fuelPricePerLiter
         _maintenance.value = MaintenanceStore(File(filesDir, "maintenance.json")).load()
-        _healthThresholds.value = thresholdStore.load()
+        // Keep user-edited thresholds if present; otherwise profile defaults.
+        val storedThresholds = thresholdStore.load()
+        _healthThresholds.value = if (thresholdStore.hasUserEdits()) {
+            storedThresholds
+        } else {
+            VehicleProfileConfig.healthDefaults(loadedProfile)
+        }
         voiceAlerter.enabled = _settings.value.voiceAlerts
         voiceAlerter.duckMediaDuringAlerts = _settings.value.duckMediaDuringAlerts
         voiceAlerter.start()
@@ -442,14 +478,53 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
         VehicleLiveStore.onConnectRequest = {
             // Car cannot pick BT devices — start Demo if offline; live ELM must be chosen on phone.
             if (!_uiState.value.sourceIsLive) {
-                useSource(DemoObdSource())
+                useSource(demoSourceForProfile())
             }
             publishCarDash()
         }
         _custom.update {
             it.copy(selectedIds = StandardPidCatalog.fuelPageDefaults().map { p -> p.id }.toSet())
         }
-        useSource(DemoObdSource())
+        useSource(demoSourceForProfile())
+        publishCarDash()
+    }
+
+    private fun demoSourceForProfile(): DemoObdSource = DemoObdSource(
+        flavour = when (vehicleProfile) {
+            VehicleProfile.FB2 -> DemoFlavour.FB2
+            VehicleProfile.GENERIC_OBD2 -> DemoFlavour.GENERIC
+        },
+    )
+
+    fun setVehicleProfile(profile: VehicleProfile) {
+        if (profile == vehicleProfile) return
+        profileStore.save(profile)
+        _settings.update {
+            it.copy(
+                vehicleProfile = profile,
+                showEstimatedGear = VehicleProfileConfig.defaultShowEstimatedGear(profile),
+            )
+        }
+        // Drop Honda-only extras / overlays that are invisible in Generic.
+        if (profile.isGeneric) {
+            _dashExtraPidIds.update { ids ->
+                ids.filter { id ->
+                    pidCatalog.any { it.id.equals(id, true) }
+                }
+            }
+            _transValues.value = emptyMap()
+            _hondaScan.value = emptyList()
+            _deepFoundValues.value = _deepFoundValues.value.filterKeys { key ->
+                pidCatalog.any { it.label.equals(key, true) || it.id.equals(key, true) }
+            }
+        }
+        if (!thresholdStore.hasUserEdits()) {
+            _healthThresholds.value = VehicleProfileConfig.healthDefaults(profile)
+        }
+        // Restart Demo under the new flavour when not on a live ELM.
+        if (!_uiState.value.sourceIsLive) {
+            useSource(demoSourceForProfile())
+        }
         publishCarDash()
     }
 
@@ -490,8 +565,9 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun resetHealthThresholds() {
-        _healthThresholds.value = HealthThresholds.DEFAULT
-        thresholdStore.save(HealthThresholds.DEFAULT)
+        val defaults = VehicleProfileConfig.healthDefaults(vehicleProfile)
+        _healthThresholds.value = defaults
+        thresholdStore.save(defaults)
         recalcHealth()
     }
 
@@ -520,11 +596,20 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
             ObdLogger.logDebug(ObdLogger.Dir.INFO, "VALUE LOG session start — main Dash only")
         }
         lastDashLogMs = 0L
+        lastSnapshotLogMs = 0L
+        lastCheckpointMs = 0L
+        // Stable on-disk file from the first second — crash mid-trip still leaves a CSV.
+        val checkpoint = sessionLogStore.beginCheckpointFile(sessionStartedMs, sessionLoggingIsDemo)
+        activeCheckpointPath = checkpoint.absolutePath
+        ObdLogger.logDebug(ObdLogger.Dir.INFO, "VALUE LOG checkpoint file ${checkpoint.fileName}")
         logDashValues(_uiState.value.snapshot, force = true)
+        checkpointLogToDisk(force = true)
         // Lightly refresh user-added Dash (+) tiles so extras stay current in the CSV.
+        // Also flush the session CSV to disk on a long-haul-safe interval.
         loggingJob = viewModelScope.launch {
             while (isActive && ObdLogger.valueLoggingEnabled) {
                 refreshDashExtrasForLog()
+                checkpointLogToDisk(force = false)
                 delay(5_000L)
             }
         }
@@ -547,11 +632,19 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
             ObdLogger.tabValueRows().none { it.tab.equals("Dash", true) }
         if (!wasOn && empty) {
             sessionLoggingIsDemo = false
+            activeCheckpointPath = null
             return null
         }
         val csv = ObdLogger.valuesCsv(isDemo = isDemo)
         val started = if (sessionStartedMs > 0L) sessionStartedMs else System.currentTimeMillis()
-        val saved = sessionLogStore.saveSession(csv, started, isDemo = isDemo)
+        val path = activeCheckpointPath
+        val saved = if (path != null) {
+            sessionLogStore.writeCheckpoint(path, csv)
+                ?: sessionLogStore.saveSession(csv, started, isDemo = isDemo)
+        } else {
+            sessionLogStore.saveSession(csv, started, isDemo = isDemo)
+        }
+        activeCheckpointPath = null
         ObdLogger.logDebug(ObdLogger.Dir.INFO, "VALUE LOG saved ${saved.fileName}")
         ObdLogger.sessionStartMs = 0L
         sessionLoggingIsDemo = false
@@ -573,6 +666,23 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
             }
         }
         return saved
+    }
+
+    /** Flush in-memory LOG buffer to the session CSV (every ~60s, or [force]). */
+    private fun checkpointLogToDisk(force: Boolean) {
+        if (!ObdLogger.valueLoggingEnabled) return
+        val path = activeCheckpointPath ?: return
+        val now = System.currentTimeMillis()
+        if (!force && now - lastCheckpointMs < CHECKPOINT_INTERVAL_MS) return
+        lastCheckpointMs = now
+        val isDemo = sessionLoggingIsDemo
+        runCatching {
+            val csv = ObdLogger.valuesCsv(isDemo = isDemo)
+            sessionLogStore.writeCheckpoint(path, csv)
+            ObdLogger.logDebug(ObdLogger.Dir.INFO, "VALUE LOG checkpoint ${csv.length} chars")
+        }.onFailure {
+            ObdLogger.logDebug(ObdLogger.Dir.INFO, "VALUE LOG checkpoint failed: ${it.message}")
+        }
     }
 
     fun setGithubUploadToken(token: String) {
@@ -692,6 +802,11 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
                     dtcText = dtcText,
                     log = truncated,
                     isDemo = isDemo,
+                    vehicleLabel = when (vehicleProfile) {
+                        VehicleProfile.FB2 -> "Honda Civic FB2"
+                        VehicleProfile.GENERIC_OBD2 -> "generic OBD-II vehicle"
+                    },
+                    includeHondaEldHint = vehicleProfile.isFb2,
                 )
                 val result = openAiClient.complete(payload.systemPrompt, payload.userMessage)
                 val parsed = AiAnalysisPayloadBuilder.parseModelResponse(result.text)
@@ -793,7 +908,10 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
         if (ids.isEmpty()) return
         val pids = ids.mapNotNull { id -> pidCatalog.find { it.id.equals(id, true) } }
         if (pids.isEmpty()) return
-        val results = LiveSnapshotOverlay.apply(source.probePids(pids), _uiState.value.snapshot)
+        val results = LiveSnapshotOverlay.apply(
+            source.probePids(pids, recoverFirst = false),
+            _uiState.value.snapshot,
+        )
         val live = results.associate { r -> r.pid.id to LiveSnapshotOverlay.formatDisplay(r) }
         _dashExtraValues.update { it + live }
         logDashValues(_uiState.value.snapshot, force = true)
@@ -866,6 +984,12 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
 
     fun setShowEstimatedGear(enabled: Boolean) {
         _settings.update { it.copy(showEstimatedGear = enabled) }
+    }
+
+    fun setDashTheme(theme: DashTheme) {
+        if (theme == _settings.value.dashTheme) return
+        dashThemeStore.save(theme)
+        _settings.update { it.copy(dashTheme = theme) }
     }
 
     fun setVoiceAlerts(enabled: Boolean) {
@@ -963,32 +1087,47 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
                 } else {
                     incoming
                 }
-                ObdLogger.logSnapshot(incoming)
+                val now = System.currentTimeMillis()
+                if (ObdLogger.valueLoggingEnabled && now - lastSnapshotLogMs >= 1_000L) {
+                    lastSnapshotLogMs = now
+                    ObdLogger.logSnapshot(incoming, now)
+                }
                 // Smooth noisy sensors for health/voice; UI still shows raw [snapshot].
                 val decision = diagnosticBrain.decisionSnapshot(snapshot)
-                val now = System.currentTimeMillis()
                 snapshot.speedKmh?.let { accelTimer.onSample(now, it) }
                 tripComputer.onSample(now, snapshot.speedKmh, snapshot.mafGps, null)
-                _trip.update {
-                    TripState(
-                        tripComputer.distanceKm,
-                        tripComputer.kmPerLiter,
-                        tripComputer.litersPer100Km,
-                        tripComputer.tripCost,
-                        tripComputer.idleSeconds,
-                        tripComputer.fuelPricePerLiter,
-                    )
-                }
-                _performance.update {
-                    it.copy(
-                        current = accelTimer.current,
-                        best = accelTimer.best,
-                        currentSpeedKmh = snapshot.speedKmh,
-                        phase = accelTimer.phase,
-                    )
-                }
-                _health.update {
-                    scoreHealth(snapshot = decision)
+                val heavyDue = now - lastHeavyUiMs >= 1_000L
+                if (heavyDue) {
+                    lastHeavyUiMs = now
+                    _trip.update {
+                        TripState(
+                            tripComputer.distanceKm,
+                            tripComputer.kmPerLiter,
+                            tripComputer.litersPer100Km,
+                            tripComputer.tripCost,
+                            tripComputer.idleSeconds,
+                            tripComputer.fuelPricePerLiter,
+                        )
+                    }
+                    _performance.update {
+                        it.copy(
+                            current = accelTimer.current,
+                            best = accelTimer.best,
+                            currentSpeedKmh = snapshot.speedKmh,
+                            phase = accelTimer.phase,
+                        )
+                    }
+                    _health.update {
+                        scoreHealth(snapshot = decision)
+                    }
+                } else {
+                    // Keep perf phase/speed somewhat current without full health recalc.
+                    _performance.update {
+                        it.copy(
+                            currentSpeedKmh = snapshot.speedKmh,
+                            phase = accelTimer.phase,
+                        )
+                    }
                 }
                 voiceAlerter.onSnapshot(
                     snapshot = decision,
@@ -1021,7 +1160,9 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
                 if (source.isLive) {
                     ensureElmMonitor(ObdMonitorForegroundService.STATUS_LIVE)
                 }
-                publishCarDash()
+                if (heavyDue) {
+                    publishCarDash()
+                }
                 // Sample main Dash only into the session CSV.
                 if (ObdLogger.valueLoggingEnabled) {
                     logDashValues(snapshot)
@@ -1131,13 +1272,19 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
             _faults.update { it.copy(loading = true, message = null) }
             val stored = source.readStoredDtcs()
             val pending = source.readPendingDtcs()
+            val permanent = source.readPermanentDtcs()
             _faults.update {
                 it.copy(
                     loading = false,
                     stored = stored,
                     pending = pending,
+                    permanent = permanent,
                     hasRead = true,
-                    message = if (stored.isEmpty() && pending.isEmpty()) "No fault codes found." else null,
+                    message = if (stored.isEmpty() && pending.isEmpty() && permanent.isEmpty()) {
+                        "No fault codes found."
+                    } else {
+                        null
+                    },
                 )
             }
             _uiState.update { it.copy(dtcCount = stored.size) }
@@ -1156,13 +1303,19 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
             val ok = source.clearDtcs()
             val stored = source.readStoredDtcs()
             val pending = source.readPendingDtcs()
+            val permanent = source.readPermanentDtcs()
             _faults.update {
                 it.copy(
                     loading = false,
                     stored = stored,
                     pending = pending,
+                    permanent = permanent,
                     hasRead = true,
-                    message = if (ok) "Codes cleared." else "Clear failed or not supported.",
+                    message = if (ok) {
+                        "Codes cleared (Mode 04). Permanent (Mode 0A) codes may remain until the ECU clears them."
+                    } else {
+                        "Clear failed or not supported."
+                    },
                 )
             }
             _uiState.update { it.copy(dtcCount = stored.size) }
@@ -1234,8 +1387,7 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
         val source = currentSource ?: return
         viewModelScope.launch {
             val defs = StandardPidCatalog.fuelPageDefaults() +
-                HondaPidCatalog.engine.pids.filter { it.label.contains("Injector", true) } +
-                HondaPidCatalog.engine.pids.filter { it.label.contains("Fuel", true) }
+                VehicleProfileConfig.fuelExtraPids(vehicleProfile)
             val probed = source.probePids(defs.distinctBy { it.id })
             val results = LiveSnapshotOverlay.apply(probed, _uiState.value.snapshot)
             ObdLogger.logProbe("Fuel system", results)
@@ -1251,7 +1403,7 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
             _idleDiag.update { it.copy(loading = true) }
             val liveSnap = _uiState.value.snapshot
             // Paint live Dash values immediately so the page isn't stuck on blank "Probing…".
-            val ordered = ColdStartIdleCatalog.allPids.sortedBy { pid ->
+            val ordered = ColdStartIdleCatalog.allPidsFor(vehicleProfile).sortedBy { pid ->
                 when {
                     pid.request.startsWith("01") -> 0
                     pid.request.startsWith("22") -> 2
@@ -1319,6 +1471,10 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun refreshTransmission() {
+        if (!VehicleProfileConfig.showTransmissionPage(vehicleProfile)) {
+            _transValues.value = emptyMap()
+            return
+        }
         val source = currentSource ?: return
         viewModelScope.launch {
             val results = source.probePids(HondaPidCatalog.transmission.pids)
@@ -1383,6 +1539,10 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun scanHondaModules() {
+        if (!VehicleProfileConfig.showHondaModules(vehicleProfile)) {
+            _hondaScan.value = emptyList()
+            return
+        }
         val source = currentSource ?: return
         viewModelScope.launch {
             _hondaScanning.value = true
@@ -1450,5 +1610,10 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
         logUploadManager.stop()
         voiceAlerter.shutdown()
         super.onCleared()
+    }
+
+    companion object {
+        /** How often the live LOG buffer is flushed to the session CSV on disk. */
+        private const val CHECKPOINT_INTERVAL_MS = 60_000L
     }
 }

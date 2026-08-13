@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
@@ -28,6 +29,7 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -57,6 +59,7 @@ import com.fb2.obd.DashboardUiState
 import com.fb2.obd.PerformanceState
 import com.fb2.obd.TripState
 import com.fb2.obd.data.ConnectionState
+import com.fb2.obd.obd.DashTheme
 import com.fb2.obd.obd.EditableMetric
 import com.fb2.obd.obd.GearSource
 import com.fb2.obd.obd.Health
@@ -68,16 +71,25 @@ import com.fb2.obd.obd.MetricStatus
 import com.fb2.obd.obd.ObdPid
 import com.fb2.obd.obd.PidCategory
 import com.fb2.obd.obd.PidDefinition
+import com.fb2.obd.obd.SnapshotFreshness
 import com.fb2.obd.obd.StandardPidCatalog
+import com.fb2.obd.obd.VehicleProfile
+import com.fb2.obd.obd.VehicleProfileConfig
 import com.fb2.obd.obd.VehicleSnapshot
 import com.fb2.obd.obd.isEffectivelyBlank
+import com.fb2.obd.ui.dash.OptAThemeDash
+import com.fb2.obd.ui.dash.OptBThemeDash
+import com.fb2.obd.ui.dash.OptCThemeDash
+import com.fb2.obd.ui.dash.ThemedTopBar
 import com.fb2.obd.ui.theme.Accent
+import com.fb2.obd.ui.theme.LocalThemePalette
 import com.fb2.obd.ui.theme.Background
 import com.fb2.obd.ui.theme.CritRed
 import com.fb2.obd.ui.theme.GoodGreen
 import com.fb2.obd.ui.theme.Surface
 import com.fb2.obd.ui.theme.TextMuted
 import com.fb2.obd.ui.theme.TextPrimary
+import com.fb2.obd.ui.theme.ThemePalette
 import com.fb2.obd.ui.theme.WarnAmber
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -86,15 +98,13 @@ import kotlin.math.roundToInt
 
 /** Column count — prefer wider tiles on car HUs (readable while driving). */
 private fun dashColumnsForWidth(maxWidth: Dp): Int = when {
-    maxWidth >= 1700.dp -> 5
-    maxWidth >= 1200.dp -> 4
-    maxWidth >= 800.dp -> 3
+    maxWidth >= 1700.dp -> 4
+    maxWidth >= 1100.dp -> 3
     else -> 2
 }
 
 private fun denseColumnsForWidth(maxWidth: Dp): Int = when {
     maxWidth >= 1400.dp -> 3
-    maxWidth >= 900.dp -> 2
     else -> 2
 }
 
@@ -112,10 +122,10 @@ private object DashType {
     val tileStatus = 11.sp
     val tileHint = 10.sp
 
-    val heroH = 78.dp
-    val heroLabel = 12.sp
-    val heroValue = 32.sp
-    val heroUnit = 13.sp
+    val heroH = 92.dp
+    val heroLabel = 11.sp
+    val heroValue = 30.sp
+    val heroUnit = 12.sp
     val heroBadge = 11.sp
 
     val tab = 14.sp
@@ -127,10 +137,8 @@ private fun Double?.fmt(digits: Int = 0): String = this?.let {
     if (digits == 0) it.roundToInt().toString() else "%.${digits}f".format(it)
 } ?: "--"
 
-/** All former Settings “Live pages” — swipe right on the dashboard. */
-private val DashPageTitles = listOf(
-    "Dash", "Custom", "Idle", "Fuel", "Trip", "Trans", "Perf", "G-force", "Health",
-)
+/** Default FB2 pages; Generic OBD2 drops Trans via [VehicleProfileConfig]. */
+private val DefaultDashPageTitles = VehicleProfileConfig.dashPageTitles(VehicleProfile.FB2)
 
 /**
  * Landscape diagnostic cluster optimized for dense sensor visibility:
@@ -141,7 +149,10 @@ fun DashboardScreen(
     state: DashboardUiState,
     modifier: Modifier = Modifier,
     showEstimatedGear: Boolean = true,
+    dashTheme: DashTheme = DashTheme.CLASSIC,
     loggingActive: Boolean = false,
+    pageTitles: List<String> = DefaultDashPageTitles,
+    profileBadge: String = VehicleProfile.FB2.badge,
     onConnectClick: () -> Unit = {},
     onSettingsClick: () -> Unit = {},
     onDiagnosticsClick: () -> Unit = {},
@@ -184,166 +195,238 @@ fun DashboardScreen(
     onLatchHealth: (String, MetricStatus) -> MetricStatus = { _, status -> status },
 ) {
     val s = state.snapshot
-    val pagerState = rememberPagerState(pageCount = { DashPageTitles.size })
+    val titles = pageTitles.ifEmpty { DefaultDashPageTitles }
+    val pagerState = rememberPagerState(pageCount = { titles.size })
     val scope = rememberCoroutineScope()
     var pickerTarget by remember { mutableStateOf<PickerTarget?>(null) }
     var editMetric by remember { mutableStateOf<EditableMetric?>(null) }
+    val palette = remember(dashTheme) { ThemePalette.of(dashTheme) }
+    val immersive = dashTheme != DashTheme.CLASSIC
 
-    LaunchedEffect(pagerState.currentPage) {
-        when (pagerState.currentPage) {
-            1 -> onRefreshCustom()
-            2 -> onRefreshIdle()
-            3 -> onRefreshFuel()
-            5 -> onRefreshTrans()
-            8 -> onRefreshHealth()
+    LaunchedEffect(pagerState.currentPage, titles, immersive) {
+        if (immersive) return@LaunchedEffect
+        when (titles.getOrNull(pagerState.currentPage)) {
+            "Custom" -> onRefreshCustom()
+            "Idle" -> onRefreshIdle()
+            "Fuel" -> onRefreshFuel()
+            "Trans" -> onRefreshTrans()
+            "Health" -> onRefreshHealth()
         }
     }
+
+    val gearSrc = if (!showEstimatedGear && s.gearSource == GearSource.ESTIMATED) {
+        GearSource.NONE
+    } else {
+        s.gearSource
+    }
+    val healthSnap = state.decisionSnapshot.takeUnless { it.isEffectivelyBlank() } ?: s
 
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(Background)
+            .background(palette.background)
             .padding(horizontal = 10.dp, vertical = 6.dp),
     ) {
-        TopBar(
-            state = state,
-            loggingActive = loggingActive,
-            onConnectClick = onConnectClick,
-            onSettingsClick = onSettingsClick,
-            onDiagnosticsClick = onDiagnosticsClick,
-            onToggleLogging = onToggleLogging,
-            onMinimizeClick = onMinimizeClick,
-        )
-
-        CompactHeroStrip(
-            rpm = s.rpm,
-            speedKmh = s.speedKmh,
-            gear = s.gear,
-            gearSource = if (!showEstimatedGear && s.gearSource == GearSource.ESTIMATED) {
-                GearSource.NONE
-            } else {
-                s.gearSource
-            },
-            gearConfidencePct = s.gearConfidencePct,
-            thresholds = healthThresholds,
-            onEditRpm = { editMetric = EditableMetric.RPM },
-        )
-
-        PageTabs(
-            titles = DashPageTitles,
-            current = pagerState.currentPage,
-            onSelect = { page -> scope.launch { pagerState.animateScrollToPage(page) } },
-        )
-
-        HorizontalPager(
-            state = pagerState,
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f),
-            userScrollEnabled = true,
-        ) { page ->
-            // Fixed page slot so swipe does not resize the hero strip above.
-            Box(modifier = Modifier.fillMaxSize()) {
-                when (page) {
-                    0 -> MetricsPage(
+        if (immersive) {
+            ThemedTopBar(
+                theme = dashTheme,
+                connected = state.connection == ConnectionState.CONNECTED && state.sourceIsLive,
+                onOpenSettings = onSettingsClick,
+                onOpenDiag = onDiagnosticsClick,
+                onOpenMin = onMinimizeClick,
+                onOpenLogs = onToggleLogging,
+                onConnect = onConnectClick,
+            )
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f),
+            ) {
+                when (dashTheme) {
+                    DashTheme.OPT_A -> OptAThemeDash(
                         snapshot = s,
-                        healthSnapshot = state.decisionSnapshot.takeUnless { it.isEffectivelyBlank() } ?: s,
-                        latchHealth = onLatchHealth,
-                        extraPidIds = extraPidIds,
-                        extraValues = extraValues,
-                        tileOverrides = tileOverrides,
-                        deepFoundValues = deepFoundValues,
-                        catalog = catalog,
+                        healthSnapshot = healthSnap,
                         thresholds = healthThresholds,
+                        gearSource = gearSrc,
+                        gearConfidencePct = s.gearConfidencePct,
                         dtcCount = dtcCount,
                         healthScore = health,
-                        onEmptySlotClick = { pickerTarget = PickerTarget.ExtraSlot(it) },
-                        onRemapBaseTile = { label -> pickerTarget = PickerTarget.RemapBase(label) },
-                        onRemapExtra = { index -> pickerTarget = PickerTarget.ExtraSlot(index) },
+                        latchHealth = onLatchHealth,
+                        palette = palette,
+                        onRemapBase = { label -> pickerTarget = PickerTarget.RemapBase(label) },
                         onDeepSearch = onDeepSearch,
                         onEditThresholds = { editMetric = it },
                     )
-                    1 -> DenseSensorGridPage(
-                        title = "Custom sensors",
-                        rows = customValues.entries.map { it.key to it.value }.ifEmpty {
-                            listOf("Tip" to "Tap Manage to pick sensors from the catalog")
-                        },
-                        action = "Probe" to onRefreshCustom,
-                        secondaryAction = "Manage" to onManageCustom,
-                        deepFoundValues = deepFoundValues,
-                        onDeepSearch = onDeepSearch,
-                        thresholds = healthThresholds,
+                    DashTheme.OPT_B -> OptBThemeDash(
                         snapshot = s,
-                        onEditThresholds = { editMetric = it },
-                    )
-                    2 -> DenseSensorGridPage(
-                        title = "Cold start / rough idle",
-                        tip = idleTips.firstOrNull(),
-                        rows = idleValues.entries
-                            .filter { !it.key.matches(Regex("^[0-9A-Fa-f]{4,}$")) }
-                            .take(24)
-                            .map { it.key to it.value }
-                            .ifEmpty { listOf("Status" to "Probing…") },
-                        action = "Probe" to onRefreshIdle,
-                        deepFoundValues = deepFoundValues,
-                        onDeepSearch = onDeepSearch,
+                        healthSnapshot = healthSnap,
                         thresholds = healthThresholds,
-                        snapshot = s,
-                        onEditThresholds = { editMetric = it },
-                    )
-                    3 -> DenseSensorGridPage(
-                        title = "Fuel system",
-                        rows = fuelValues.entries.map { it.key to it.value }
-                            .ifEmpty { listOf("Status" to "Probing…") },
-                        action = "Refresh" to onRefreshFuel,
-                        deepFoundValues = deepFoundValues,
+                        gearSource = gearSrc,
+                        dtcCount = dtcCount,
+                        healthScore = health,
+                        latchHealth = onLatchHealth,
+                        palette = palette,
+                        onRemapBase = { label -> pickerTarget = PickerTarget.RemapBase(label) },
                         onDeepSearch = onDeepSearch,
-                        thresholds = healthThresholds,
-                        snapshot = s,
                         onEditThresholds = { editMetric = it },
                     )
-                    4 -> TripScreen(
-                        distanceKm = trip.distanceKm,
-                        kmPerL = trip.kmPerLiter,
-                        cost = trip.cost,
-                        idleSec = trip.idleSeconds,
-                        fuelPrice = trip.fuelPrice,
-                        onReset = onResetTrip,
-                        onFuelPriceChange = onSetFuelPrice,
-                        embedded = true,
-                        modifier = Modifier.fillMaxSize(),
-                    )
-                    5 -> DenseSensorGridPage(
-                        title = "Transmission",
-                        rows = transValues.entries.map { it.key to it.value }
-                            .ifEmpty { listOf("Status" to "Probing…") },
-                        action = "Probe" to onRefreshTrans,
-                        deepFoundValues = deepFoundValues,
+                    DashTheme.OPT_C -> OptCThemeDash(
+                        snapshot = s,
+                        healthSnapshot = healthSnap,
+                        thresholds = healthThresholds,
+                        gearSource = gearSrc,
+                        gearConfidencePct = s.gearConfidencePct,
+                        dtcCount = dtcCount,
+                        healthScore = health,
+                        latchHealth = onLatchHealth,
+                        palette = palette,
+                        onRemapBase = { label -> pickerTarget = PickerTarget.RemapBase(label) },
                         onDeepSearch = onDeepSearch,
-                        thresholds = healthThresholds,
-                        snapshot = s,
                         onEditThresholds = { editMetric = it },
                     )
-                    6 -> PerformanceScreen(
-                        state = performance,
-                        onReset = onResetPerformance,
-                        phase = performance.phase,
-                        embedded = true,
-                        modifier = Modifier.fillMaxSize(),
-                    )
-                    7 -> GForceScreen(
-                        ax = gForceAx,
-                        ay = gForceAy,
-                        az = gForceAz,
-                        embedded = true,
-                        modifier = Modifier.fillMaxSize(),
-                    )
-                    else -> HealthScoresScreen(
-                        score = health,
-                        onRefresh = onRefreshHealth,
-                        embedded = true,
-                        modifier = Modifier.fillMaxSize(),
-                    )
+                    DashTheme.CLASSIC -> Unit
+                }
+            }
+        } else {
+            TopBar(
+                state = state,
+                loggingActive = loggingActive,
+                profileBadge = profileBadge,
+                onConnectClick = onConnectClick,
+                onSettingsClick = onSettingsClick,
+                onDiagnosticsClick = onDiagnosticsClick,
+                onToggleLogging = onToggleLogging,
+                onMinimizeClick = onMinimizeClick,
+            )
+
+            CompactHeroStrip(
+                rpm = s.rpm,
+                speedKmh = s.speedKmh,
+                gear = s.gear,
+                gearSource = gearSrc,
+                gearConfidencePct = s.gearConfidencePct,
+                thresholds = healthThresholds,
+                rpmFreshAtMs = s.freshAtMs[SnapshotFreshness.KEY_RPM],
+                speedFreshAtMs = s.freshAtMs[SnapshotFreshness.KEY_SPEED],
+                onEditRpm = { editMetric = EditableMetric.RPM },
+            )
+
+            PageTabs(
+                titles = titles,
+                current = pagerState.currentPage,
+                onSelect = { page -> scope.launch { pagerState.scrollToPage(page) } },
+            )
+
+            HorizontalPager(
+                state = pagerState,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f),
+                userScrollEnabled = true,
+                beyondBoundsPageCount = 0,
+            ) { page ->
+                Box(modifier = Modifier.fillMaxSize()) {
+                    when (titles.getOrNull(page)) {
+                        "Dash" -> MetricsPage(
+                            snapshot = s,
+                            healthSnapshot = healthSnap,
+                            latchHealth = onLatchHealth,
+                            extraPidIds = extraPidIds,
+                            extraValues = extraValues,
+                            tileOverrides = tileOverrides,
+                            deepFoundValues = deepFoundValues,
+                            catalog = catalog,
+                            thresholds = healthThresholds,
+                            dtcCount = dtcCount,
+                            healthScore = health,
+                            onEmptySlotClick = { pickerTarget = PickerTarget.ExtraSlot(it) },
+                            onRemapBaseTile = { label -> pickerTarget = PickerTarget.RemapBase(label) },
+                            onRemapExtra = { index -> pickerTarget = PickerTarget.ExtraSlot(index) },
+                            onDeepSearch = onDeepSearch,
+                            onEditThresholds = { editMetric = it },
+                        )
+                        "Custom" -> DenseSensorGridPage(
+                            title = "Custom sensors",
+                            rows = customValues.entries.map { it.key to it.value }.ifEmpty {
+                                listOf("Tip" to "Tap Manage to pick sensors from the catalog")
+                            },
+                            action = "Probe" to onRefreshCustom,
+                            secondaryAction = "Manage" to onManageCustom,
+                            deepFoundValues = deepFoundValues,
+                            onDeepSearch = onDeepSearch,
+                            thresholds = healthThresholds,
+                            snapshot = s,
+                            onEditThresholds = { editMetric = it },
+                        )
+                        "Idle" -> DenseSensorGridPage(
+                            title = "Cold start / rough idle",
+                            tip = idleTips.firstOrNull(),
+                            rows = idleValues.entries
+                                .filter { !it.key.matches(Regex("^[0-9A-Fa-f]{4,}$")) }
+                                .take(16)
+                                .map { it.key to it.value }
+                                .ifEmpty { listOf("Status" to "Probing…") },
+                            action = "Probe" to onRefreshIdle,
+                            deepFoundValues = deepFoundValues,
+                            onDeepSearch = onDeepSearch,
+                            thresholds = healthThresholds,
+                            snapshot = s,
+                            onEditThresholds = { editMetric = it },
+                        )
+                        "Fuel" -> DenseSensorGridPage(
+                            title = "Fuel system",
+                            rows = fuelValues.entries.map { it.key to it.value }
+                                .ifEmpty { listOf("Status" to "Probing…") },
+                            action = "Refresh" to onRefreshFuel,
+                            deepFoundValues = deepFoundValues,
+                            onDeepSearch = onDeepSearch,
+                            thresholds = healthThresholds,
+                            snapshot = s,
+                            onEditThresholds = { editMetric = it },
+                        )
+                        "Trip" -> TripScreen(
+                            distanceKm = trip.distanceKm,
+                            kmPerL = trip.kmPerLiter,
+                            cost = trip.cost,
+                            idleSec = trip.idleSeconds,
+                            fuelPrice = trip.fuelPrice,
+                            onReset = onResetTrip,
+                            onFuelPriceChange = onSetFuelPrice,
+                            embedded = true,
+                            modifier = Modifier.fillMaxSize(),
+                        )
+                        "Trans" -> DenseSensorGridPage(
+                            title = "Transmission",
+                            rows = transValues.entries.map { it.key to it.value }
+                                .ifEmpty { listOf("Status" to "Probing…") },
+                            action = "Probe" to onRefreshTrans,
+                            deepFoundValues = deepFoundValues,
+                            onDeepSearch = onDeepSearch,
+                            thresholds = healthThresholds,
+                            snapshot = s,
+                            onEditThresholds = { editMetric = it },
+                        )
+                        "Perf" -> PerformanceScreen(
+                            state = performance,
+                            onReset = onResetPerformance,
+                            phase = performance.phase,
+                            embedded = true,
+                            modifier = Modifier.fillMaxSize(),
+                        )
+                        "G-force" -> GForceScreen(
+                            ax = gForceAx,
+                            ay = gForceAy,
+                            az = gForceAz,
+                            embedded = true,
+                            modifier = Modifier.fillMaxSize(),
+                        )
+                        else -> HealthScoresScreen(
+                            score = health,
+                            onRefresh = onRefreshHealth,
+                            embedded = true,
+                            modifier = Modifier.fillMaxSize(),
+                        )
+                    }
                 }
             }
         }
@@ -391,6 +474,8 @@ private fun CompactHeroStrip(
     gearSource: GearSource,
     gearConfidencePct: Int? = null,
     thresholds: HealthThresholds = HealthThresholds.DEFAULT,
+    rpmFreshAtMs: Long? = null,
+    speedFreshAtMs: Long? = null,
     onEditRpm: (() -> Unit)? = null,
 ) {
     val rpmStatus = HealthEvaluator.rpm(rpm, thresholds)
@@ -401,8 +486,8 @@ private fun CompactHeroStrip(
             .padding(top = 2.dp, bottom = 6.dp)
             .height(DashType.heroH)
             .clip(RoundedCornerShape(12.dp))
-            .background(Surface)
-            .padding(horizontal = 12.dp, vertical = 8.dp),
+            .background(MaterialTheme.colorScheme.surface)
+            .padding(horizontal = 12.dp, vertical = 6.dp),
         horizontalArrangement = Arrangement.SpaceEvenly,
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -411,11 +496,12 @@ private fun CompactHeroStrip(
             value = rpm.fmt(),
             unit = "",
             accent = if (rpmStatus.health == Health.UNKNOWN || rpmStatus.health == Health.GOOD) {
-                Accent
+                MaterialTheme.colorScheme.primary
             } else {
                 rpmStatus.health.color()
             },
             valueColor = if (rpmStatus.health == Health.UNKNOWN) TextPrimary else rpmStatus.health.color(),
+            freshAtMs = rpmFreshAtMs,
             modifier = Modifier
                 .weight(1f)
                 .then(
@@ -430,8 +516,8 @@ private fun CompactHeroStrip(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center,
             modifier = Modifier
-                .widthIn(min = 72.dp)
-                .fillMaxHeight(),
+                .widthIn(min = 84.dp)
+                .padding(horizontal = 4.dp),
         ) {
             Text(
                 "GEAR",
@@ -439,13 +525,15 @@ private fun CompactHeroStrip(
                 fontSize = DashType.heroLabel,
                 fontWeight = FontWeight.Bold,
                 style = tightTextStyle(DashType.heroLabel),
+                maxLines = 1,
             )
             Text(
                 text = if (gearSource == GearSource.NONE) "–" else (gear?.toString() ?: "–"),
-                color = Accent,
+                color = MaterialTheme.colorScheme.primary,
                 fontSize = DashType.heroValue,
                 fontWeight = FontWeight.Bold,
                 style = tightTextStyle(DashType.heroValue),
+                maxLines = 1,
             )
             val badge = when (gearSource) {
                 GearSource.ECU -> "ECU" to GoodGreen
@@ -460,7 +548,15 @@ private fun CompactHeroStrip(
                 color = badge.second,
                 fontSize = DashType.heroBadge,
                 fontWeight = FontWeight.Bold,
-                style = tightTextStyle(DashType.heroBadge),
+                // Avoid Trim.Both — "%" descender was clipped on phones.
+                style = TextStyle(
+                    fontSize = DashType.heroBadge,
+                    lineHeight = 14.sp,
+                    platformStyle = PlatformTextStyle(includeFontPadding = false),
+                ),
+                maxLines = 1,
+                softWrap = false,
+                modifier = Modifier.padding(top = 2.dp, bottom = 1.dp),
             )
         }
         HeroDigit(
@@ -469,6 +565,7 @@ private fun CompactHeroStrip(
             unit = "km/h",
             accent = GoodGreen,
             valueColor = speedStatus.health.color(),
+            freshAtMs = speedFreshAtMs,
             modifier = Modifier.weight(1f),
         )
     }
@@ -481,6 +578,7 @@ private fun HeroDigit(
     unit: String,
     accent: Color,
     valueColor: Color = TextPrimary,
+    freshAtMs: Long? = null,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -488,13 +586,16 @@ private fun HeroDigit(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
-        Text(
-            label,
-            color = accent,
-            fontSize = DashType.heroLabel,
-            fontWeight = FontWeight.Bold,
-            style = tightTextStyle(DashType.heroLabel),
-        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            FreshnessHeartbeat(lastOkMs = freshAtMs, size = 7.dp)
+            Text(
+                text = " $label",
+                color = accent,
+                fontSize = DashType.heroLabel,
+                fontWeight = FontWeight.Bold,
+                style = tightTextStyle(DashType.heroLabel),
+            )
+        }
         Row(verticalAlignment = Alignment.Bottom) {
             Text(
                 text = value,
@@ -543,13 +644,13 @@ private fun PageTabs(titles: List<String>, current: Int, onSelect: (Int) -> Unit
             val selected = i == current
             Text(
                 text = title,
-                color = if (selected) Accent else TextMuted,
+                color = if (selected) MaterialTheme.colorScheme.primary else TextMuted,
                 fontSize = DashType.tab,
                 fontWeight = if (selected) FontWeight.Bold else FontWeight.SemiBold,
                 modifier = Modifier
                     .clip(RoundedCornerShape(10.dp))
                     .clickable { onSelect(i) }
-                    .background(if (selected) Surface else Background)
+                    .background(if (selected) MaterialTheme.colorScheme.surface else MaterialTheme.colorScheme.background)
                     .padding(horizontal = 12.dp, vertical = 8.dp),
             )
         }
@@ -671,7 +772,8 @@ private fun MetricsPage(
     )
 
     val extras = extraPidIds.mapNotNull { id -> catalog.find { it.id.equals(id, true) } }
-    val emptySlots = (0 until 6).toList()
+    // Cap empty "+" slots — 6 blank tiles hurt scroll on weak HUs.
+    val emptySlots = (0 until 3).toList()
 
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val columns = dashColumnsForWidth(maxWidth)
@@ -682,7 +784,7 @@ private fun MetricsPage(
             verticalArrangement = Arrangement.spacedBy(DashType.tileGap),
             contentPadding = PaddingValues(bottom = 4.dp),
         ) {
-        items(baseTiles) { t ->
+        items(baseTiles, key = { it.label }) { t ->
             val overrideId = tileOverrides[t.label]
             val overridePid = overrideId?.let { id -> catalog.find { it.id.equals(id, true) } }
             if (overridePid != null) {
@@ -701,6 +803,8 @@ private fun MetricsPage(
                     muted = unsupported,
                     deepSearchHint = unsupported,
                     remappedHint = true,
+                    freshAtMs = SnapshotFreshness.keyForTileLabel(overridePid.label)
+                        ?.let { snapshot.freshAtMs[it] },
                     onDeepSearch = if (unsupported) {
                         { onDeepSearch(overridePid.label, overridePid.id) }
                     } else {
@@ -739,6 +843,9 @@ private fun MetricsPage(
                     statusLabel = if (showNs) null else t.status?.label,
                     muted = showNs,
                     deepSearchHint = showNs,
+                    freshAtMs = t.pid?.let { SnapshotFreshness.keyFor(it) }
+                        ?.let { snapshot.freshAtMs[it] }
+                        ?.takeUnless { showNs },
                     onDeepSearch = if (showNs) {
                         { onDeepSearch(t.label, t.pid?.request) }
                     } else {
@@ -768,6 +875,9 @@ private fun MetricsPage(
                 health = null,
                 muted = unsupported,
                 deepSearchHint = unsupported,
+                freshAtMs = SnapshotFreshness.keyForTileLabel(pid.label)
+                    ?.let { snapshot.freshAtMs[it] }
+                    ?.takeUnless { unsupported },
                 onDeepSearch = if (unsupported) {
                     { onDeepSearch(pid.label, pid.id) }
                 } else {
@@ -817,20 +927,20 @@ private fun DenseSensorGridPage(
                     modifier = Modifier
                         .clip(RoundedCornerShape(10.dp))
                         .clickable { secondaryAction.second() }
-                        .background(Surface)
+                        .background(MaterialTheme.colorScheme.surface)
                         .padding(horizontal = 14.dp, vertical = 8.dp)
                         .padding(end = 6.dp),
                 )
             }
             Text(
                 text = action.first,
-                color = Accent,
+                color = MaterialTheme.colorScheme.primary,
                 fontSize = DashType.pageTitle,
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier
                     .clip(RoundedCornerShape(10.dp))
                     .clickable { action.second() }
-                    .background(Surface)
+                    .background(MaterialTheme.colorScheme.surface)
                     .padding(horizontal = 14.dp, vertical = 8.dp),
             )
         }
@@ -844,7 +954,7 @@ private fun DenseSensorGridPage(
                     .fillMaxWidth()
                     .padding(bottom = 6.dp)
                     .clip(RoundedCornerShape(8.dp))
-                    .background(Surface)
+                    .background(MaterialTheme.colorScheme.surface)
                     .padding(horizontal = 10.dp, vertical = 8.dp),
             )
         }
@@ -857,7 +967,7 @@ private fun DenseSensorGridPage(
                 verticalArrangement = Arrangement.spacedBy(DashType.tileGap),
                 contentPadding = PaddingValues(bottom = 4.dp),
             ) {
-            items(rows) { (label, value) ->
+            items(rows, key = { it.first }) { (label, value) ->
                 val recovered = deepFoundValues[label]
                 val effective = recovered ?: value
                 val unsupported = recovered == null &&
@@ -972,6 +1082,7 @@ private fun DenseTile(
     muted: Boolean = false,
     deepSearchHint: Boolean = false,
     remappedHint: Boolean = false,
+    freshAtMs: Long? = null,
     onDeepSearch: (() -> Unit)? = null,
     onRemap: (() -> Unit)? = null,
     onEditThresholds: (() -> Unit)? = null,
@@ -991,7 +1102,7 @@ private fun DenseTile(
         modifier = modifier
             .height(DashType.tileH)
             .clip(RoundedCornerShape(12.dp))
-            .background(Surface)
+            .background(MaterialTheme.colorScheme.surface)
             .combinedClickable(
                 onClick = {
                     val now = System.currentTimeMillis()
@@ -1021,7 +1132,10 @@ private fun DenseTile(
             .padding(horizontal = 10.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.SpaceBetween,
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
             if (health != null && health != Health.UNKNOWN) {
                 Box(
                     modifier = Modifier
@@ -1037,6 +1151,7 @@ private fun DenseTile(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     style = tightTextStyle(DashType.tileLabel),
+                    modifier = Modifier.weight(1f, fill = false),
                 )
             } else {
                 Text(
@@ -1047,8 +1162,15 @@ private fun DenseTile(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     style = tightTextStyle(DashType.tileLabel),
+                    modifier = Modifier.weight(1f, fill = false),
                 )
             }
+            // Torque-style freshness blink (separate from health traffic-light dot).
+            FreshnessHeartbeat(
+                lastOkMs = if (muted) null else freshAtMs,
+                size = 8.dp,
+                modifier = Modifier.padding(start = 6.dp),
+            )
         }
         Row(verticalAlignment = Alignment.Bottom) {
             Text(
@@ -1075,7 +1197,7 @@ private fun DenseTile(
         when {
             deepSearchHint -> Text(
                 "tap×3 deep · 2× change",
-                color = Accent,
+                color = MaterialTheme.colorScheme.primary,
                 fontSize = DashType.tileHint,
                 fontWeight = FontWeight.Bold,
                 maxLines = 1,
@@ -1083,7 +1205,7 @@ private fun DenseTile(
             )
             remappedHint -> Text(
                 "2× change",
-                color = Accent,
+                color = MaterialTheme.colorScheme.primary,
                 fontSize = DashType.tileHint,
                 fontWeight = FontWeight.Bold,
                 maxLines = 1,
@@ -1117,12 +1239,12 @@ private fun EmptyTile(modifier: Modifier = Modifier, onClick: () -> Unit) {
         modifier = modifier
             .height(DashType.tileH)
             .clip(RoundedCornerShape(12.dp))
-            .background(Surface)
+            .background(MaterialTheme.colorScheme.surface)
             .clickable(onClick = onClick)
             .padding(4.dp),
         contentAlignment = Alignment.Center,
     ) {
-        Text(text = "+", color = Accent, fontSize = 28.sp, fontWeight = FontWeight.Bold)
+        Text(text = "+", color = MaterialTheme.colorScheme.primary, fontSize = 28.sp, fontWeight = FontWeight.Bold)
         Text(
             text = "add",
             color = TextMuted,
@@ -1254,7 +1376,7 @@ private fun SensorPickerDialog(
                         if (category != null) {
                             Text(
                                 text = if (subProfile != null) "← Subcategories" else "← Categories",
-                                color = Accent,
+                                color = MaterialTheme.colorScheme.primary,
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Bold,
                                 modifier = Modifier
@@ -1332,9 +1454,9 @@ private fun SensorPickerDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = onDismiss) { Text("Cancel", color = Accent) }
+            TextButton(onClick = onDismiss) { Text("Cancel", color = MaterialTheme.colorScheme.primary) }
         },
-        containerColor = Background,
+        containerColor = MaterialTheme.colorScheme.background,
     )
 }
 
@@ -1356,7 +1478,7 @@ private fun PickerRow(
             .padding(bottom = 4.dp)
             .clip(RoundedCornerShape(8.dp))
             .clickable(onClick = onClick)
-            .background(Surface)
+            .background(MaterialTheme.colorScheme.surface)
             .padding(horizontal = 10.dp, vertical = 6.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
@@ -1365,7 +1487,7 @@ private fun PickerRow(
             Text(title, color = TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(subtitle, color = TextMuted, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
-        Text(trailing, color = Accent, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+        Text(trailing, color = MaterialTheme.colorScheme.primary, fontSize = 18.sp, fontWeight = FontWeight.Bold)
     }
 }
 
@@ -1380,7 +1502,7 @@ private fun TopBarChip(text: String, color: Color, onClick: () -> Unit) {
             .padding(start = 8.dp)
             .clip(RoundedCornerShape(10.dp))
             .clickable(onClick = onClick)
-            .background(Surface)
+            .background(MaterialTheme.colorScheme.surface)
             .padding(horizontal = 12.dp, vertical = 9.dp),
     )
 }
@@ -1389,12 +1511,14 @@ private fun TopBarChip(text: String, color: Color, onClick: () -> Unit) {
 private fun TopBar(
     state: DashboardUiState,
     loggingActive: Boolean,
+    profileBadge: String = VehicleProfile.FB2.badge,
     onConnectClick: () -> Unit,
     onSettingsClick: () -> Unit,
     onDiagnosticsClick: () -> Unit,
     onToggleLogging: () -> Unit,
     onMinimizeClick: () -> Unit,
 ) {
+    val accent = LocalThemePalette.current.accent
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -1402,12 +1526,20 @@ private fun TopBar(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(
-            text = "FB2 DIAG",
-            color = Accent,
-            fontSize = DashType.topTitle,
-            fontWeight = FontWeight.Bold,
-        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = "FB2 DIAG",
+                color = MaterialTheme.colorScheme.primary,
+                fontSize = DashType.topTitle,
+                fontWeight = FontWeight.Bold,
+            )
+            Text(
+                text = "  $profileBadge",
+                color = TextMuted,
+                fontSize = DashType.topChip,
+                fontWeight = FontWeight.Bold,
+            )
+        }
         Row(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.horizontalScroll(rememberScrollState()),
@@ -1420,7 +1552,7 @@ private fun TopBar(
                     GoodGreen to "LIVE"
                 state.connection == ConnectionState.CONNECTED && !state.sourceIsLive ->
                     WarnAmber to "DEMO"
-                state.connection == ConnectionState.CONNECTING -> Accent to "…"
+                state.connection == ConnectionState.CONNECTING -> accent to "…"
                 state.connection == ConnectionState.ERROR -> CritRed to "ERR"
                 else -> TextMuted to "OFF"
             }
@@ -1437,9 +1569,9 @@ private fun TopBar(
                 fontWeight = FontWeight.Bold,
             )
 
-            TopBarChip(if (loggingActive) "STOP LOG" else "LOG", if (loggingActive) CritRed else Accent, onToggleLogging)
-            TopBarChip("MIN", Accent, onMinimizeClick)
-            TopBarChip("DIAG", Accent, onDiagnosticsClick)
+            TopBarChip(if (loggingActive) "STOP LOG" else "LOG", if (loggingActive) CritRed else accent, onToggleLogging)
+            TopBarChip("MIN", accent, onMinimizeClick)
+            TopBarChip("DIAG", accent, onDiagnosticsClick)
             TopBarChip("SETTINGS", TextMuted, onSettingsClick)
             // CONNECTED only for a real ELM adapter — Demo keeps CONNECT (+ yellow DEMO badge).
             val liveConnected = state.connection == ConnectionState.CONNECTED &&
@@ -1454,7 +1586,7 @@ private fun TopBar(
                 color = when {
                     liveConnected -> GoodGreen
                     state.connection == ConnectionState.ERROR -> CritRed
-                    else -> Accent
+                    else -> accent
                 },
                 onClick = onConnectClick,
             )
