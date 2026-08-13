@@ -23,6 +23,9 @@ Keep these fixed. If a change might touch one of these areas, re-verify it.
 | I08 | App very laggy / slow | Fixed | Timeouts ~650/450 ms; core-PID-only while recovering; less ATSP thrash; **PID rotate** (heroes every cycle, ≤4 secondaries) |
 | I34 | Speed stuck / under-reads (e.g. 65 vs ~98 km/h) while RPM moves | Fixed | `PidPollPlanner` never fail-streak-skips RPM/Speed; `SnapshotFreshness` clears Speed after 2.5s stale; unit test recreates freeze |
 | I36 | Want Torque-style green blink when a value is freshly fetched | Fixed | `FreshnessHeartbeat` on hero + Dash tiles; `VehicleSnapshot.freshAtMs` from ELM/Demo |
+| I37 | Long-trip: LOG only in RAM until STOP (crash loses hours) | Fixed | Checkpoint CSV to disk every ~60s from LOG start; finalize on STOP |
+| I38 | Long-trip: UNABLE soft-recover loops forever (sticky Dash) | Fixed | ATRV-only ≠ healthy cycle; hard reconnect after 3 soft recovers |
+| I39 | Long-trip: Coolant/Battery/MAF/RPM sticky last-good | Fixed | Sanitize clears safety fields after TTL; smoother clears on null; EST gear needs fresh RPM+Speed |
 | I09 | Debug log Share does nothing | Fixed | FileProvider share; HU fallback → Downloads/FB2-Diag + path dialog |
 | I10 | Value LOG Share broken / truncated (large CSV as EXTRA_TEXT) | Fixed | FileProvider CSV share; same HU save fallback |
 | I11 | Voice alerts must keep working with screen off (real ELM) | Fixed | `ObdMonitorForegroundService` + wake lock + AudioFocus |

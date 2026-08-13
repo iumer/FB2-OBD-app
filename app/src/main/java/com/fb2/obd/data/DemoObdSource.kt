@@ -187,7 +187,10 @@ class DemoObdSource(
         "221316" to 12.0, // total misfire
     )
 
-    override suspend fun probePids(pids: List<PidDefinition>) = pids.map { pid ->
+    override suspend fun probePids(
+        pids: List<PidDefinition>,
+        recoverFirst: Boolean,
+    ) = pids.map { pid ->
         when {
             pid.request.equals("0103", true) -> {
                 // Byte A = 0x02 → CLOSED LOOP

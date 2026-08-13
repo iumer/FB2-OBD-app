@@ -43,4 +43,16 @@ class SessionLogStoreTest {
         assertTrue(live.fileName.startsWith("FB2-log-"))
         assertTrue(!live.fileName.startsWith("FB2-log-demo-"))
     }
+
+    @Test
+    fun checkpoint_overwritesSameSessionFile() {
+        val store = SessionLogStore(tmp.newFolder("logs4"))
+        val started = 1_700_000_200_000L
+        val begun = store.beginCheckpointFile(started, isDemo = false)
+        store.writeCheckpoint(begun.absolutePath, "# events\nv1")
+        store.writeCheckpoint(begun.absolutePath, "# events\nv2-longer")
+        assertEquals(1, store.list().size)
+        assertEquals("# events\nv2-longer", store.read(begun.fileName))
+        assertTrue(begun.fileName.startsWith("FB2-log-"))
+    }
 }

@@ -51,6 +51,15 @@ class DiagnosticBrainTest {
     }
 
     @Test
+    fun decisionSnapshot_nullClearsSmoothedValue() {
+        val brain = DiagnosticBrain(SignalSmoother(alpha = 0.5))
+        brain.decisionSnapshot(VehicleSnapshot(batteryVolts = 14.0))
+        val cleared = brain.decisionSnapshot(VehicleSnapshot(batteryVolts = null, rpm = 2000.0))
+        assertEquals(null, cleared.batteryVolts)
+        assertEquals(2000.0, cleared.rpm!!, 0.001)
+    }
+
+    @Test
     fun alertPolicy_voiceHolds_areLongerForBatteryThanCoolant() {
         assertTrue(AlertPolicy.voiceHoldMs("battery") > AlertPolicy.voiceHoldMs("coolant"))
         assertTrue(AlertPolicy.mayVoice("coolant"))

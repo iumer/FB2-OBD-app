@@ -140,6 +140,12 @@ non-obvious cloud specifics.
   **Freshness LEDs:** each Dash tile / hero RPM+Speed shows a green heartbeat that
   blinks when that field was successfully decoded (`VehicleSnapshot.freshAtMs`).
   Dim while recent, dark when stale — same idea as Torque Pro’s green blink.
+  Safety fields (RPM/Speed/Coolant/Battery/MAF/MAP) clear to `n/s` after TTL;
+  estimated gear only when both RPM and Speed are fresh.
+  **Long-haul LOG:** session CSV is checkpointed to disk ~every 60s (and on STOP)
+  so a crash does not lose the whole drive. Snapshot rows throttled to ~1 Hz.
+  Bus-lost soft-recover caps at 3 then RFCOMM reconnect; ATRV-only is not a
+  healthy Mode 01 cycle. Dash-extra refresh does not softRecover every 5s.
 - **Screen off / background:** real ELM sessions start
   `ObdMonitorForegroundService` (`connectedDevice` FGS + sticky notification +
   `PARTIAL_WAKE_LOCK`). Demo mode must not start it. Voice alerts play a short

@@ -135,6 +135,7 @@ class Elm327BluetoothSource(
                     var unable = 0
                     var busLost = false
                     var rpmUpdated = false
+                    var mode01Ok = false
                     val cycleStartMs = System.currentTimeMillis()
 
                     // ATRV first every cycle — adapter rail voltage does NOT need the ECU.
@@ -188,6 +189,7 @@ class Elm327BluetoothSource(
                         val value = ObdResponseParser.parse(pid, raw)
                         if (value != null) {
                             responded++
+                            mode01Ok = true
                             failStreak[pid] = 0
                             snapshot = snapshot.merge(pid, value)
                             freshness.markPid(pid, cycleStartMs)
@@ -195,6 +197,7 @@ class Elm327BluetoothSource(
                         } else {
                             // Frame arrived but didn't decode — still counts as link alive.
                             responded++
+                            mode01Ok = true
                             // Heroes keep retrying next cycle; cap streak so planner never skips them.
                             failStreak[pid] = if (PidPollPlanner.isHero(pid)) {
                                 (streak + 1).coerceAtMost(1)
@@ -217,14 +220,25 @@ class Elm327BluetoothSource(
                     if (busLost) {
                         softRecover(conn)
                         deadCycles++
-                    } else if (responded == 0) {
+                        logger.logDebug(
+                            ObdLogger.Dir.INFO,
+                            "soft recover #$deadCycles (unable=$unable)",
+                        )
+                        if (deadCycles >= MAX_SOFT_RECOVER_BEFORE_RECONNECT) {
+                            throw IOException(
+                                "ECU bus lost after $deadCycles soft recovers — reconnecting",
+                            )
+                        }
+                    } else if (!mode01Ok) {
+                        // ATRV-only or total silence — do not treat as a healthy Dash cycle.
                         deadCycles++
                         logger.logDebug(
                             ObdLogger.Dir.INFO,
-                            "dead cycle $deadCycles (timeouts=$timedOut unable=$unable/${activePids.size})",
+                            "dead cycle $deadCycles (timeouts=$timedOut unable=$unable/" +
+                                "${activePids.size} atrvOnly=${responded > 0})",
                         )
                         if (deadCycles >= 4) {
-                            throw IOException("No response from adapter after $deadCycles dead cycles")
+                            throw IOException("No ECU Mode 01 response after $deadCycles dead cycles")
                         }
                     } else {
                         deadCycles = 0
@@ -330,10 +344,14 @@ class Elm327BluetoothSource(
         return DiagnosticParsers.dumpMode06(raw)
     }
 
-    override suspend fun probePids(pids: List<PidDefinition>): List<PidProbeResult> {
+    override suspend fun probePids(
+        pids: List<PidDefinition>,
+        recoverFirst: Boolean,
+    ): List<PidProbeResult> {
         val conn = connection ?: return emptyList()
-        // Start clean so Mode 22 / deep-search leftovers don't poison the probe.
-        softRecover(conn)
+        if (recoverFirst) {
+            softRecover(conn)
+        }
         val out = ArrayList<PidProbeResult>(pids.size)
         var failStreak = 0
         for (pid in pids) {
@@ -520,5 +538,7 @@ class Elm327BluetoothSource(
         private val INIT_SEQUENCE = listOf("ATZ", "ATE0", "ATL0", "ATS0", "ATSP0")
         private val RECOVER_SEQUENCE = listOf("ATD", "ATE0", "ATL0", "ATS0", "ATSP0", "ATSH7DF", "ATAR")
         private val BAD_TOKENS = listOf("NO DATA", "UNABLE", "ERROR", "?", "STOPPED")
+        /** Soft-recover loops that never reconnect leave a sticky false Dash. */
+        private const val MAX_SOFT_RECOVER_BEFORE_RECONNECT = 3
     }
 }
