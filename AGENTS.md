@@ -137,6 +137,9 @@ non-obvious cloud specifics.
   reconnect frame must not wipe the Dash or fake `Engine Stop`.
   **Battery** prefers `ATRV` (adapter rail voltage, Torque-style) every cycle even
   during `UNABLE` — do not gate ATRV on ECU bus health.
+  **Freshness LEDs:** each Dash tile / hero RPM+Speed shows a green heartbeat that
+  blinks when that field was successfully decoded (`VehicleSnapshot.freshAtMs`).
+  Dim while recent, dark when stale — same idea as Torque Pro’s green blink.
 - **Screen off / background:** real ELM sessions start
   `ObdMonitorForegroundService` (`connectedDevice` FGS + sticky notification +
   `PARTIAL_WAKE_LOCK`). Demo mode must not start it. Voice alerts play a short

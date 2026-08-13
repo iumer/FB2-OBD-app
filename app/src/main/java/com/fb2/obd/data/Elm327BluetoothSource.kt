@@ -143,6 +143,7 @@ class Elm327BluetoothSource(
                         readAtrv(conn)?.let { v ->
                             responded++
                             snapshot = snapshot.copy(batteryVolts = v)
+                            freshness.markOk(SnapshotFreshness.KEY_BATTERY, cycleStartMs)
                         }
                     }
 
@@ -189,15 +190,8 @@ class Elm327BluetoothSource(
                             responded++
                             failStreak[pid] = 0
                             snapshot = snapshot.merge(pid, value)
-                            when (pid) {
-                                ObdPid.ENGINE_RPM -> {
-                                    rpmUpdated = true
-                                    freshness.markOk(SnapshotFreshness.KEY_RPM, cycleStartMs)
-                                }
-                                ObdPid.SPEED ->
-                                    freshness.markOk(SnapshotFreshness.KEY_SPEED, cycleStartMs)
-                                else -> Unit
-                            }
+                            freshness.markPid(pid, cycleStartMs)
+                            if (pid == ObdPid.ENGINE_RPM) rpmUpdated = true
                         } else {
                             // Frame arrived but didn't decode — still counts as link alive.
                             responded++
@@ -216,6 +210,7 @@ class Elm327BluetoothSource(
                         readAtrv(conn)?.let { v ->
                             responded++
                             snapshot = snapshot.copy(batteryVolts = v)
+                            freshness.markOk(SnapshotFreshness.KEY_BATTERY, System.currentTimeMillis())
                         }
                     }
 

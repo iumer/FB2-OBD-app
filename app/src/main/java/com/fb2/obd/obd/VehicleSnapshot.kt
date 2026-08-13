@@ -30,6 +30,11 @@ data class VehicleSnapshot(
     val gearRatioActual: Double? = null,
     /** PID numbers the ECU reported as NOT supported (for "n/s" tiles). */
     val unsupportedPids: Set<Int> = emptySet(),
+    /**
+     * Wall-clock ms of the last successful decode per Dash field key
+     * ([SnapshotFreshness] keys). Drives Torque-style green heartbeat LEDs.
+     */
+    val freshAtMs: Map<String, Long> = emptyMap(),
 ) {
     companion object {
         val EMPTY = VehicleSnapshot()
