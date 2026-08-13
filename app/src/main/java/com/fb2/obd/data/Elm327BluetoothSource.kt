@@ -315,6 +315,11 @@ class Elm327BluetoothSource(
         return runCatching { DtcDecoder.decode(conn.exec("07"), 0x47) }.getOrDefault(emptyList())
     }
 
+    override suspend fun readPermanentDtcs(): List<Dtc> {
+        val conn = connection ?: return emptyList()
+        return runCatching { DtcDecoder.decode(conn.exec("0A"), 0x4A) }.getOrDefault(emptyList())
+    }
+
     override suspend fun clearDtcs(): Boolean {
         val conn = connection ?: return false
         return runCatching { conn.exec("04").uppercase().contains("44") }.getOrDefault(false)

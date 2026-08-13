@@ -43,6 +43,8 @@ fun DiagnosticsHubScreen(
     nav: DiagnosticsNav,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
+    showHondaModules: Boolean = true,
+    blurb: String = "Read / clear codes, AI analysis, deep scans, VIN, Honda modules, and maintenance. Live sensor pages are on the dashboard swipe tabs.",
 ) {
     Column(
         modifier = modifier
@@ -53,7 +55,7 @@ fun DiagnosticsHubScreen(
     ) {
         ScreenHeader(title = "Diagnostics", onBack = onBack)
         Text(
-            text = "Read / clear codes, AI analysis, deep scans, VIN, Honda modules, and maintenance. Live sensor pages are on the dashboard swipe tabs.",
+            text = blurb,
             color = TextMuted,
             fontSize = 12.sp,
             modifier = Modifier.padding(bottom = 12.dp),
@@ -62,7 +64,9 @@ fun DiagnosticsHubScreen(
         DiagRow("Fault codes (read / clear + tips)", nav.onFaults)
         DiagRow("Deep diagnostics (freeze / readiness / Mode 05+06)", nav.onDeepDiag)
         DiagRow("Vehicle info (VIN / Mode 09)", nav.onVehicle)
-        DiagRow("Honda modules / full-system probe", nav.onHonda)
+        if (showHondaModules) {
+            DiagRow("Honda modules / full-system probe", nav.onHonda)
+        }
         DiagRow("Maintenance log book", nav.onMaintenance)
     }
 }

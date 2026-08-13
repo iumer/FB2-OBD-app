@@ -27,6 +27,7 @@ Keep these fixed. If a change might touch one of these areas, re-verify it.
 | I38 | Long-trip: UNABLE soft-recover loops forever (sticky Dash) | Fixed | ATRV-only ≠ healthy cycle; hard reconnect after 3 soft recovers |
 | I39 | Long-trip: Coolant/Battery/MAF/RPM sticky last-good | Fixed | Sanitize clears safety fields after TTL; smoother clears on null; EST gear needs fresh RPM+Speed |
 | I40 | Deep search shows 1/N then fails; Dash goes laggy during search | Fixed | Pause Mode 01 poll during deep search; walk full strategy list when bus OK; honest “Skipped N” when ECU link down |
+| I41 | Need FB2 vs Generic OBD2 profiles (no Honda junk on other cars) | Fixed | Settings → Vehicle profile; SAE-only catalog/pages/DIAG/deep search for Generic; Mode 0A permanent DTCs |
 | I09 | Debug log Share does nothing | Fixed | FileProvider share; HU fallback → Downloads/FB2-Diag + path dialog |
 | I10 | Value LOG Share broken / truncated (large CSV as EXTRA_TEXT) | Fixed | FileProvider CSV share; same HU save fallback |
 | I11 | Voice alerts must keep working with screen off (real ELM) | Fixed | `ObdMonitorForegroundService` + wake lock + AudioFocus |
@@ -88,6 +89,7 @@ All three Gradle tasks must pass. Copy the APK into `dist/` so sideload artifact
 | `DiagnosticEventTrackerTest` | Zone / fuel-loop events; battery ZONE hysteresis (no ELD flap spam) |
 | `DtcDecoderTest` | Mode 03/07 DTC frames |
 | `DeepSearchKnowledgeBaseTest` | Strategy order + demo ATRV/ambient recovery |
+| `VehicleProfileTest` | FB2 vs Generic catalogs/pages/deep-search/Mode 0A demo |
 | `FeatureExpansionTest` | Catalogs, readiness, VIN, trip, `n/s` overlay, probes |
 | `AccelerationTimerTest` | 0–100 perf timer |
 | `ObdLoggerTest` | Debug buffer, lean CSV, LOG toggle |
@@ -102,7 +104,9 @@ All three Gradle tasks must pass. Copy the APK into `dist/` so sideload artifact
 Do these on a phone with the new `dist/FB2-Diag-debug.apk` whenever the change
 touches ELM, Dash health, deep search, logging, or share:
 
-1. **Demo smoke** — open app → Demo feed moves; swipe Dash → Custom → Idle → Fuel → Trip → Trans → Perf → G-force → Health.
+1. **Demo smoke** — open app → Demo feed moves; swipe all Dash pages for the active profile (Generic has no Trans).
+1b. **Vehicle profile** — Settings → select Generic OBD2 → Trans + Honda DIAG gone; picker SAE-only; badge `OBD2`. Switch back to FB2 → Trans + Honda modules return.
+1c. **Faults** — Read shows Stored / Pending / Permanent (Mode 0A); Clear refreshes lists.
 2. **Connect live ELM** — chip goes `LIVE`; Battery shows volts (ATRV); MAF at idle ~3–5 g/s and **not** CRITICAL.
 3. **Idle stability** — leave idling several minutes; Dash stays populated; on drop chip shows `RETRY` and auto-recovers without tapping.
 4. **Deep analysis (Battery)** — triple-tap Battery when n/s (or after a glitch) → should recover via ATRV when adapter is powered.

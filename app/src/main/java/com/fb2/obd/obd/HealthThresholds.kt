@@ -82,6 +82,48 @@ data class HealthThresholds(
 ) {
     companion object {
         val DEFAULT = HealthThresholds()
+
+        /**
+         * Wider SAE-safe bands for Generic OBD2 — not tuned to R18 idle MAF / Honda ELD.
+         * Prefer fewer false CRITICAL colours on unknown engines.
+         */
+        fun genericObd2(): HealthThresholds = HealthThresholds(
+            coolantColdBelow = 60.0,
+            coolantGoodMax = 95.0,
+            coolantWarnMax = 105.0,
+            coolantElevatedMax = 110.0,
+            coolantVoiceAbove = 115.0,
+            battRunGoodMin = 13.0,
+            battRunGoodMax = 15.0,
+            battRunWarnMin = 12.6,
+            battRunElevatedMin = 12.2,
+            battRunCriticalAbove = 15.5,
+            mafIdleGoodMin = 1.0,
+            mafIdleGoodMax = 12.0,
+            mafIdleWarnMin = 0.5,
+            mafCruiseGoodMin = 2.0,
+            mafCruiseGoodMax = 60.0,
+            mafHeavyGoodMin = 20.0,
+            mafHeavyGoodMax = 180.0,
+            mapIdleGoodMin = 20.0,
+            mapIdleGoodMax = 50.0,
+            mapCruiseGoodMin = 35.0,
+            mapCruiseGoodMax = 80.0,
+            mapWotGoodMin = 85.0,
+            mapGoodMax = 80.0,
+            mapWarnMax = 100.0,
+            rpmIdleLow = 550.0,
+            rpmIdleHigh = 950.0,
+            rpmNormalMax = 5000.0,
+            rpmHighMax = 6500.0,
+            // ATF / slip unused on Generic (no TCM page) — leave permissive.
+            atfColdMax = 50.0,
+            atfGoodMax = 110.0,
+            atfWarnMax = 120.0,
+            atfElevatedMax = 130.0,
+            slipGoodMax = 80.0,
+            slipWarnMax = 200.0,
+        )
     }
 }
 

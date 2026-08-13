@@ -31,6 +31,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.fb2.obd.SettingsState
 import com.fb2.obd.data.LogUploadManager
+import com.fb2.obd.obd.VehicleProfile
 import com.fb2.obd.ui.theme.Accent
 import com.fb2.obd.ui.theme.Background
 import com.fb2.obd.ui.theme.GoodGreen
@@ -80,6 +81,7 @@ data class SettingsNav(
 @Composable
 fun SettingsScreen(
     settings: SettingsState,
+    onVehicleProfileChange: (VehicleProfile) -> Unit = {},
     onToggleEstimatedGear: (Boolean) -> Unit,
     onToggleVoiceAlerts: (Boolean) -> Unit = {},
     onToggleDuckMedia: (Boolean) -> Unit = {},
@@ -111,10 +113,29 @@ fun SettingsScreen(
             modifier = Modifier.padding(bottom = 8.dp),
         )
 
+        SectionLabel("Vehicle profile")
+        Text(
+            text = "FB2 keeps Honda Mode 22 / Transmission. Generic OBD2 is SAE-only for any OBD-II car.",
+            color = TextMuted,
+            fontSize = 12.sp,
+            modifier = Modifier.padding(bottom = 8.dp),
+        )
+        VehicleProfile.entries.forEach { profile ->
+            ProfileRow(
+                profile = profile,
+                selected = settings.vehicleProfile == profile,
+                onClick = { onVehicleProfileChange(profile) },
+            )
+        }
+
         SectionLabel("Gear")
         ToggleRow(
             title = "Show estimated gear",
-            subtitle = "When the ECU can't report the actual gear, estimate from speed & RPM (EST).",
+            subtitle = if (settings.vehicleProfile.isGeneric) {
+                "Off by default on Generic OBD2 (ratios are FB2-specific). Enable only if you accept approximate gears."
+            } else {
+                "When the ECU can't report the actual gear, estimate from speed & RPM (EST)."
+            },
             checked = settings.showEstimatedGear,
             onCheckedChange = onToggleEstimatedGear,
         )
@@ -257,6 +278,40 @@ private fun SectionLabel(text: String) {
         fontWeight = FontWeight.Bold,
         modifier = Modifier.padding(top = 18.dp, bottom = 8.dp),
     )
+}
+
+@Composable
+private fun ProfileRow(
+    profile: VehicleProfile,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = 8.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(Surface)
+            .clickable(onClick = onClick)
+            .padding(14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = profile.displayName,
+                color = TextPrimary,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Text(text = profile.subtitle, color = TextMuted, fontSize = 12.sp)
+        }
+        Text(
+            text = if (selected) "SELECTED" else "SELECT",
+            color = if (selected) GoodGreen else Accent,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Bold,
+        )
+    }
 }
 
 @Composable

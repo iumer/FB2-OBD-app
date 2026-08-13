@@ -134,6 +134,9 @@ class HealthThresholdStore(private val file: File) {
         file.writeText(o.toString(2))
     }
 
+    /** True when the user (or a prior schema migration) has a saved thresholds file. */
+    fun hasUserEdits(): Boolean = file.exists()
+
     companion object {
         /** Bumped when default MAF bands were retuned for R18 idle/coast (~2–8 g/s). */
         const val SCHEMA_VERSION = 3

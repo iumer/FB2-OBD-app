@@ -57,7 +57,7 @@ fun FaultsScreen(
 
         if (!state.hasRead && state.message == null) {
             Text(
-                text = "Tap Read to scan the ECU for stored (Mode 03) and pending (Mode 07) trouble codes.",
+                text = "Tap Read to scan the ECU for stored (Mode 03), pending (Mode 07), and permanent (Mode 0A) trouble codes.",
                 color = TextMuted,
                 fontSize = 13.sp,
             )
@@ -76,7 +76,11 @@ fun FaultsScreen(
                 SectionTitle("Pending (${state.pending.size})", WarnAmber)
                 state.pending.forEach { DtcRow(it, WarnAmber) }
             }
-            if (state.hasRead && state.stored.isEmpty() && state.pending.isEmpty()) {
+            if (state.permanent.isNotEmpty()) {
+                SectionTitle("Permanent (${state.permanent.size})", TextMuted)
+                state.permanent.forEach { DtcRow(it, TextMuted) }
+            }
+            if (state.hasRead && state.stored.isEmpty() && state.pending.isEmpty() && state.permanent.isEmpty()) {
                 Text(text = "\u2713 No codes.", color = GoodGreen, fontSize = 16.sp, fontWeight = FontWeight.Bold)
             }
         }
