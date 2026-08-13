@@ -128,9 +128,13 @@ non-obvious cloud specifics.
   values. API key in Settings → AI analysis (`platform.openai.com` — Plus ≠ API).
   No conversational chat in-app.
 - **ELM idle drop:** cheap clones often hang mid-poll. The app uses short PID
-  timeouts (~650 ms poll / ~450 ms probe), skips repeatedly-failing PIDs, keeps
-  last-good Dash values, and retries RFCOMM forever with backoff (UI shows
-  `RETRY`). A blank reconnect frame must not wipe the Dash or fake `Engine Stop`.
+  timeouts (~650 ms poll / ~450 ms probe), skips repeatedly-failing **secondary**
+  PIDs, keeps last-good Dash values briefly, and retries RFCOMM forever with
+  backoff (UI shows `RETRY`). **RPM + Speed are never fail-streak-skipped**
+  (`PidPollPlanner`); secondary PIDs rotate (~4/cycle) so cycles stay short.
+  Speed older than ~2.5s without a fresh decode is cleared (`SnapshotFreshness`)
+  so the Dash does not freeze on a false km/h while RPM still updates. A blank
+  reconnect frame must not wipe the Dash or fake `Engine Stop`.
   **Battery** prefers `ATRV` (adapter rail voltage, Torque-style) every cycle even
   during `UNABLE` — do not gate ATRV on ECU bus health.
 - **Screen off / background:** real ELM sessions start

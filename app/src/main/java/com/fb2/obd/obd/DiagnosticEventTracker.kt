@@ -130,8 +130,11 @@ class DiagnosticEventTracker {
             lastFuelLoop = loop
         }
 
-        // Colour-zone transitions
-        zone("coolant", HealthEvaluator.coolant(snapshot.coolantC, thresholds))
+        // Colour-zone transitions (latched — raw ELD chatter must not spam events).
+        zone(
+            "coolant",
+            HealthEvaluator.coolant(snapshot.coolantC, thresholds),
+        )
         zone(
             "battery",
             HealthEvaluator.battery(snapshot.batteryVolts, engineOn, thresholds, rpm = snapshot.rpm),
@@ -162,7 +165,8 @@ class DiagnosticEventTracker {
 
         // Overheating begin/end
         val coolStatus = HealthEvaluator.coolant(snapshot.coolantC, thresholds)
-        val isOverheat = coolStatus.health == Health.CRITICAL ||
+        val latchedCool = AlertPolicy.latchHealth(lastZone["coolant"], coolStatus.health)
+        val isOverheat = latchedCool == Health.CRITICAL ||
             (snapshot.coolantC != null && snapshot.coolantC > thresholds.coolantElevatedMax)
         if (isOverheat && !overheating) {
             overheating = true
@@ -172,15 +176,17 @@ class DiagnosticEventTracker {
             emit("OVERHEAT", "Overheating ended")
         }
 
-        // Charging problem begin/end (engine running + above-idle ELD gate)
+        // Charging problem begin/end — use latched battery band so ELD flicker
+        // does not toggle CHARGE events every second (laggy UX / log spam).
         val batt = HealthEvaluator.battery(
             snapshot.batteryVolts,
             engineOn,
             thresholds,
             rpm = snapshot.rpm,
         )
+        val latchedBatt = AlertPolicy.latchHealth(lastZone["battery"], batt.health)
         val chargeBad = engineOn &&
-            (batt.health == Health.CRITICAL || batt.health == Health.ELEVATED) &&
+            (latchedBatt == Health.CRITICAL || latchedBatt == Health.ELEVATED) &&
             (snapshot.rpm ?: 0.0) > (thresholds.rpmIdleHigh + 150.0)
         if (chargeBad && !chargingProblem) {
             chargingProblem = true
@@ -211,12 +217,13 @@ class DiagnosticEventTracker {
             lastZone[key] = status.health
             return
         }
-        if (prev != status.health) {
+        val latched = AlertPolicy.latchHealth(prev, status.health)
+        if (prev != latched) {
             emit(
                 "ZONE",
-                "$key ${prev.name} → ${status.health.name} (${status.label})",
+                "$key ${prev.name} → ${latched.name} (${status.label})",
             )
-            lastZone[key] = status.health
+            lastZone[key] = latched
         }
     }
 

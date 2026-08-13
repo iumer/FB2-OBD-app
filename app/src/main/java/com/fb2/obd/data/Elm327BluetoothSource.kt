@@ -18,8 +18,10 @@ import com.fb2.obd.obd.O2TestResult
 import com.fb2.obd.obd.ObdPid
 import com.fb2.obd.obd.ObdResponseParser
 import com.fb2.obd.obd.PidDefinition
+import com.fb2.obd.obd.PidPollPlanner
 import com.fb2.obd.obd.PidProbeResult
 import com.fb2.obd.obd.ReadinessStatus
+import com.fb2.obd.obd.SnapshotFreshness
 import com.fb2.obd.obd.SupportedPids
 import com.fb2.obd.obd.VehicleInfo
 import com.fb2.obd.obd.VehicleSnapshot
@@ -124,25 +126,16 @@ class Elm327BluetoothSource(
                 var snapshot = VehicleSnapshot.EMPTY.copy(unsupportedPids = unsupported)
                 var deadCycles = 0
                 val failStreak = mutableMapOf<ObdPid, Int>()
+                val freshness = SnapshotFreshness()
                 var cycles = 0
-                // Core Dash PIDs — keep these alive first when the bus is flaky.
-                val coreNumbers = setOf(
-                    ObdPid.ENGINE_RPM.number,
-                    ObdPid.SPEED.number,
-                    ObdPid.COOLANT_TEMP.number,
-                    ObdPid.MAF.number,
-                    ObdPid.INTAKE_MAP.number,
-                    ObdPid.THROTTLE.number,
-                    ObdPid.STFT_B1.number,
-                    ObdPid.FUEL_SYSTEM_STATUS.number,
-                    ObdPid.ENGINE_LOAD.number,
-                )
                 while (isActive) {
                     cycles++
                     var responded = 0
                     var timedOut = 0
                     var unable = 0
                     var busLost = false
+                    var rpmUpdated = false
+                    val cycleStartMs = System.currentTimeMillis()
 
                     // ATRV first every cycle — adapter rail voltage does NOT need the ECU.
                     // Skipping it during busLost was why Battery went n/s while Torque still worked.
@@ -154,16 +147,17 @@ class Elm327BluetoothSource(
                     }
 
                     val recovering = deadCycles > 0
-                    for (pid in activePids) {
+                    // Heroes every cycle; rotate secondaries so Speed cannot freeze behind a long PID list.
+                    val cyclePids = PidPollPlanner.selectForCycle(
+                        activePids = activePids,
+                        failStreak = failStreak,
+                        cycle = cycles,
+                        recovering = recovering,
+                    )
+                    for (pid in cyclePids) {
                         if (busLost) break
-                        // While recovering, only hammer the core set so the Dash stays snappy.
-                        if (recovering && pid.number !in coreNumbers && pid.number !in forcePoll) continue
 
                         val streak = failStreak[pid] ?: 0
-                        // Skip flaky PIDs most cycles; retry occasionally.
-                        if (streak >= 2 && cycles % 20 != 0) continue
-                        if (streak >= 1 && recovering && cycles % 5 != 0 && pid.number !in forcePoll) continue
-
                         val raw = try {
                             conn.exec(pid.request)
                         } catch (io: IOException) {
@@ -195,10 +189,24 @@ class Elm327BluetoothSource(
                             responded++
                             failStreak[pid] = 0
                             snapshot = snapshot.merge(pid, value)
+                            when (pid) {
+                                ObdPid.ENGINE_RPM -> {
+                                    rpmUpdated = true
+                                    freshness.markOk(SnapshotFreshness.KEY_RPM, cycleStartMs)
+                                }
+                                ObdPid.SPEED ->
+                                    freshness.markOk(SnapshotFreshness.KEY_SPEED, cycleStartMs)
+                                else -> Unit
+                            }
                         } else {
                             // Frame arrived but didn't decode — still counts as link alive.
                             responded++
-                            failStreak[pid] = (streak + 1).coerceAtMost(2)
+                            // Heroes keep retrying next cycle; cap streak so planner never skips them.
+                            failStreak[pid] = if (PidPollPlanner.isHero(pid)) {
+                                (streak + 1).coerceAtMost(1)
+                            } else {
+                                (streak + 1).coerceAtMost(2)
+                            }
                         }
                     }
 
@@ -227,9 +235,14 @@ class Elm327BluetoothSource(
                         deadCycles = 0
                     }
 
-                    snapshot = snapshot.withGear(hasEcuGear)
+                    snapshot = freshness.sanitize(
+                        snapshot.withGear(hasEcuGear),
+                        System.currentTimeMillis(),
+                        rpmUpdatedThisCycle = rpmUpdated,
+                    )
                     val hasAny = snapshot.rpm != null || snapshot.coolantC != null ||
-                        snapshot.batteryVolts != null || snapshot.mafGps != null
+                        snapshot.batteryVolts != null || snapshot.mafGps != null ||
+                        snapshot.speedKmh != null
                     if (hasAny || deadCycles == 0) {
                         trySend(snapshot)
                     }
