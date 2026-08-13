@@ -253,6 +253,9 @@ fun DashboardScreen(
                         healthScore = health,
                         latchHealth = onLatchHealth,
                         palette = palette,
+                        onRemapBase = { label -> pickerTarget = PickerTarget.RemapBase(label) },
+                        onDeepSearch = onDeepSearch,
+                        onEditThresholds = { editMetric = it },
                     )
                     DashTheme.OPT_B -> OptBThemeDash(
                         snapshot = s,
@@ -263,6 +266,9 @@ fun DashboardScreen(
                         healthScore = health,
                         latchHealth = onLatchHealth,
                         palette = palette,
+                        onRemapBase = { label -> pickerTarget = PickerTarget.RemapBase(label) },
+                        onDeepSearch = onDeepSearch,
+                        onEditThresholds = { editMetric = it },
                     )
                     DashTheme.OPT_C -> OptCThemeDash(
                         snapshot = s,
@@ -274,6 +280,9 @@ fun DashboardScreen(
                         healthScore = health,
                         latchHealth = onLatchHealth,
                         palette = palette,
+                        onRemapBase = { label -> pickerTarget = PickerTarget.RemapBase(label) },
+                        onDeepSearch = onDeepSearch,
+                        onEditThresholds = { editMetric = it },
                     )
                     DashTheme.CLASSIC -> Unit
                 }
