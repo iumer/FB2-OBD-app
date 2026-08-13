@@ -13,6 +13,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -58,7 +59,7 @@ fun ConnectSheetContent(
     Column(
         modifier = modifier
             .clip(RoundedCornerShape(18.dp))
-            .background(Background)
+            .background(MaterialTheme.colorScheme.background)
             .padding(20.dp)
             .width(420.dp),
     ) {
@@ -102,7 +103,7 @@ fun ConnectSheetContent(
                 .fillMaxWidth()
                 .padding(top = 16.dp)
                 .clip(RoundedCornerShape(12.dp))
-                .background(Surface)
+                .background(MaterialTheme.colorScheme.surface)
                 .clickable { onPickDemo() }
                 .padding(14.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -123,7 +124,7 @@ private fun DeviceRow(device: BtDeviceUi, onClick: () -> Unit) {
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
-            .background(Surface)
+            .background(MaterialTheme.colorScheme.surface)
             .clickable { onClick() }
             .padding(14.dp),
         verticalAlignment = Alignment.CenterVertically,

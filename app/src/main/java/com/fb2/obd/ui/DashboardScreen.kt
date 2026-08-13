@@ -29,6 +29,7 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -81,6 +82,7 @@ import com.fb2.obd.ui.dash.OptBThemeDash
 import com.fb2.obd.ui.dash.OptCThemeDash
 import com.fb2.obd.ui.dash.ThemedTopBar
 import com.fb2.obd.ui.theme.Accent
+import com.fb2.obd.ui.theme.LocalThemePalette
 import com.fb2.obd.ui.theme.Background
 import com.fb2.obd.ui.theme.CritRed
 import com.fb2.obd.ui.theme.GoodGreen
@@ -486,7 +488,7 @@ private fun CompactHeroStrip(
             .padding(top = 2.dp, bottom = 6.dp)
             .height(DashType.heroH)
             .clip(RoundedCornerShape(12.dp))
-            .background(Surface)
+            .background(MaterialTheme.colorScheme.surface)
             .padding(horizontal = 12.dp, vertical = 6.dp),
         horizontalArrangement = Arrangement.SpaceEvenly,
         verticalAlignment = Alignment.CenterVertically,
@@ -496,7 +498,7 @@ private fun CompactHeroStrip(
             value = rpm.fmt(),
             unit = "",
             accent = if (rpmStatus.health == Health.UNKNOWN || rpmStatus.health == Health.GOOD) {
-                Accent
+                MaterialTheme.colorScheme.primary
             } else {
                 rpmStatus.health.color()
             },
@@ -529,7 +531,7 @@ private fun CompactHeroStrip(
             )
             Text(
                 text = if (gearSource == GearSource.NONE) "–" else (gear?.toString() ?: "–"),
-                color = Accent,
+                color = MaterialTheme.colorScheme.primary,
                 fontSize = DashType.heroValue,
                 fontWeight = FontWeight.Bold,
                 style = tightTextStyle(DashType.heroValue),
@@ -644,13 +646,13 @@ private fun PageTabs(titles: List<String>, current: Int, onSelect: (Int) -> Unit
             val selected = i == current
             Text(
                 text = title,
-                color = if (selected) Accent else TextMuted,
+                color = if (selected) MaterialTheme.colorScheme.primary else TextMuted,
                 fontSize = DashType.tab,
                 fontWeight = if (selected) FontWeight.Bold else FontWeight.SemiBold,
                 modifier = Modifier
                     .clip(RoundedCornerShape(10.dp))
                     .clickable { onSelect(i) }
-                    .background(if (selected) Surface else Background)
+                    .background(if (selected) MaterialTheme.colorScheme.surface else MaterialTheme.colorScheme.background)
                     .padding(horizontal = 12.dp, vertical = 8.dp),
             )
         }
@@ -927,20 +929,20 @@ private fun DenseSensorGridPage(
                     modifier = Modifier
                         .clip(RoundedCornerShape(10.dp))
                         .clickable { secondaryAction.second() }
-                        .background(Surface)
+                        .background(MaterialTheme.colorScheme.surface)
                         .padding(horizontal = 14.dp, vertical = 8.dp)
                         .padding(end = 6.dp),
                 )
             }
             Text(
                 text = action.first,
-                color = Accent,
+                color = MaterialTheme.colorScheme.primary,
                 fontSize = DashType.pageTitle,
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier
                     .clip(RoundedCornerShape(10.dp))
                     .clickable { action.second() }
-                    .background(Surface)
+                    .background(MaterialTheme.colorScheme.surface)
                     .padding(horizontal = 14.dp, vertical = 8.dp),
             )
         }
@@ -954,7 +956,7 @@ private fun DenseSensorGridPage(
                     .fillMaxWidth()
                     .padding(bottom = 6.dp)
                     .clip(RoundedCornerShape(8.dp))
-                    .background(Surface)
+                    .background(MaterialTheme.colorScheme.surface)
                     .padding(horizontal = 10.dp, vertical = 8.dp),
             )
         }
@@ -1102,7 +1104,7 @@ private fun DenseTile(
         modifier = modifier
             .height(DashType.tileH)
             .clip(RoundedCornerShape(12.dp))
-            .background(Surface)
+            .background(MaterialTheme.colorScheme.surface)
             .combinedClickable(
                 onClick = {
                     val now = System.currentTimeMillis()
@@ -1197,7 +1199,7 @@ private fun DenseTile(
         when {
             deepSearchHint -> Text(
                 "tap×3 deep · 2× change",
-                color = Accent,
+                color = MaterialTheme.colorScheme.primary,
                 fontSize = DashType.tileHint,
                 fontWeight = FontWeight.Bold,
                 maxLines = 1,
@@ -1205,7 +1207,7 @@ private fun DenseTile(
             )
             remappedHint -> Text(
                 "2× change",
-                color = Accent,
+                color = MaterialTheme.colorScheme.primary,
                 fontSize = DashType.tileHint,
                 fontWeight = FontWeight.Bold,
                 maxLines = 1,
@@ -1239,12 +1241,12 @@ private fun EmptyTile(modifier: Modifier = Modifier, onClick: () -> Unit) {
         modifier = modifier
             .height(DashType.tileH)
             .clip(RoundedCornerShape(12.dp))
-            .background(Surface)
+            .background(MaterialTheme.colorScheme.surface)
             .clickable(onClick = onClick)
             .padding(4.dp),
         contentAlignment = Alignment.Center,
     ) {
-        Text(text = "+", color = Accent, fontSize = 28.sp, fontWeight = FontWeight.Bold)
+        Text(text = "+", color = MaterialTheme.colorScheme.primary, fontSize = 28.sp, fontWeight = FontWeight.Bold)
         Text(
             text = "add",
             color = TextMuted,
@@ -1376,7 +1378,7 @@ private fun SensorPickerDialog(
                         if (category != null) {
                             Text(
                                 text = if (subProfile != null) "← Subcategories" else "← Categories",
-                                color = Accent,
+                                color = MaterialTheme.colorScheme.primary,
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Bold,
                                 modifier = Modifier
@@ -1454,9 +1456,9 @@ private fun SensorPickerDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = onDismiss) { Text("Cancel", color = Accent) }
+            TextButton(onClick = onDismiss) { Text("Cancel", color = MaterialTheme.colorScheme.primary) }
         },
-        containerColor = Background,
+        containerColor = MaterialTheme.colorScheme.background,
     )
 }
 
@@ -1478,7 +1480,7 @@ private fun PickerRow(
             .padding(bottom = 4.dp)
             .clip(RoundedCornerShape(8.dp))
             .clickable(onClick = onClick)
-            .background(Surface)
+            .background(MaterialTheme.colorScheme.surface)
             .padding(horizontal = 10.dp, vertical = 6.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
@@ -1487,7 +1489,7 @@ private fun PickerRow(
             Text(title, color = TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(subtitle, color = TextMuted, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
-        Text(trailing, color = Accent, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+        Text(trailing, color = MaterialTheme.colorScheme.primary, fontSize = 18.sp, fontWeight = FontWeight.Bold)
     }
 }
 
@@ -1502,7 +1504,7 @@ private fun TopBarChip(text: String, color: Color, onClick: () -> Unit) {
             .padding(start = 8.dp)
             .clip(RoundedCornerShape(10.dp))
             .clickable(onClick = onClick)
-            .background(Surface)
+            .background(MaterialTheme.colorScheme.surface)
             .padding(horizontal = 12.dp, vertical = 9.dp),
     )
 }
@@ -1518,6 +1520,7 @@ private fun TopBar(
     onToggleLogging: () -> Unit,
     onMinimizeClick: () -> Unit,
 ) {
+    val accent = LocalThemePalette.current.accent
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -1528,7 +1531,7 @@ private fun TopBar(
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
                 text = "FB2 DIAG",
-                color = Accent,
+                color = MaterialTheme.colorScheme.primary,
                 fontSize = DashType.topTitle,
                 fontWeight = FontWeight.Bold,
             )
@@ -1551,7 +1554,7 @@ private fun TopBar(
                     GoodGreen to "LIVE"
                 state.connection == ConnectionState.CONNECTED && !state.sourceIsLive ->
                     WarnAmber to "DEMO"
-                state.connection == ConnectionState.CONNECTING -> Accent to "…"
+                state.connection == ConnectionState.CONNECTING -> accent to "…"
                 state.connection == ConnectionState.ERROR -> CritRed to "ERR"
                 else -> TextMuted to "OFF"
             }
@@ -1568,9 +1571,9 @@ private fun TopBar(
                 fontWeight = FontWeight.Bold,
             )
 
-            TopBarChip(if (loggingActive) "STOP LOG" else "LOG", if (loggingActive) CritRed else Accent, onToggleLogging)
-            TopBarChip("MIN", Accent, onMinimizeClick)
-            TopBarChip("DIAG", Accent, onDiagnosticsClick)
+            TopBarChip(if (loggingActive) "STOP LOG" else "LOG", if (loggingActive) CritRed else accent, onToggleLogging)
+            TopBarChip("MIN", accent, onMinimizeClick)
+            TopBarChip("DIAG", accent, onDiagnosticsClick)
             TopBarChip("SETTINGS", TextMuted, onSettingsClick)
             // CONNECTED only for a real ELM adapter — Demo keeps CONNECT (+ yellow DEMO badge).
             val liveConnected = state.connection == ConnectionState.CONNECTED &&
@@ -1585,7 +1588,7 @@ private fun TopBar(
                 color = when {
                     liveConnected -> GoodGreen
                     state.connection == ConnectionState.ERROR -> CritRed
-                    else -> Accent
+                    else -> accent
                 },
                 onClick = onConnectClick,
             )

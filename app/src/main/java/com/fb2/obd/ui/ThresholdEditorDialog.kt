@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -85,7 +86,7 @@ fun ThresholdEditorDialog(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(10.dp))
-                            .background(Surface)
+                            .background(MaterialTheme.colorScheme.surface)
                             .padding(horizontal = 10.dp, vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -102,7 +103,7 @@ fun ThresholdEditorDialog(
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(
                                 text = "−",
-                                color = Accent,
+                                color = MaterialTheme.colorScheme.primary,
                                 fontSize = 18.sp,
                                 fontWeight = FontWeight.Bold,
                                 modifier = Modifier
@@ -110,7 +111,7 @@ fun ThresholdEditorDialog(
                                     .clickable {
                                         onChangeField(field.id, (field.value - step).roundToStep(step))
                                     }
-                                    .background(Background)
+                                    .background(MaterialTheme.colorScheme.background)
                                     .padding(horizontal = 12.dp, vertical = 6.dp),
                             )
                             Text(
@@ -122,7 +123,7 @@ fun ThresholdEditorDialog(
                             )
                             Text(
                                 text = "+",
-                                color = Accent,
+                                color = MaterialTheme.colorScheme.primary,
                                 fontSize = 18.sp,
                                 fontWeight = FontWeight.Bold,
                                 modifier = Modifier
@@ -130,7 +131,7 @@ fun ThresholdEditorDialog(
                                     .clickable {
                                         onChangeField(field.id, (field.value + step).roundToStep(step))
                                     }
-                                    .background(Background)
+                                    .background(MaterialTheme.colorScheme.background)
                                     .padding(horizontal = 12.dp, vertical = 6.dp),
                             )
                         }
@@ -140,7 +141,7 @@ fun ThresholdEditorDialog(
         },
         confirmButton = {
             TextButton(onClick = onDismiss) {
-                Text("Done", color = Accent)
+                Text("Done", color = MaterialTheme.colorScheme.primary)
             }
         },
         dismissButton = {
@@ -148,7 +149,7 @@ fun ThresholdEditorDialog(
                 Text("Reset all", color = TextMuted)
             }
         },
-        containerColor = Background,
+        containerColor = MaterialTheme.colorScheme.background,
     )
 
     if (confirmReset) {
@@ -166,14 +167,14 @@ fun ThresholdEditorDialog(
                 TextButton(onClick = {
                     onResetAll()
                     confirmReset = false
-                }) { Text("Reset", color = Accent) }
+                }) { Text("Reset", color = MaterialTheme.colorScheme.primary) }
             },
             dismissButton = {
                 TextButton(onClick = { confirmReset = false }) {
                     Text("Cancel", color = TextMuted)
                 }
             },
-            containerColor = Background,
+            containerColor = MaterialTheme.colorScheme.background,
         )
     }
 }

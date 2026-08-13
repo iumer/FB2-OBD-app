@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -96,7 +97,7 @@ fun FloatingDashBubblePreview(
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(Background)
+            .background(MaterialTheme.colorScheme.background)
             .padding(16.dp),
         contentAlignment = Alignment.CenterStart,
     ) {
@@ -145,7 +146,7 @@ fun FloatingDashBubblePreview(
                 modifier = Modifier
                     .size(BubbleScale.center)
                     .clip(CircleShape)
-                    .background(Surface.copy(alpha = 0.92f))
+                    .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.92f))
                     .border(4.dp, rim, CircleShape),
                 contentAlignment = Alignment.Center,
             ) {
@@ -184,7 +185,7 @@ private fun SatelliteBubble(
         modifier = modifier
             .size(BubbleScale.sat)
             .clip(CircleShape)
-            .background(Surface.copy(alpha = 0.92f))
+            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.92f))
             .border(3.dp, color, CircleShape),
         contentAlignment = Alignment.Center,
     ) {

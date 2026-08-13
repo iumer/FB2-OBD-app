@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
@@ -67,7 +68,7 @@ fun AiAnalyzeScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(Background)
+            .background(MaterialTheme.colorScheme.background)
             .padding(16.dp)
             .verticalScroll(rememberScrollState()),
     ) {
@@ -88,13 +89,13 @@ fun AiAnalyzeScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(12.dp))
-                    .background(Surface)
+                    .background(MaterialTheme.colorScheme.surface)
                     .clickable(onClick = onOpenSettings)
                     .padding(14.dp),
             )
             Text(
                 text = "Tap to open Settings",
-                color = Accent,
+                color = MaterialTheme.colorScheme.primary,
                 fontSize = 12.sp,
                 modifier = Modifier.padding(top = 6.dp, bottom = 12.dp),
             )
@@ -118,7 +119,7 @@ fun AiAnalyzeScreen(
                     .fillMaxWidth()
                     .padding(bottom = 8.dp)
                     .clip(RoundedCornerShape(10.dp))
-                    .background(Surface)
+                    .background(MaterialTheme.colorScheme.surface)
                     .padding(12.dp),
             )
         }
@@ -147,8 +148,8 @@ fun AiAnalyzeScreen(
             steps = AiAnalysisPayloadBuilder.MAX_WINDOW_MINUTES -
                 AiAnalysisPayloadBuilder.MIN_WINDOW_MINUTES - 1,
             colors = SliderDefaults.colors(
-                thumbColor = Accent,
-                activeTrackColor = Accent,
+                thumbColor = MaterialTheme.colorScheme.primary,
+                activeTrackColor = MaterialTheme.colorScheme.primary,
                 inactiveTrackColor = TextMuted.copy(alpha = 0.35f),
             ),
             modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
@@ -192,9 +193,9 @@ fun AiAnalyzeScreen(
                             .fillMaxWidth()
                             .padding(bottom = 6.dp)
                             .clip(RoundedCornerShape(10.dp))
-                            .background(Surface)
+                            .background(MaterialTheme.colorScheme.surface)
                             .then(
-                                if (selected) Modifier.border(2.dp, Accent, RoundedCornerShape(10.dp))
+                                if (selected) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(10.dp))
                                 else Modifier,
                             )
                             .clickable(enabled = !state.loading) { onSelectLog(log.fileName) }
@@ -221,12 +222,12 @@ fun AiAnalyzeScreen(
                         if (selected) {
                             Text(
                                 text = if (state.loading) "…" else "Analyze",
-                                color = if (state.loading) TextMuted else Background,
+                                color = if (state.loading) TextMuted else MaterialTheme.colorScheme.background,
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.Bold,
                                 modifier = Modifier
                                     .clip(RoundedCornerShape(8.dp))
-                                    .background(if (state.loading) Background else Accent)
+                                    .background(if (state.loading) MaterialTheme.colorScheme.background else MaterialTheme.colorScheme.primary)
                                     .clickable(enabled = !state.loading) { onAnalyze() }
                                     .padding(horizontal = 12.dp, vertical = 8.dp),
                             )
@@ -246,7 +247,7 @@ fun AiAnalyzeScreen(
                         .padding(top = 8.dp, bottom = 4.dp)
                         .clip(RoundedCornerShape(8.dp))
                         .clickable { onClearReport() }
-                        .background(Surface)
+                        .background(MaterialTheme.colorScheme.surface)
                         .padding(horizontal = 12.dp, vertical = 8.dp),
                 )
             }
@@ -298,12 +299,12 @@ fun AiAnalyzeScreen(
                         modifier = Modifier
                             .clip(RoundedCornerShape(8.dp))
                             .clickable { onClearReport() }
-                            .background(Surface)
+                            .background(MaterialTheme.colorScheme.surface)
                             .padding(horizontal = 12.dp, vertical = 6.dp),
                     )
                     Text(
                         text = "COPY",
-                        color = Accent,
+                        color = MaterialTheme.colorScheme.primary,
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Bold,
                         modifier = Modifier
@@ -312,7 +313,7 @@ fun AiAnalyzeScreen(
                                 val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                                 cm.setPrimaryClip(ClipData.newPlainText("FB2 AI report", report))
                             }
-                            .background(Surface)
+                            .background(MaterialTheme.colorScheme.surface)
                             .padding(horizontal = 12.dp, vertical = 6.dp),
                     )
                 }
@@ -325,7 +326,7 @@ fun AiAnalyzeScreen(
                     .fillMaxWidth()
                     .heightIn(min = 120.dp)
                     .clip(RoundedCornerShape(12.dp))
-                    .background(Surface)
+                    .background(MaterialTheme.colorScheme.surface)
                     .padding(14.dp),
             )
             Text(
@@ -355,14 +356,14 @@ private fun LiveAnalyzeBar(
             modifier = Modifier
                 .weight(1f)
                 .clip(RoundedCornerShape(12.dp))
-                .background(if (loading) Surface else Accent)
+                .background(if (loading) MaterialTheme.colorScheme.surface else MaterialTheme.colorScheme.primary)
                 .clickable(enabled = !loading) { onAnalyze() }
                 .padding(vertical = 14.dp),
             horizontalArrangement = Arrangement.Center,
         ) {
             Text(
                 text = if (loading) "Analyzing…" else "Analyze",
-                color = if (loading) TextMuted else Background,
+                color = if (loading) TextMuted else MaterialTheme.colorScheme.background,
                 fontSize = 16.sp,
                 fontWeight = FontWeight.Bold,
             )
@@ -370,7 +371,7 @@ private fun LiveAnalyzeBar(
         Row(
             modifier = Modifier
                 .clip(RoundedCornerShape(12.dp))
-                .background(Surface)
+                .background(MaterialTheme.colorScheme.surface)
                 .clickable(enabled = canClear) { onClear() }
                 .padding(horizontal = 16.dp, vertical = 14.dp),
             horizontalArrangement = Arrangement.Center,
@@ -390,12 +391,12 @@ private fun LiveAnalyzeBar(
 private fun ModeChip(label: String, selected: Boolean, onClick: () -> Unit) {
     Text(
         text = label,
-        color = if (selected) Background else TextPrimary,
+        color = if (selected) MaterialTheme.colorScheme.background else TextPrimary,
         fontSize = 13.sp,
         fontWeight = FontWeight.Bold,
         modifier = Modifier
             .clip(RoundedCornerShape(20.dp))
-            .background(if (selected) Accent else Surface)
+            .background(if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface)
             .clickable(onClick = onClick)
             .padding(horizontal = 14.dp, vertical = 8.dp),
     )
