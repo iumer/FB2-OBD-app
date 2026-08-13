@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Publish dist/*.apk to branch `latest` so the stable sideload URL stays current:
+# Publish ONE sideload APK to branch `latest` (stable URL never changes):
 #   https://raw.githubusercontent.com/iumer/FB2-OBD-app/latest/dist/FB2-Diag-debug.apk
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -12,21 +12,12 @@ TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
 mkdir -p "$TMP/dist"
 cp dist/FB2-Diag-debug.apk "$TMP/dist/"
-if [[ -f dist/FB2-Diag-hu.apk ]]; then
-  cp dist/FB2-Diag-hu.apk "$TMP/dist/"
-else
-  cp dist/FB2-Diag-debug.apk "$TMP/dist/FB2-Diag-hu.apk"
-fi
 cat > "$TMP/README.md" <<'EOF'
 # FB2 Diag — always-latest APK
 
-**One download link (does not change between updates):**
+**Only download link (does not change between updates):**
 
 https://raw.githubusercontent.com/iumer/FB2-OBD-app/latest/dist/FB2-Diag-debug.apk
-
-HU copy:
-
-https://raw.githubusercontent.com/iumer/FB2-OBD-app/latest/dist/FB2-Diag-hu.apk
 EOF
 cd "$TMP"
 git init -b latest >/dev/null

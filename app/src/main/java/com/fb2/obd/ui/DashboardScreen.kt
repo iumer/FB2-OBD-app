@@ -58,6 +58,7 @@ import com.fb2.obd.DashboardUiState
 import com.fb2.obd.PerformanceState
 import com.fb2.obd.TripState
 import com.fb2.obd.data.ConnectionState
+import com.fb2.obd.obd.DashTheme
 import com.fb2.obd.obd.EditableMetric
 import com.fb2.obd.obd.GearSource
 import com.fb2.obd.obd.Health
@@ -75,6 +76,9 @@ import com.fb2.obd.obd.VehicleProfile
 import com.fb2.obd.obd.VehicleProfileConfig
 import com.fb2.obd.obd.VehicleSnapshot
 import com.fb2.obd.obd.isEffectivelyBlank
+import com.fb2.obd.ui.dash.OptAThemeDash
+import com.fb2.obd.ui.dash.OptBThemeDash
+import com.fb2.obd.ui.dash.OptCThemeDash
 import com.fb2.obd.ui.theme.Accent
 import com.fb2.obd.ui.theme.Background
 import com.fb2.obd.ui.theme.CritRed
@@ -141,6 +145,7 @@ fun DashboardScreen(
     state: DashboardUiState,
     modifier: Modifier = Modifier,
     showEstimatedGear: Boolean = true,
+    dashTheme: DashTheme = DashTheme.CLASSIC,
     loggingActive: Boolean = false,
     pageTitles: List<String> = DefaultDashPageTitles,
     profileBadge: String = VehicleProfile.FB2.badge,
@@ -219,21 +224,25 @@ fun DashboardScreen(
             onMinimizeClick = onMinimizeClick,
         )
 
-        CompactHeroStrip(
-            rpm = s.rpm,
-            speedKmh = s.speedKmh,
-            gear = s.gear,
-            gearSource = if (!showEstimatedGear && s.gearSource == GearSource.ESTIMATED) {
-                GearSource.NONE
-            } else {
-                s.gearSource
-            },
-            gearConfidencePct = s.gearConfidencePct,
-            thresholds = healthThresholds,
-            rpmFreshAtMs = s.freshAtMs[SnapshotFreshness.KEY_RPM],
-            speedFreshAtMs = s.freshAtMs[SnapshotFreshness.KEY_SPEED],
-            onEditRpm = { editMetric = EditableMetric.RPM },
-        )
+        val onDashPage = titles.getOrNull(pagerState.currentPage) == "Dash"
+        val useAltTheme = dashTheme != DashTheme.CLASSIC && onDashPage
+        if (!useAltTheme) {
+            CompactHeroStrip(
+                rpm = s.rpm,
+                speedKmh = s.speedKmh,
+                gear = s.gear,
+                gearSource = if (!showEstimatedGear && s.gearSource == GearSource.ESTIMATED) {
+                    GearSource.NONE
+                } else {
+                    s.gearSource
+                },
+                gearConfidencePct = s.gearConfidencePct,
+                thresholds = healthThresholds,
+                rpmFreshAtMs = s.freshAtMs[SnapshotFreshness.KEY_RPM],
+                speedFreshAtMs = s.freshAtMs[SnapshotFreshness.KEY_SPEED],
+                onEditRpm = { editMetric = EditableMetric.RPM },
+            )
+        }
 
         PageTabs(
             titles = titles,
@@ -246,30 +255,73 @@ fun DashboardScreen(
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f),
-            userScrollEnabled = true,
+            // OptA vertical wheels fight nested horizontal swipe — use tabs on OptA Dash.
+            userScrollEnabled = !(
+                dashTheme == DashTheme.OPT_A &&
+                    titles.getOrNull(pagerState.currentPage) == "Dash"
+                ),
             beyondBoundsPageCount = 0,
         ) { page ->
             // Fixed page slot so swipe does not resize the hero strip above.
             Box(modifier = Modifier.fillMaxSize()) {
                 when (titles.getOrNull(page)) {
-                    "Dash" -> MetricsPage(
-                        snapshot = s,
-                        healthSnapshot = state.decisionSnapshot.takeUnless { it.isEffectivelyBlank() } ?: s,
-                        latchHealth = onLatchHealth,
-                        extraPidIds = extraPidIds,
-                        extraValues = extraValues,
-                        tileOverrides = tileOverrides,
-                        deepFoundValues = deepFoundValues,
-                        catalog = catalog,
-                        thresholds = healthThresholds,
-                        dtcCount = dtcCount,
-                        healthScore = health,
-                        onEmptySlotClick = { pickerTarget = PickerTarget.ExtraSlot(it) },
-                        onRemapBaseTile = { label -> pickerTarget = PickerTarget.RemapBase(label) },
-                        onRemapExtra = { index -> pickerTarget = PickerTarget.ExtraSlot(index) },
-                        onDeepSearch = onDeepSearch,
-                        onEditThresholds = { editMetric = it },
-                    )
+                    "Dash" -> {
+                        val gearSrc = if (!showEstimatedGear && s.gearSource == GearSource.ESTIMATED) {
+                            GearSource.NONE
+                        } else {
+                            s.gearSource
+                        }
+                        val healthSnap = state.decisionSnapshot.takeUnless { it.isEffectivelyBlank() } ?: s
+                        when (dashTheme) {
+                            DashTheme.CLASSIC -> MetricsPage(
+                                snapshot = s,
+                                healthSnapshot = healthSnap,
+                                latchHealth = onLatchHealth,
+                                extraPidIds = extraPidIds,
+                                extraValues = extraValues,
+                                tileOverrides = tileOverrides,
+                                deepFoundValues = deepFoundValues,
+                                catalog = catalog,
+                                thresholds = healthThresholds,
+                                dtcCount = dtcCount,
+                                healthScore = health,
+                                onEmptySlotClick = { pickerTarget = PickerTarget.ExtraSlot(it) },
+                                onRemapBaseTile = { label -> pickerTarget = PickerTarget.RemapBase(label) },
+                                onRemapExtra = { index -> pickerTarget = PickerTarget.ExtraSlot(index) },
+                                onDeepSearch = onDeepSearch,
+                                onEditThresholds = { editMetric = it },
+                            )
+                            DashTheme.OPT_A -> OptAThemeDash(
+                                snapshot = s,
+                                healthSnapshot = healthSnap,
+                                thresholds = healthThresholds,
+                                gearSource = gearSrc,
+                                gearConfidencePct = s.gearConfidencePct,
+                                dtcCount = dtcCount,
+                                healthScore = health,
+                                latchHealth = onLatchHealth,
+                            )
+                            DashTheme.OPT_B -> OptBThemeDash(
+                                snapshot = s,
+                                healthSnapshot = healthSnap,
+                                thresholds = healthThresholds,
+                                gearSource = gearSrc,
+                                dtcCount = dtcCount,
+                                healthScore = health,
+                                latchHealth = onLatchHealth,
+                            )
+                            DashTheme.OPT_C -> OptCThemeDash(
+                                snapshot = s,
+                                healthSnapshot = healthSnap,
+                                thresholds = healthThresholds,
+                                gearSource = gearSrc,
+                                gearConfidencePct = s.gearConfidencePct,
+                                dtcCount = dtcCount,
+                                healthScore = health,
+                                latchHealth = onLatchHealth,
+                            )
+                        }
+                    }
                     "Custom" -> DenseSensorGridPage(
                         title = "Custom sensors",
                         rows = customValues.entries.map { it.key to it.value }.ifEmpty {

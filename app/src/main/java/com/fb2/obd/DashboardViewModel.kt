@@ -23,7 +23,9 @@ import com.fb2.obd.data.OpenAiClient
 import com.fb2.obd.data.SavedAiReport
 import com.fb2.obd.data.SavedLogFile
 import com.fb2.obd.data.SessionLogStore
+import com.fb2.obd.data.DashThemeStore
 import com.fb2.obd.data.VehicleProfileStore
+import com.fb2.obd.obd.DashTheme
 import com.fb2.obd.data.VoiceAlerter
 import com.fb2.obd.obd.AiAnalysisPayloadBuilder
 import com.fb2.obd.obd.ColdStartIdleCatalog
@@ -99,6 +101,8 @@ data class SettingsState(
      */
     val duckMediaDuringAlerts: Boolean = false,
     val vehicleProfile: VehicleProfile = VehicleProfile.DEFAULT,
+    /** Phone Dash presentation theme (Classic / OptA / OptB / OptC). */
+    val dashTheme: DashTheme = DashTheme.DEFAULT,
 )
 
 /** UI state for one-shot Analyze via AI. */
@@ -185,6 +189,7 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
     val settings: StateFlow<SettingsState> = _settings.asStateFlow()
 
     private val profileStore = VehicleProfileStore(app)
+    private val dashThemeStore = DashThemeStore(app)
     val vehicleProfile: VehicleProfile get() = _settings.value.vehicleProfile
     val dashPageTitles: List<String> get() = VehicleProfileConfig.dashPageTitles(vehicleProfile)
     val showHondaModules: Boolean get() = VehicleProfileConfig.showHondaModules(vehicleProfile)
@@ -436,6 +441,7 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
         _settings.value = SettingsState(
             showEstimatedGear = VehicleProfileConfig.defaultShowEstimatedGear(loadedProfile),
             vehicleProfile = loadedProfile,
+            dashTheme = dashThemeStore.load(),
         )
         tripComputer.fuelPricePerLiter = _settings.value.fuelPricePerLiter
         _maintenance.value = MaintenanceStore(File(filesDir, "maintenance.json")).load()
@@ -978,6 +984,12 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
 
     fun setShowEstimatedGear(enabled: Boolean) {
         _settings.update { it.copy(showEstimatedGear = enabled) }
+    }
+
+    fun setDashTheme(theme: DashTheme) {
+        if (theme == _settings.value.dashTheme) return
+        dashThemeStore.save(theme)
+        _settings.update { it.copy(dashTheme = theme) }
     }
 
     fun setVoiceAlerts(enabled: Boolean) {

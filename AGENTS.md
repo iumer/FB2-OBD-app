@@ -27,9 +27,10 @@ non-obvious cloud specifics.
   (also copy to `dist/FB2-Diag-debug.apk` for sideload).
 - **Always-latest sideload URL (do not invent branch-specific raw links for the user):**
   https://raw.githubusercontent.com/iumer/FB2-OBD-app/latest/dist/FB2-Diag-debug.apk  
-  After every APK rebuild, **publish** `dist/FB2-Diag-debug.apk` (and `FB2-Diag-hu.apk`)
-  to branch `latest` at path `dist/` (force-push orphan/update is OK). Tell the user
-  that same URL — never a `cursor/...` branch raw link unless they ask for a specific PR build.
+  **Only one APK** — publish `dist/FB2-Diag-debug.apk` alone to branch `latest`
+  via `scripts/publish-latest-apk.sh`. Never create a second sideload APK/link.
+  Tell the user that same URL — never a `cursor/...` branch raw link unless they
+  ask for a specific PR build.
 
 ### Running / demoing the UI
 
@@ -68,6 +69,8 @@ non-obvious cloud specifics.
     deep search skips Mode 22/Honda strategies; estimated gear off by default;
     Mode 0A permanent DTCs on Faults. Use Generic as the safe fallback for any
     OBD-II car (Mira / Corolla / Civic X / etc.).
+- **Dash Theme** (Settings → Theme): Classic / OptA / OptB / OptC. Presentation
+  only — same snapshot, health, MIN bubble, AI analysis, alerts, logging.
 - Honda enhanced packs in `HondaPidCatalog` use Mode 22 placeholders
   (`2211xx`…`2219xx`). Real FB2 / market-specific ECUs often need different IDs
   **and** CAN headers (`ATSH`). Until recently the app never sent headers — that
@@ -196,8 +199,8 @@ non-obvious cloud specifics.
   runs deep search on n/s tiles; long-press edits health thresholds.
 - **Sensor picker search:** Type ≥2 chars in the dialog search box to filter
   by label / request / category (skip category drill-down).
-- **HU sideload APK:** Use `scripts/package-hu-apk.sh` (or `dist/FB2-Diag-debug.apk`
-  / `dist/FB2-Diag-hu.apk`). Must be **v1+v2** signed — plain AGP debug/release
+- **HU sideload APK:** Use `scripts/package-hu-apk.sh` → single file
+  `dist/FB2-Diag-debug.apk`. Must be **v1+v2** signed — plain AGP debug/release
   is often **v2-only**, which makes some car package installers hang on
   “Installing…”. Prefer the ~7MB release-classpath APK over the bloated debug
   APK. If install sticks: uninstall old `FB2 Diag`, reboot HU, copy APK via USB
