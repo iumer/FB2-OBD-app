@@ -48,4 +48,33 @@ class DiagnosticEventTrackerTest {
         assertTrue(FuelSystemDecoder.decode(intArrayOf(0x02, 0x00)) == "CLOSED LOOP")
         assertTrue(FuelSystemDecoder.fromRawByte(2.0) == "CLOSED LOOP")
     }
+
+    @Test
+    fun batteryZone_doesNotFlapCriticalElevatedEverySample() {
+        // Recreates Aug 13 session B: 6.5 battery ZONE flaps/min from ELD chatter.
+        val tracker = DiagnosticEventTracker()
+        val base = VehicleSnapshot(rpm = 1800.0, speedKmh = 90.0, batteryVolts = 12.0)
+        tracker.onSnapshot(base, HealthThresholds.DEFAULT) // establish CRITICAL / ALT WEAK
+
+        // One-step recovery to ELEVATED must not emit (hysteresis).
+        tracker.onSnapshot(base.copy(batteryVolts = 12.6), HealthThresholds.DEFAULT)
+        tracker.onSnapshot(base.copy(batteryVolts = 12.0), HealthThresholds.DEFAULT)
+        tracker.onSnapshot(base.copy(batteryVolts = 12.6), HealthThresholds.DEFAULT)
+
+        val battZones = ObdLogger.eventRows().filter {
+            it.category == "ZONE" && it.message.startsWith("battery")
+        }
+        assertTrue(
+            "expected no CRITICAL↔ELEVATED flap spam, got: $battZones",
+            battZones.isEmpty(),
+        )
+
+        // Full recovery to GOOD is allowed.
+        tracker.onSnapshot(base.copy(batteryVolts = 14.0), HealthThresholds.DEFAULT)
+        assertTrue(
+            ObdLogger.eventRows().any {
+                it.category == "ZONE" && it.message.contains("battery") && it.message.contains("GOOD")
+            },
+        )
+    }
 }
