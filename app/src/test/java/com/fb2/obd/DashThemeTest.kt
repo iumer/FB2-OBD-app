@@ -1,0 +1,46 @@
+package com.fb2.obd
+
+import com.fb2.obd.obd.DashTheme
+import com.fb2.obd.obd.HealthThresholds
+import com.fb2.obd.obd.VehicleSnapshot
+import com.fb2.obd.ui.dash.DashThemeMetrics
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
+import org.junit.Test
+
+class DashThemeTest {
+
+    @Test
+    fun fromId_defaultsAndParses() {
+        assertEquals(DashTheme.CLASSIC, DashTheme.fromId(null))
+        assertEquals(DashTheme.CLASSIC, DashTheme.fromId("nope"))
+        assertEquals(DashTheme.OPT_A, DashTheme.fromId("opt_a"))
+        assertEquals(DashTheme.OPT_B, DashTheme.fromId("OPT_B"))
+        assertEquals(DashTheme.OPT_C, DashTheme.fromId("opt_c"))
+    }
+
+    @Test
+    fun sideMetrics_splitExcludesHeroAndSplitsWheels() {
+        val snap = VehicleSnapshot(
+            rpm = 2200.0,
+            speedKmh = 60.0,
+            gear = 3,
+            coolantC = 88.0,
+            batteryVolts = 14.1,
+            intakeC = 35.0,
+            engineLoadPct = 30.0,
+            throttlePct = 12.0,
+            mapKpa = 40.0,
+            mafGps = 8.0,
+        )
+        val metrics = DashThemeMetrics.sideMetrics(snap, thresholds = HealthThresholds.DEFAULT)
+        assertTrue(metrics.none { it.label.equals("RPM", true) })
+        assertTrue(metrics.none { it.label.equals("Speed", true) })
+        assertTrue(metrics.any { it.label == "Coolant" })
+        assertTrue(metrics.any { it.label == "Battery" })
+        val (left, right) = DashThemeMetrics.splitWheels(metrics)
+        assertEquals(metrics.size, left.size + right.size)
+        assertTrue(left.isNotEmpty())
+        assertTrue(right.isNotEmpty())
+    }
+}

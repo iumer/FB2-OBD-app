@@ -31,6 +31,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.fb2.obd.SettingsState
 import com.fb2.obd.data.LogUploadManager
+import com.fb2.obd.obd.DashTheme
 import com.fb2.obd.obd.VehicleProfile
 import com.fb2.obd.ui.theme.Accent
 import com.fb2.obd.ui.theme.Background
@@ -82,6 +83,7 @@ data class SettingsNav(
 fun SettingsScreen(
     settings: SettingsState,
     onVehicleProfileChange: (VehicleProfile) -> Unit = {},
+    onDashThemeChange: (DashTheme) -> Unit = {},
     onToggleEstimatedGear: (Boolean) -> Unit,
     onToggleVoiceAlerts: (Boolean) -> Unit = {},
     onToggleDuckMedia: (Boolean) -> Unit = {},
@@ -125,6 +127,21 @@ fun SettingsScreen(
                 profile = profile,
                 selected = settings.vehicleProfile == profile,
                 onClick = { onVehicleProfileChange(profile) },
+            )
+        }
+
+        SectionLabel("Theme")
+        Text(
+            text = "Dash tab only. Classic / OptA / OptB / OptC — same readings, MIN, AI, alerts.",
+            color = TextMuted,
+            fontSize = 12.sp,
+            modifier = Modifier.padding(bottom = 8.dp),
+        )
+        DashTheme.entries.forEach { theme ->
+            ThemeRow(
+                theme = theme,
+                selected = settings.dashTheme == theme,
+                onClick = { onDashThemeChange(theme) },
             )
         }
 
@@ -304,6 +321,40 @@ private fun ProfileRow(
                 fontWeight = FontWeight.SemiBold,
             )
             Text(text = profile.subtitle, color = TextMuted, fontSize = 12.sp)
+        }
+        Text(
+            text = if (selected) "SELECTED" else "SELECT",
+            color = if (selected) GoodGreen else Accent,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Bold,
+        )
+    }
+}
+
+@Composable
+private fun ThemeRow(
+    theme: DashTheme,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = 8.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(Surface)
+            .clickable(onClick = onClick)
+            .padding(14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = theme.displayName,
+                color = TextPrimary,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Text(text = theme.subtitle, color = TextMuted, fontSize = 12.sp)
         }
         Text(
             text = if (selected) "SELECTED" else "SELECT",

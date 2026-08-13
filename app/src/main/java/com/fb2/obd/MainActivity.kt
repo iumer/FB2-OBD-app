@@ -251,6 +251,7 @@ class MainActivity : ComponentActivity() {
                         state = state,
                         modifier = Modifier.fillMaxSize(),
                         showEstimatedGear = settings.showEstimatedGear,
+                        dashTheme = settings.dashTheme,
                         loggingActive = settings.valueLogging,
                         pageTitles = viewModel.dashPageTitles,
                         profileBadge = settings.vehicleProfile.badge,
@@ -341,6 +342,7 @@ class MainActivity : ComponentActivity() {
                         SettingsScreen(
                             settings = settings,
                             onVehicleProfileChange = viewModel::setVehicleProfile,
+                            onDashThemeChange = viewModel::setDashTheme,
                             onToggleEstimatedGear = viewModel::setShowEstimatedGear,
                             onToggleVoiceAlerts = viewModel::setVoiceAlerts,
                             onToggleDuckMedia = viewModel::setDuckMediaDuringAlerts,
