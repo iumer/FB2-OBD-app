@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -162,7 +163,7 @@ fun StatTile(
     Column(
         modifier = modifier
             .clip(RoundedCornerShape(14.dp))
-            .background(Surface)
+            .background(MaterialTheme.colorScheme.surface)
             .padding(horizontal = 14.dp, vertical = 10.dp),
         verticalArrangement = Arrangement.Center,
     ) {
@@ -213,7 +214,7 @@ fun GearIndicator(
     Column(
         modifier = modifier
             .clip(RoundedCornerShape(16.dp))
-            .background(Surface)
+            .background(MaterialTheme.colorScheme.surface)
             .padding(horizontal = 22.dp, vertical = 12.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
@@ -221,7 +222,7 @@ fun GearIndicator(
         Text(
             // Null means "unknown / below the speed floor", NOT Neutral.
             text = gear?.toString() ?: "\u2013",
-            color = Accent,
+            color = MaterialTheme.colorScheme.primary,
             fontSize = 44.sp,
             fontWeight = FontWeight.Bold,
         )

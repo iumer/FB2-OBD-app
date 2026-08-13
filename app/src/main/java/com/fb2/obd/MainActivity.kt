@@ -29,6 +29,7 @@ import androidx.activity.viewModels
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -75,6 +76,7 @@ import com.fb2.obd.ui.SettingsScreen
 import com.fb2.obd.ui.ValueLogScreen
 import com.fb2.obd.ui.VehicleInfoScreen
 import com.fb2.obd.ui.theme.FB2Theme
+import com.fb2.obd.ui.theme.ThemePalette
 import java.io.File
 import kotlinx.coroutines.delay
 
@@ -92,9 +94,9 @@ class MainActivity : ComponentActivity() {
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
 
         setContent {
-            FB2Theme {
+            val settings by viewModel.settings.collectAsState()
+            FB2Theme(palette = ThemePalette.of(settings.dashTheme)) {
                 val state by viewModel.uiState.collectAsState()
-                val settings by viewModel.settings.collectAsState()
                 val faults by viewModel.faults.collectAsState()
                 val performance by viewModel.performance.collectAsState()
                 val trip by viewModel.trip.collectAsState()
@@ -537,7 +539,7 @@ class MainActivity : ComponentActivity() {
                                     finishAndRemoveTask()
                                 },
                             ) {
-                                Text("Exit & disconnect", color = Accent, fontWeight = FontWeight.Bold)
+                                Text("Exit & disconnect", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
                             }
                         },
                         dismissButton = {
@@ -545,7 +547,7 @@ class MainActivity : ComponentActivity() {
                                 Text("Stay", color = TextPrimary)
                             }
                         },
-                        containerColor = Background,
+                        containerColor = MaterialTheme.colorScheme.background,
                     )
                 }
 

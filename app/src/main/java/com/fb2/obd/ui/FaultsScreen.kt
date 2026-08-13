@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -41,12 +42,12 @@ fun FaultsScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(Background)
+            .background(MaterialTheme.colorScheme.background)
             .padding(16.dp),
     ) {
         ScreenHeader(title = "Fault codes", onBack = onBack) {
             Row {
-                ActionButton(if (state.loading) "Reading\u2026" else "Read", Accent, onRead)
+                ActionButton(if (state.loading) "Reading\u2026" else "Read", MaterialTheme.colorScheme.primary, onRead)
                 ActionButton("Clear", CritRed, onClear)
             }
         }
@@ -105,7 +106,7 @@ private fun DtcRow(dtc: Dtc, color: androidx.compose.ui.graphics.Color) {
             .fillMaxWidth()
             .padding(bottom = 8.dp)
             .clip(RoundedCornerShape(12.dp))
-            .background(Surface)
+            .background(MaterialTheme.colorScheme.surface)
             .padding(14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -130,7 +131,7 @@ private fun ActionButton(text: String, color: androidx.compose.ui.graphics.Color
             .padding(start = 8.dp)
             .clip(RoundedCornerShape(8.dp))
             .clickable { onClick() }
-            .background(Surface)
+            .background(MaterialTheme.colorScheme.surface)
             .padding(horizontal = 14.dp, vertical = 8.dp),
     )
 }

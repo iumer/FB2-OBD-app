@@ -71,7 +71,9 @@ non-obvious cloud specifics.
     OBD-II car (Mira / Corolla / Civic X / etc.).
 - **Dash Theme** (Settings → Theme dropdown): Classic / OptA / OptB / OptC.
   Classic keeps Idle/Perf swipe tabs. Opt themes are immersive clusters (themed
-  chrome + colours; ☰ menu for Settings/DIAG/MIN/LOG). Same readings/alerts/AI.
+  chrome + colours; ☰ menu for Settings/DIAG/MIN/LOG). Selecting a theme
+  recolours the **entire app** (Faults / AI / DIAG / Settings) via
+  `ThemePalette` → `FB2Theme` / Material3 colour scheme.
 - Honda enhanced packs in `HondaPidCatalog` use Mode 22 placeholders
   (`2211xx`…`2219xx`). Real FB2 / market-specific ECUs often need different IDs
   **and** CAN headers (`ATSH`). Until recently the app never sent headers — that

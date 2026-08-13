@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Text
@@ -61,11 +62,11 @@ fun DeepSearchDialogs(
                             fontSize = 13.sp,
                             modifier = Modifier.padding(bottom = 12.dp),
                         )
-                        LinearProgressIndicator(modifier = Modifier.fillMaxWidth(), color = Accent)
+                        LinearProgressIndicator(modifier = Modifier.fillMaxWidth(), color = MaterialTheme.colorScheme.primary)
                     }
                 },
                 confirmButton = {},
-                containerColor = Background,
+                containerColor = MaterialTheme.colorScheme.background,
             )
         }
 
@@ -92,7 +93,7 @@ fun DeepSearchDialogs(
                             val hit = report.hit!!
                             Text(
                                 text = "%.2f %s".format(hit.value, hit.strategy.unit).trim(),
-                                color = Accent,
+                                color = MaterialTheme.colorScheme.primary,
                                 fontSize = 22.sp,
                                 fontWeight = FontWeight.Bold,
                             )
@@ -120,9 +121,9 @@ fun DeepSearchDialogs(
                     }
                 },
                 confirmButton = {
-                    TextButton(onClick = onDismiss) { Text("OK", color = Accent) }
+                    TextButton(onClick = onDismiss) { Text("OK", color = MaterialTheme.colorScheme.primary) }
                 },
-                containerColor = Background,
+                containerColor = MaterialTheme.colorScheme.background,
             )
         }
 
@@ -154,7 +155,7 @@ fun DeepSearchDialogs(
                         )
                         Text(
                             text = "Scroll for full text. Demo: try Coolant 2, Ambient, or LTFT.",
-                            color = Accent,
+                            color = MaterialTheme.colorScheme.primary,
                             fontSize = 11.sp,
                             modifier = Modifier.padding(top = 8.dp),
                         )
@@ -162,13 +163,13 @@ fun DeepSearchDialogs(
                 },
                 confirmButton = {
                     TextButton(onClick = onConfirm) {
-                        Text("Yes — deep research", color = Accent, fontWeight = FontWeight.Bold)
+                        Text("Yes — deep research", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
                     }
                 },
                 dismissButton = {
                     TextButton(onClick = onDismiss) { Text("No", color = TextPrimary) }
                 },
-                containerColor = Background,
+                containerColor = MaterialTheme.colorScheme.background,
             )
         }
     }
