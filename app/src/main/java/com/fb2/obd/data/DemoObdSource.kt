@@ -104,7 +104,8 @@ class DemoObdSource(
             }
             emit(snapshot)
             t += 1.0
-            delay(250L)
+            // ~1.25 Hz UI feed — 250 ms was thrashing low-RAM HU scroll/swipe.
+            delay(800L)
         }
     }
 

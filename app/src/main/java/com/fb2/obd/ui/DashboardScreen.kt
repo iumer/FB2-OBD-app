@@ -89,15 +89,13 @@ import kotlin.math.roundToInt
 
 /** Column count — prefer wider tiles on car HUs (readable while driving). */
 private fun dashColumnsForWidth(maxWidth: Dp): Int = when {
-    maxWidth >= 1700.dp -> 5
-    maxWidth >= 1200.dp -> 4
-    maxWidth >= 800.dp -> 3
+    maxWidth >= 1700.dp -> 4
+    maxWidth >= 1100.dp -> 3
     else -> 2
 }
 
 private fun denseColumnsForWidth(maxWidth: Dp): Int = when {
     maxWidth >= 1400.dp -> 3
-    maxWidth >= 900.dp -> 2
     else -> 2
 }
 
@@ -239,7 +237,7 @@ fun DashboardScreen(
         PageTabs(
             titles = titles,
             current = pagerState.currentPage,
-            onSelect = { page -> scope.launch { pagerState.animateScrollToPage(page) } },
+            onSelect = { page -> scope.launch { pagerState.scrollToPage(page) } },
         )
 
         HorizontalPager(
@@ -248,6 +246,7 @@ fun DashboardScreen(
                 .fillMaxWidth()
                 .weight(1f),
             userScrollEnabled = true,
+            beyondBoundsPageCount = 0,
         ) { page ->
             // Fixed page slot so swipe does not resize the hero strip above.
             Box(modifier = Modifier.fillMaxSize()) {
@@ -288,7 +287,7 @@ fun DashboardScreen(
                         tip = idleTips.firstOrNull(),
                         rows = idleValues.entries
                             .filter { !it.key.matches(Regex("^[0-9A-Fa-f]{4,}$")) }
-                            .take(24)
+                            .take(16)
                             .map { it.key to it.value }
                             .ifEmpty { listOf("Status" to "Probing…") },
                         action = "Probe" to onRefreshIdle,
@@ -686,7 +685,8 @@ private fun MetricsPage(
     )
 
     val extras = extraPidIds.mapNotNull { id -> catalog.find { it.id.equals(id, true) } }
-    val emptySlots = (0 until 6).toList()
+    // Cap empty "+" slots — 6 blank tiles hurt scroll on weak HUs.
+    val emptySlots = (0 until 3).toList()
 
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val columns = dashColumnsForWidth(maxWidth)
@@ -697,7 +697,7 @@ private fun MetricsPage(
             verticalArrangement = Arrangement.spacedBy(DashType.tileGap),
             contentPadding = PaddingValues(bottom = 4.dp),
         ) {
-        items(baseTiles) { t ->
+        items(baseTiles, key = { it.label }) { t ->
             val overrideId = tileOverrides[t.label]
             val overridePid = overrideId?.let { id -> catalog.find { it.id.equals(id, true) } }
             if (overridePid != null) {
@@ -880,7 +880,7 @@ private fun DenseSensorGridPage(
                 verticalArrangement = Arrangement.spacedBy(DashType.tileGap),
                 contentPadding = PaddingValues(bottom = 4.dp),
             ) {
-            items(rows) { (label, value) ->
+            items(rows, key = { it.first }) { (label, value) ->
                 val recovered = deepFoundValues[label]
                 val effective = recovered ?: value
                 val unsupported = recovered == null &&
