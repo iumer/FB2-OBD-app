@@ -64,6 +64,7 @@ Universal APK (only URL):
 35. **Classic deepFound froze stale recovered values** — live wins; overlay only when blank; cleared when live returns.
 36. **Classic could not deep-search Coolant when `--`** — deep search enabled whenever value is blank (not only n/s).
 37. **Intake/Throttle sticky forever** — secondary TTL clear in `SnapshotFreshness` (2026-08-14 flat 60°C / 13.7% drive log).
+38. **OptB/OptC km/h + EST clipped** — dial digits under gauges; height-scaled gear stacks; `includeFontPadding=false` tight labels.
 
 ### Must stay covered in code (additions)
 | Coolant/MAF always-poll + TTL | `SpeedFreshnessAndPollPlannerTest` |
