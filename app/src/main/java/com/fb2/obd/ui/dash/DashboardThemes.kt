@@ -394,30 +394,46 @@ fun OptBThemeDash(
             )
             Column(
                 modifier = Modifier
-                    .width(92.dp)
-                    .fillMaxHeight(0.74f)
+                    .width(86.dp)
+                    .fillMaxHeight(0.82f)
                     .clip(RoundedCornerShape(20.dp))
                     .background(
                         Brush.verticalGradient(listOf(Color(0xFF152030), palette.surface)),
                     )
                     .border(1.5.dp, palette.accent.copy(alpha = 0.65f), RoundedCornerShape(20.dp))
-                    .padding(vertical = 10.dp)
+                    .padding(horizontal = 6.dp, vertical = 12.dp)
                     .themeMetricGestures(
                         onRemap = { onRemapBase("Gear") },
                         onDeepSearch = { onDeepSearch("Gear", null) },
                     ),
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.SpaceEvenly,
+                verticalArrangement = Arrangement.Center,
             ) {
-                Text("GEAR", color = palette.textMuted, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp)
-                Box(modifier = Modifier.width(32.dp).height(2.dp).background(palette.accent))
+                Text(
+                    "GEAR",
+                    color = palette.textMuted,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 1.5.sp,
+                    maxLines = 1,
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+                Box(
+                    modifier = Modifier
+                        .width(28.dp)
+                        .height(2.dp)
+                        .background(palette.accent),
+                )
+                Spacer(modifier = Modifier.height(4.dp))
                 Text(
                     text = if (gearSource == GearSource.NONE) "–" else (snapshot.gear?.toString() ?: "–"),
                     color = palette.textPrimary,
-                    fontSize = 56.sp,
+                    fontSize = 48.sp,
                     fontWeight = FontWeight.Black,
                     fontFamily = DigitFace,
+                    maxLines = 1,
                 )
+                Spacer(modifier = Modifier.height(8.dp))
                 Text(
                     text = when (gearSource) {
                         GearSource.ECU -> "ECU"
@@ -425,11 +441,12 @@ fun OptBThemeDash(
                         GearSource.NONE -> "—"
                     },
                     color = palette.accent,
-                    fontSize = 11.sp,
+                    fontSize = 10.sp,
                     fontWeight = FontWeight.Bold,
+                    maxLines = 1,
                     modifier = Modifier
                         .border(1.dp, palette.accent, RoundedCornerShape(6.dp))
-                        .padding(horizontal = 8.dp, vertical = 2.dp),
+                        .padding(horizontal = 8.dp, vertical = 3.dp),
                 )
             }
             RealisticNeedleGauge(
@@ -533,7 +550,7 @@ fun OptCThemeDash(
                     ),
                 )
                 .border(1.dp, palette.accent.copy(alpha = 0.28f), RoundedCornerShape(26.dp))
-                .padding(8.dp),
+                .padding(horizontal = 10.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             BoxWithConstraints(
@@ -606,10 +623,10 @@ fun OptCThemeDash(
                     ),
                 contentAlignment = Alignment.Center,
             ) {
-                Canvas(modifier = Modifier.fillMaxSize(0.85f)) {
+                Canvas(modifier = Modifier.fillMaxSize(0.78f)) {
                     val cx = size.width / 2f
                     val cy = size.height / 2f
-                    val r = size.minDimension * 0.42f
+                    val r = size.minDimension * 0.40f
                     drawArc(
                         color = palette.accent.copy(alpha = 0.95f),
                         startAngle = 100f,
@@ -644,15 +661,28 @@ fun OptCThemeDash(
                         )
                     }
                 }
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("GEAR", color = palette.accent, fontSize = 12.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center,
+                    modifier = Modifier.padding(vertical = 4.dp),
+                ) {
+                    Text(
+                        "GEAR",
+                        color = palette.accent,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 2.sp,
+                        maxLines = 1,
+                    )
                     Text(
                         text = if (gearSource == GearSource.NONE) "–" else (snapshot.gear?.toString() ?: "–"),
                         color = palette.textPrimary,
-                        fontSize = 56.sp,
+                        fontSize = 44.sp,
                         fontWeight = FontWeight.Black,
                         fontFamily = DigitFace,
+                        maxLines = 1,
                     )
+                    Spacer(modifier = Modifier.height(6.dp))
                     Text(
                         text = when (gearSource) {
                             GearSource.ECU -> "ECU"
@@ -660,11 +690,12 @@ fun OptCThemeDash(
                             GearSource.NONE -> "—"
                         },
                         color = palette.accent,
-                        fontSize = 11.sp,
+                        fontSize = 10.sp,
                         fontWeight = FontWeight.Bold,
+                        maxLines = 1,
                         modifier = Modifier
                             .border(1.dp, palette.accent, RoundedCornerShape(6.dp))
-                            .padding(horizontal = 8.dp, vertical = 2.dp),
+                            .padding(horizontal = 8.dp, vertical = 3.dp),
                     )
                 }
             }
@@ -673,6 +704,7 @@ fun OptCThemeDash(
                 modifier = Modifier
                     .weight(0.34f)
                     .fillMaxHeight()
+                    .padding(vertical = 2.dp)
                     .themeMetricGestures(
                         onRemap = { onRemapBase("Speed") },
                         onDeepSearch = { onDeepSearch("Speed", "010D") },
@@ -687,9 +719,13 @@ fun OptCThemeDash(
                     )
                     Text(" SPEED", color = palette.textMuted, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                 }
+                Spacer(modifier = Modifier.height(2.dp))
                 Box(
                     contentAlignment = Alignment.Center,
-                    modifier = Modifier.height(72.dp).fillMaxWidth(),
+                    modifier = Modifier
+                        .heightIn(max = 64.dp)
+                        .height(56.dp)
+                        .fillMaxWidth(),
                 ) {
                     Canvas(modifier = Modifier.matchParentSize()) {
                         for (i in 0..6) {
@@ -704,13 +740,20 @@ fun OptCThemeDash(
                     Text(
                         text = snapshot.speedKmh?.roundToInt()?.toString() ?: "--",
                         color = palette.textPrimary,
-                        fontSize = 52.sp,
+                        fontSize = 44.sp,
                         fontWeight = FontWeight.Black,
                         fontFamily = DigitFace,
                         maxLines = 1,
                     )
                 }
-                Text("km/h", color = palette.accentSoft, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    "km/h",
+                    color = palette.accentSoft,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                )
             }
         }
 
@@ -1045,8 +1088,16 @@ private fun RealisticNeedleGauge(
     palette: ThemePalette,
     modifier: Modifier = Modifier,
 ) {
-    Box(modifier = modifier.fillMaxHeight(), contentAlignment = Alignment.Center) {
-        Canvas(modifier = Modifier.size(210.dp)) {
+    BoxWithConstraints(
+        modifier = modifier.fillMaxHeight(),
+        contentAlignment = Alignment.Center,
+    ) {
+        // Fit dial + center readout inside available bounds (fixed 210.dp was clipping km/h).
+        val side = minOf(maxWidth, maxHeight)
+        val canvasSize = side * 0.96f
+        val valueSp = (side.value * 0.11f).coerceIn(16f, 26f).sp
+        val unitSp = (side.value * 0.055f).coerceIn(9f, 12f).sp
+        Canvas(modifier = Modifier.size(canvasSize)) {
             val cx = size.width / 2f
             val cy = size.height / 2f
             val r = size.minDimension * 0.40f
@@ -1115,7 +1166,7 @@ private fun RealisticNeedleGauge(
             val labelPaint = Paint().apply {
                 color = palette.textMuted.toArgb()
                 textAlign = Paint.Align.CENTER
-                textSize = 18f
+                textSize = (size.minDimension * 0.065f).coerceIn(14f, 20f)
                 isAntiAlias = true
                 typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
             }
@@ -1173,22 +1224,33 @@ private fun RealisticNeedleGauge(
             drawCircle(color = arcColor, radius = 9f, center = Offset(cx, cy))
             drawCircle(color = Color.White.copy(alpha = 0.95f), radius = 3.2f, center = Offset(cx, cy))
         }
+        // Readout sits in the lower dial opening — keep fully inside canvasSize.
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
-            modifier = Modifier.padding(top = 78.dp),
+            modifier = Modifier
+                .align(Alignment.Center)
+                .padding(top = canvasSize * 0.30f)
+                .padding(bottom = canvasSize * 0.06f),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                FreshnessHeartbeat(lastOkMs = freshAtMs, size = 7.dp)
+                FreshnessHeartbeat(lastOkMs = freshAtMs, size = 6.dp)
                 Spacer(modifier = Modifier.width(4.dp))
                 Text(
                     text = valueText,
                     color = arcColor,
-                    fontSize = 24.sp,
+                    fontSize = valueSp,
                     fontWeight = FontWeight.Black,
                     fontFamily = DigitFace,
+                    maxLines = 1,
                 )
             }
-            Text(unit, color = palette.textMuted, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+            Text(
+                unit,
+                color = palette.textMuted,
+                fontSize = unitSp,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+            )
         }
     }
 }
