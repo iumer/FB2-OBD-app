@@ -72,6 +72,8 @@ class ThemeDashboardSnapshotTest(private val theme: DashTheme) {
                     state = state,
                     dashTheme = theme,
                     showEstimatedGear = true,
+                    loggingActive = true,
+                    networkOnline = true,
                     dtcCount = 0,
                     health = HealthScore(
                         enginePct = 94,
