@@ -289,6 +289,8 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
     /** Values recovered by deep search, keyed by tile label / pid id. */
     private val _deepFoundValues = MutableStateFlow<Map<String, String>>(emptyMap())
     val deepFoundValues: StateFlow<Map<String, String>> = _deepFoundValues.asStateFlow()
+    /** Wall-clock ms when each deepFound entry was first recovered (honest LEDs). */
+    private val _deepFoundAtMs = MutableStateFlow<Map<String, Long>>(emptyMap())
 
     val pidCatalog: List<PidDefinition>
         get() = VehicleProfileConfig.pidCatalog(vehicleProfile)
@@ -340,19 +342,22 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
             if (report.success) {
                 val hit = report.hit!!
                 val text = "%.2f %s".format(hit.value, hit.strategy.unit).trim()
+                val hitAt = System.currentTimeMillis()
                 _deepFoundValues.update {
                     it + (label to text) + (report.targetId to text)
                 }
+                _deepFoundAtMs.update {
+                    it + (label to hitAt) + (report.targetId to hitAt)
+                }
                 // Feed recovered sensors into the live snapshot so Opt themes,
                 // health, voice, and CSV see them — not just Classic overlays.
-                val now = System.currentTimeMillis()
                 _uiState.update { st ->
                     val applied = applyDeepSearchHit(
                         snapshot = st.snapshot,
                         label = label,
                         targetId = report.targetId,
                         value = hit.value,
-                        nowMs = now,
+                        nowMs = hitAt,
                     )
                     st.copy(snapshot = applied)
                 }
@@ -523,6 +528,9 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
             _hondaScan.value = emptyList()
             _deepFoundValues.value = _deepFoundValues.value.filterKeys { key ->
                 pidCatalog.any { it.label.equals(key, true) || it.id.equals(key, true) }
+            }
+            _deepFoundAtMs.value = _deepFoundAtMs.value.filterKeys { key ->
+                _deepFoundValues.value.containsKey(key)
             }
         }
         if (!thresholdStore.hasUserEdits()) {
@@ -1096,12 +1104,13 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
                     incoming
                 }
                 // Keep deep-search recoveries until a live poll fills that field again.
-                val snapshot = overlayDeepFoundOntoSnapshot(base, System.currentTimeMillis())
+                val snapshot = overlayDeepFoundOntoSnapshot(base)
                 clearDeepFoundWhenLive(incoming)
                 val now = System.currentTimeMillis()
                 if (ObdLogger.valueLoggingEnabled && now - lastSnapshotLogMs >= 1_000L) {
                     lastSnapshotLogMs = now
-                    ObdLogger.logSnapshot(snapshot, now)
+                    // Log raw ELM frame — not deepFound overlay — so CSV stays honest.
+                    ObdLogger.logSnapshot(incoming, now)
                 }
                 // Smooth noisy sensors for health/voice; UI still shows raw [snapshot].
                 val decision = diagnosticBrain.decisionSnapshot(snapshot)
@@ -1649,18 +1658,21 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
         if (incoming.timingAdvance != null) dropLabel("Timing", "010E")
         if (drop.isEmpty()) return
         _deepFoundValues.update { cur -> cur.filterKeys { it !in drop } }
+        _deepFoundAtMs.update { cur -> cur.filterKeys { it !in drop } }
     }
 
     /** Re-apply deep-search hits into null snapshot fields until live poll returns. */
-    private fun overlayDeepFoundOntoSnapshot(snap: VehicleSnapshot, nowMs: Long): VehicleSnapshot {
+    private fun overlayDeepFoundOntoSnapshot(snap: VehicleSnapshot): VehicleSnapshot {
         val deep = _deepFoundValues.value
         if (deep.isEmpty()) return snap
+        val hitTimes = _deepFoundAtMs.value
         var out = snap
         fun tryApply(label: String, id: String, missing: Boolean) {
             if (!missing) return
             val text = deep[label] ?: deep[id] ?: return
             val raw = text.substringBefore(" ").toDoubleOrNull() ?: return
-            out = applyDeepSearchHit(out, label, id, raw, nowMs)
+            val hitAt = hitTimes[label] ?: hitTimes[id] ?: return
+            out = applyDeepSearchHit(out, label, id, raw, hitAt)
         }
         tryApply("Coolant 1", "0105", out.coolantC == null)
         tryApply("Coolant 2", "0167", out.coolant2C == null)
@@ -1694,7 +1706,13 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
             val tid = targetId.lowercase()
             fun withFresh(key: String, block: VehicleSnapshot.() -> VehicleSnapshot): VehicleSnapshot {
                 val next = snapshot.block()
-                return next.copy(freshAtMs = next.freshAtMs + (key to nowMs))
+                // Preserve original hit time if already stamped (no forever-green on re-apply).
+                val fresh = if (next.freshAtMs.containsKey(key)) {
+                    next.freshAtMs
+                } else {
+                    next.freshAtMs + (key to nowMs)
+                }
+                return next.copy(freshAtMs = fresh)
             }
             return when {
                 lab.contains("battery") || lab.contains("ecu v") || tid.contains("0142") ->

@@ -163,7 +163,11 @@ class Elm327BluetoothSource(
                         softRecover(conn)
                         failStreak.clear()
                         deadCycles = 0
-                        logger.logDebug(ObdLogger.Dir.INFO, "post-deep-search soft recover + streaks cleared")
+                        // Deep search paused polling — prior lastOk clocks aged out.
+                        // Remake marks for fields we still hold so sanitize does not
+                        // blank the Dash before the first post-resume poll lands.
+                        freshness.remakePresent(snapshot, System.currentTimeMillis())
+                        logger.logDebug(ObdLogger.Dir.INFO, "post-deep-search soft recover + streaks cleared + freshness remade")
                     }
 
                     cycles++
@@ -173,19 +177,17 @@ class Elm327BluetoothSource(
                     var busLost = false
                     var rpmUpdated = false
                     var mode01Ok = false
+                    val markedThisCycle = mutableSetOf<String>()
 
-                    // ATRV first every cycle — adapter rail voltage does NOT need the ECU.
-                    // Prefer ATRV over Mode 01 0142 (ECU module V can differ / lag; Torque uses ATRV).
+                    // ATRV every cycle — adapter-local, cheap, Torque-style battery source.
                     var atrvThisCycle: Double? = null
-                    if (cycles == 1 || snapshot.batteryVolts == null || cycles % 2 == 0) {
-                        readAtrv(conn)?.let { v ->
-                            responded++
-                            atrvThisCycle = v
-                            snapshot = snapshot.copy(batteryVolts = v)
-                            // Stamp success time — not cycleStart — so a long cycle cannot
-                            // TTL-wipe a value that was just decoded this same cycle.
-                            freshness.markOk(SnapshotFreshness.KEY_BATTERY, System.currentTimeMillis())
-                        }
+                    readAtrv(conn)?.let { v ->
+                        responded++
+                        atrvThisCycle = v
+                        snapshot = snapshot.copy(batteryVolts = v)
+                        val okAt = System.currentTimeMillis()
+                        freshness.markOk(SnapshotFreshness.KEY_BATTERY, okAt)
+                        markedThisCycle += SnapshotFreshness.KEY_BATTERY
                     }
 
                     val recovering = deadCycles > 0
@@ -232,12 +234,15 @@ class Elm327BluetoothSource(
                             mode01Ok = true
                             failStreak[pid] = 0
                             val okAt = System.currentTimeMillis()
+                            val key = SnapshotFreshness.keyFor(pid)
                             // Do not let 0142 overwrite a fresh ATRV reading this cycle.
                             if (pid == ObdPid.CONTROL_MODULE_VOLTAGE && atrvThisCycle != null) {
                                 freshness.markPid(pid, okAt)
+                                markedThisCycle += key
                             } else {
                                 snapshot = snapshot.merge(pid, value)
                                 freshness.markPid(pid, okAt)
+                                markedThisCycle += key
                             }
                             if (pid == ObdPid.ENGINE_RPM) rpmUpdated = true
                         } else {
@@ -253,14 +258,16 @@ class Elm327BluetoothSource(
                         }
                     }
 
-                    // Extra ATRV refresh if 0142 never answered this cycle.
+                    // Extra ATRV refresh if volts still missing after Mode 01.
                     val voltFail = failStreak[ObdPid.CONTROL_MODULE_VOLTAGE] ?: 0
                     if (atrvThisCycle == null && (snapshot.batteryVolts == null || voltFail >= 2)) {
                         readAtrv(conn)?.let { v ->
                             responded++
                             atrvThisCycle = v
                             snapshot = snapshot.copy(batteryVolts = v)
-                            freshness.markOk(SnapshotFreshness.KEY_BATTERY, System.currentTimeMillis())
+                            val okAt = System.currentTimeMillis()
+                            freshness.markOk(SnapshotFreshness.KEY_BATTERY, okAt)
+                            markedThisCycle += SnapshotFreshness.KEY_BATTERY
                         }
                     }
 
@@ -291,9 +298,13 @@ class Elm327BluetoothSource(
                         deadCycles = 0
                     }
 
+                    // Anything decoded this cycle must survive sanitize even if the
+                    // cycle itself ran longer than that field's TTL.
+                    val sanitizeAt = System.currentTimeMillis()
+                    freshness.restamp(markedThisCycle, sanitizeAt)
                     snapshot = freshness.sanitize(
                         snapshot.withGear(hasEcuGear),
-                        System.currentTimeMillis(),
+                        sanitizeAt,
                         rpmUpdatedThisCycle = rpmUpdated,
                     )
                     val hasAny = snapshot.rpm != null || snapshot.coolantC != null ||

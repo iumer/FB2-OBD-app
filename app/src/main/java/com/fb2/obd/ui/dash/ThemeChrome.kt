@@ -80,7 +80,7 @@ private fun StatusPills(link: DashLinkStatus, accent: Color) {
     }
     val logLabel = if (link.logging) "LOGGING" else "NOT LOGGING"
     val logColor = if (link.logging) Color(0xFF5EEBA0) else Color(0xFF888888)
-    val netLabel = if (link.online) "NET" else "OFFLINE"
+    val netLabel = if (link.online) "INET" else "NO NET"
     val netColor = if (link.online) Color(0xFF5EEBA0) else Color(0xFF888888)
 
     Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {

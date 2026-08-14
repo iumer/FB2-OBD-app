@@ -1600,7 +1600,7 @@ private fun TopBar(
                 fontWeight = FontWeight.Bold,
             )
             Text(
-                text = if (networkOnline) " · NET" else " · OFFLINE",
+                text = if (networkOnline) " · INET" else " · NO NET",
                 color = if (networkOnline) GoodGreen else TextMuted,
                 fontSize = DashType.topChip,
                 fontWeight = FontWeight.Bold,
