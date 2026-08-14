@@ -55,11 +55,18 @@ Universal APK (only URL):
 26. **OptB needles laggy** — `animateFloatAsState` on needle fraction.
 27. **OptC digital RPM overlaps gauge** — digits sit beside the dial, not on top of the arc.
 28. **Fuel loop truncated `CLOSED LOO`** — abbreviate to CLOSED/OPEN + ellipsis in wheels.
+29. **Opt remaps ignored** — OptA/B/C now apply `tileOverrides` like Classic.
+30. **Hold never opened thresholds on Opt** — hold prefers threshold editor; triple-tap = deep search (Classic aligned).
+31. **Deep-search hit only Battery/Coolant1 into snapshot** — MAF/Ambient/LTFT/Coolant2/etc. now inject + freshness stamp.
+32. **Estimated gear toggle not persisted** — saved in `DashThemeStore`.
+33. **Opt showed `--` for unsupported ECU PIDs** — now shows `n/s` (honest) when bitmask says unsupported.
 
 ### Must stay covered in code (additions)
 | Coolant/MAF always-poll + TTL | `SpeedFreshnessAndPollPlannerTest` |
 | Deep search Mode 01 before bus skip | `DeepSearchKnowledgeBaseTest` |
 | Theme status chips / Opt layouts | Paparazzi `ThemeDashboardSnapshotTest` |
+| Opt tileOverrides + n/s | `DashThemeTest` |
+| Hold prefers thresholds | `ThemeGestureLogicTest` |
 
 ---
 

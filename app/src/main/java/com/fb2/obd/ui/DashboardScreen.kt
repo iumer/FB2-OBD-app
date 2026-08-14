@@ -78,9 +78,11 @@ import com.fb2.obd.obd.VehicleProfileConfig
 import com.fb2.obd.obd.VehicleSnapshot
 import com.fb2.obd.obd.isEffectivelyBlank
 import com.fb2.obd.ui.dash.DashLinkStatus
+import com.fb2.obd.ui.dash.DashThemeMetrics
 import com.fb2.obd.ui.dash.OptAThemeDash
 import com.fb2.obd.ui.dash.OptBThemeDash
 import com.fb2.obd.ui.dash.OptCThemeDash
+import com.fb2.obd.ui.dash.ThemeGestureLogic
 import com.fb2.obd.ui.dash.ThemedTopBar
 import com.fb2.obd.ui.theme.Accent
 import com.fb2.obd.ui.theme.LocalThemePalette
@@ -265,6 +267,8 @@ fun DashboardScreen(
                         onDeepSearch = onDeepSearch,
                         onEditThresholds = { editMetric = it },
                         deepFoundValues = deepFoundValues,
+                        tileOverrides = tileOverrides,
+                        catalog = catalog,
                     )
                     DashTheme.OPT_B -> OptBThemeDash(
                         snapshot = s,
@@ -279,6 +283,8 @@ fun DashboardScreen(
                         onDeepSearch = onDeepSearch,
                         onEditThresholds = { editMetric = it },
                         deepFoundValues = deepFoundValues,
+                        tileOverrides = tileOverrides,
+                        catalog = catalog,
                     )
                     DashTheme.OPT_C -> OptCThemeDash(
                         snapshot = s,
@@ -294,6 +300,8 @@ fun DashboardScreen(
                         onDeepSearch = onDeepSearch,
                         onEditThresholds = { editMetric = it },
                         deepFoundValues = deepFoundValues,
+                        tileOverrides = tileOverrides,
+                        catalog = catalog,
                     )
                     DashTheme.CLASSIC -> Unit
                 }
@@ -762,7 +770,7 @@ private fun MetricsPage(
         ),
         TileData(
             "Fuel loop",
-            snapshot.fuelSystemStatus?.take(12) ?: "--",
+            DashThemeMetrics.abbreviateFuelLoop(snapshot.fuelSystemStatus),
             "",
             HealthEvaluator.fuelSystem(snapshot.fuelSystemStatus, snapshot.coolantC),
             ObdPid.FUEL_SYSTEM_STATUS,
@@ -1138,7 +1146,11 @@ private fun DenseTile(
                     }
                 },
                 onLongClick = {
-                    onEditThresholds?.invoke()
+                    when (ThemeGestureLogic.onHold(onDeepSearch != null, onEditThresholds != null)) {
+                        ThemeGestureLogic.HoldAction.EDIT_THRESHOLDS -> onEditThresholds?.invoke()
+                        ThemeGestureLogic.HoldAction.DEEP_SEARCH -> onDeepSearch?.invoke()
+                        ThemeGestureLogic.HoldAction.NONE -> Unit
+                    }
                 },
             )
             .padding(horizontal = 10.dp, vertical = 8.dp),

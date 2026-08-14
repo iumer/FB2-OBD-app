@@ -5,8 +5,10 @@ import com.fb2.obd.obd.Health
 import com.fb2.obd.obd.HealthEvaluator
 import com.fb2.obd.obd.HealthScore
 import com.fb2.obd.obd.HealthThresholds
+import com.fb2.obd.obd.LiveSnapshotOverlay
 import com.fb2.obd.obd.MetricStatus
 import com.fb2.obd.obd.ObdPid
+import com.fb2.obd.obd.PidDefinition
 import com.fb2.obd.obd.SnapshotFreshness
 import com.fb2.obd.obd.VehicleSnapshot
 import kotlin.math.roundToInt
@@ -20,6 +22,10 @@ data class DashThemeMetric(
     val freshAtMs: Long? = null,
     val pidRequest: String? = null,
     val editMetric: EditableMetric? = null,
+    /** True when ECU support bitmask says n/s and no live/recovered value. */
+    val unsupported: Boolean = false,
+    /** Base Dash slot this row remaps (null when not remapped). */
+    val remapBaseLabel: String? = null,
 )
 
 object DashThemeMetrics {
@@ -40,6 +46,8 @@ object DashThemeMetrics {
         healthScore: HealthScore? = null,
         latchHealth: (String, MetricStatus) -> MetricStatus = { _, s -> s },
         deepFoundValues: Map<String, String> = emptyMap(),
+        tileOverrides: Map<String, String> = emptyMap(),
+        catalog: List<PidDefinition> = emptyList(),
     ): List<DashThemeMetric> {
         val hs = healthSnapshot
         val engineRunning = (hs.rpm ?: snapshot.rpm ?: 0.0) > 0.0
@@ -55,15 +63,21 @@ object DashThemeMetrics {
             freshKey: String?,
             pid: ObdPid?,
             edit: EditableMetric? = null,
-        ) = DashThemeMetric(
-            label = label,
-            value = value,
-            unit = unit,
-            health = status.health,
-            freshAtMs = freshKey?.let { fresh[it] },
-            pidRequest = pid?.request,
-            editMetric = edit,
-        )
+        ): DashThemeMetric {
+            val unsupported = pid != null && pid.number in snapshot.unsupportedPids
+            val hasLive = value != "--" && value.isNotBlank()
+            val showNs = unsupported && !hasLive
+            return DashThemeMetric(
+                label = label,
+                value = if (showNs) "n/s" else value,
+                unit = if (showNs) "" else unit,
+                health = if (showNs) Health.UNKNOWN else status.health,
+                freshAtMs = if (showNs) null else freshKey?.let { fresh[it] },
+                pidRequest = pid?.request,
+                editMetric = edit,
+                unsupported = showNs,
+            )
+        }
 
         return listOf(
             row(
@@ -156,7 +170,9 @@ object DashThemeMetrics {
                 HealthEvaluator.vehicleHealth(healthScore?.vehiclePct),
                 null, null,
             ),
-        ).map { applyDeepFound(it, deepFoundValues) }
+        )
+            .map { applyDeepFound(it, deepFoundValues) }
+            .map { applyTileOverride(it, tileOverrides, catalog, snapshot, deepFoundValues) }
     }
 
     /** Keep Fuel loop readable in narrow OptA wheel slots (avoid "CLOSED LOO"). */
@@ -175,13 +191,60 @@ object DashThemeMetrics {
         deepFound: Map<String, String>,
     ): DashThemeMetric {
         if (deepFound.isEmpty()) return metric
-        if (metric.value != "--" && metric.value.isNotBlank()) return metric
+        if (metric.value != "--" && metric.value != "n/s" && metric.value.isNotBlank()) return metric
         val recovered = deepFound[metric.label]
             ?: metric.pidRequest?.let { deepFound[it] }
             ?: return metric
         val valuePart = recovered.substringBefore(" ").ifBlank { recovered }
         val unitPart = recovered.substringAfter(" ", "").ifBlank { metric.unit }
-        return metric.copy(value = valuePart, unit = unitPart)
+        return metric.copy(
+            value = valuePart,
+            unit = unitPart,
+            unsupported = false,
+            freshAtMs = metric.freshAtMs ?: System.currentTimeMillis(),
+        )
+    }
+
+    /**
+     * Apply Classic-style tile remaps so Opt themes honour [tileOverrides].
+     * Remapped slot keeps the base gesture key for further remaps, but displays
+     * the override PID label/value.
+     */
+    private fun applyTileOverride(
+        metric: DashThemeMetric,
+        tileOverrides: Map<String, String>,
+        catalog: List<PidDefinition>,
+        snapshot: VehicleSnapshot,
+        deepFound: Map<String, String>,
+    ): DashThemeMetric {
+        if (tileOverrides.isEmpty() || catalog.isEmpty()) return metric
+        val overrideId = tileOverrides[metric.label] ?: return metric
+        val overridePid = catalog.find { it.id.equals(overrideId, true) } ?: return metric
+        val recovered = deepFound[overridePid.label] ?: deepFound[overridePid.id]
+        val text = recovered ?: LiveSnapshotOverlay.formatLiveOrNs(overridePid, snapshot)
+        val unsupported = recovered == null && (text.startsWith("n/s") || text == "—")
+        val valuePart = when {
+            unsupported -> "n/s"
+            else -> text.substringBefore(" ").ifBlank { text }
+        }
+        val unitPart = when {
+            unsupported -> ""
+            recovered != null -> recovered.substringAfter(" ", "").ifBlank { overridePid.unit }
+            else -> text.substringAfter(" ", overridePid.unit).ifBlank { overridePid.unit }
+        }
+        return metric.copy(
+            label = overridePid.label.take(14),
+            value = valuePart,
+            unit = unitPart,
+            health = Health.UNKNOWN,
+            freshAtMs = SnapshotFreshness.keyForTileLabel(overridePid.label)
+                ?.let { snapshot.freshAtMs[it] }
+                ?.takeUnless { unsupported },
+            pidRequest = overridePid.request,
+            editMetric = EditableMetric.fromTileLabel(overridePid.label),
+            unsupported = unsupported,
+            remapBaseLabel = metric.label,
+        )
     }
 
     fun splitWheels(all: List<DashThemeMetric>): Pair<List<DashThemeMetric>, List<DashThemeMetric>> {

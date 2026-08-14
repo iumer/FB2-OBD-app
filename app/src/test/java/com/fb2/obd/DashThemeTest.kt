@@ -63,4 +63,32 @@ class DashThemeTest {
         assertEquals("91", cool.value)
         assertEquals("°C", cool.unit)
     }
+
+    @Test
+    fun sideMetrics_showsNsForUnsupportedWithoutLive() {
+        val snap = VehicleSnapshot(
+            rpm = 1000.0,
+            unsupportedPids = setOf(com.fb2.obd.obd.ObdPid.AMBIENT_TEMP.number),
+        )
+        val metrics = DashThemeMetrics.sideMetrics(snap)
+        val ambient = metrics.first { it.label == "Ambient" }
+        assertEquals("n/s", ambient.value)
+        assertTrue(ambient.unsupported)
+    }
+
+    @Test
+    fun sideMetrics_appliesTileOverride() {
+        val snap = VehicleSnapshot(rpm = 1000.0, coolantC = 90.0, mafGps = 7.5)
+        val catalog = listOf(
+            com.fb2.obd.obd.StandardPidCatalog.all.first { it.request.equals("0110", true) },
+        )
+        val metrics = DashThemeMetrics.sideMetrics(
+            snap,
+            tileOverrides = mapOf("Coolant 1" to catalog.first().id),
+            catalog = catalog,
+        )
+        val remapped = metrics.first { it.remapBaseLabel == "Coolant 1" }
+        assertTrue(remapped.label.contains("MAF", ignoreCase = true) || remapped.pidRequest == "0110")
+        assertEquals("7.50", remapped.value)
+    }
 }
