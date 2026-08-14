@@ -28,6 +28,36 @@ class SnapshotFreshness(
     fun snapshotMap(): Map<String, Long> = lastOkMs.toMap()
 
     /**
+     * Re-stamp keys that still have non-null values in [snapshot].
+     * Used after deep-search pause so sanitize does not blank retained fields
+     * before the first post-resume poll can refresh them.
+     */
+    fun remakePresent(snapshot: VehicleSnapshot, nowMs: Long) {
+        fun touch(key: String, present: Boolean) {
+            if (present) markOk(key, nowMs)
+        }
+        touch(KEY_RPM, snapshot.rpm != null)
+        touch(KEY_SPEED, snapshot.speedKmh != null)
+        touch(KEY_COOLANT, snapshot.coolantC != null)
+        touch(KEY_COOLANT2, snapshot.coolant2C != null)
+        touch(KEY_INTAKE, snapshot.intakeC != null)
+        touch(KEY_AMBIENT, snapshot.ambientC != null)
+        touch(KEY_LOAD, snapshot.engineLoadPct != null)
+        touch(KEY_THROTTLE, snapshot.throttlePct != null)
+        touch(KEY_TIMING, snapshot.timingAdvance != null)
+        touch(KEY_MAF, snapshot.mafGps != null)
+        touch(KEY_MAP, snapshot.mapKpa != null)
+        touch(KEY_STFT, snapshot.stftPct != null)
+        touch(KEY_LTFT, snapshot.ltftPct != null)
+        touch(KEY_BATTERY, snapshot.batteryVolts != null)
+        touch(KEY_FUEL_LOOP, !snapshot.fuelSystemStatus.isNullOrBlank())
+    }
+
+    /** Re-stamp only keys successfully decoded earlier in this same poll cycle. */
+    fun restamp(keys: Set<String>, nowMs: Long) {
+        keys.forEach { markOk(it, nowMs) }
+    }
+    /**
      * Apply stale rules to [snapshot] before UI/log emit.
      * [rpmUpdatedThisCycle] true when ENGINE_RPM decoded successfully this cycle.
      */

@@ -161,21 +161,25 @@ class SpeedFreshnessAndPollPlannerTest {
     }
 
     @Test
-    fun freshness_successStampSurvivesLongCycle() {
-        // Documents the old bug: mark at cycleStart, sanitize at cycleEnd > TTL → wipe.
+    fun freshness_restampProtectsSameCycleDecodes() {
         val fresh = SnapshotFreshness(staleAfterMs = 2_500L)
-        val markAt = 1_000L
-        fresh.markOk(SnapshotFreshness.KEY_COOLANT, markAt)
-        fresh.markOk(SnapshotFreshness.KEY_MAF, markAt)
-        val snap = VehicleSnapshot(coolantC = 90.0, mafGps = 5.0)
-        // Success-time stamp + 5s Coolant/MAF TTL: still fresh 4s later.
-        val ok = fresh.sanitize(snap, nowMs = markAt + 4_000L, rpmUpdatedThisCycle = false)
-        assertEquals(90.0, ok.coolantC!!, 0.01)
-        assertEquals(5.0, ok.mafGps!!, 0.01)
-        // Past 5s TTL — must blank.
-        val gone = fresh.sanitize(snap, nowMs = markAt + 5_001L, rpmUpdatedThisCycle = false)
-        assertNull(gone.coolantC)
-        assertNull(gone.mafGps)
+        // Speed decoded at T=0; rest of cycle takes 4s of timeouts.
+        fresh.markOk(SnapshotFreshness.KEY_SPEED, 0L)
+        fresh.restamp(setOf(SnapshotFreshness.KEY_SPEED), nowMs = 4_000L)
+        val snap = VehicleSnapshot(speedKmh = 90.0, rpm = 2000.0)
+        val out = fresh.sanitize(snap, nowMs = 4_000L, rpmUpdatedThisCycle = true)
+        assertEquals(90.0, out.speedKmh!!, 0.01)
+    }
+
+    @Test
+    fun freshness_remakePresentAfterPause() {
+        val fresh = SnapshotFreshness(staleAfterMs = 2_500L)
+        fresh.markOk(SnapshotFreshness.KEY_COOLANT, 0L)
+        val snap = VehicleSnapshot(coolantC = 88.0)
+        // Simulate deep-search pause aging the mark past TTL, then remake.
+        fresh.remakePresent(snap, nowMs = 10_000L)
+        val out = fresh.sanitize(snap, nowMs = 10_100L, rpmUpdatedThisCycle = false)
+        assertEquals(88.0, out.coolantC!!, 0.01)
     }
 
     @Test
