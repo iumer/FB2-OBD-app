@@ -60,6 +60,9 @@ Universal APK (only URL):
 31. **Deep-search hit only Battery/Coolant1 into snapshot** — MAF/Ambient/LTFT/Coolant2/etc. now inject + freshness stamp.
 32. **Estimated gear toggle not persisted** — saved in `DashThemeStore`.
 33. **Opt showed `--` for unsupported ECU PIDs** — now shows `n/s` (honest) when bitmask says unsupported.
+34. **Same-cycle Coolant TTL wipe** — freshness stamped at PID success time, not cycle start.
+35. **Classic deepFound froze stale recovered values** — live wins; overlay only when blank; cleared when live returns.
+36. **Classic could not deep-search Coolant when `--`** — deep search enabled whenever value is blank (not only n/s).
 
 ### Must stay covered in code (additions)
 | Coolant/MAF always-poll + TTL | `SpeedFreshnessAndPollPlannerTest` |
