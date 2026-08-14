@@ -11,6 +11,7 @@ import com.fb2.obd.obd.ModuleScanResult
 import com.fb2.obd.obd.PidDefinition
 import com.fb2.obd.obd.PidProbeResult
 import com.fb2.obd.obd.ReadinessStatus
+import com.fb2.obd.obd.SnapshotFreshness
 import com.fb2.obd.obd.VehicleInfo
 import com.fb2.obd.obd.VehicleSnapshot
 import kotlinx.coroutines.flow.Flow
@@ -23,12 +24,21 @@ import kotlin.math.sin
  * Simulated ELM327 feed. Produces a believable driving cycle (accelerate, cruise,
  * decelerate) so the full dashboard can be exercised without a car or adapter —
  * useful for development, demos and UI review in the cloud.
+ *
+ * [flavour] switches FB2-style intentional n/s (Coolant2/Ambient/LTFT) vs a
+ * broader Generic OBD2 support mask for profile QA.
  */
+enum class DemoFlavour { FB2, GENERIC }
+
 class DemoObdSource(
     private val gearEstimator: GearEstimator = GearEstimator(),
+    private val flavour: DemoFlavour = DemoFlavour.FB2,
 ) : ObdSource {
 
-    override val name: String = "Demo (simulated)"
+    override val name: String = when (flavour) {
+        DemoFlavour.FB2 -> "Demo (simulated)"
+        DemoFlavour.GENERIC -> "Demo Generic OBD2"
+    }
     override val isLive: Boolean = false
 
     override fun snapshots(): Flow<VehicleSnapshot> = flow {
@@ -51,39 +61,51 @@ class DemoObdSource(
             // Open loop while cold, closed loop once warm (demo).
             val fuelLoop = if (coolant < 70.0) "OPEN LOOP" else "CLOSED LOOP"
 
-            // Mirror a real FB2: Coolant2 / Ambient / LTFT stay n/s until the user
-            // triple-taps and runs Deep search (Demo command() still answers those PIDs).
+            val unsupported = when (flavour) {
+                // Mirror a real FB2: Coolant2 / Ambient / LTFT stay n/s until deep search.
+                DemoFlavour.FB2 -> setOf(0x67, 0x46, 0x07)
+                // Generic demo advertises those SAE PIDs as live.
+                DemoFlavour.GENERIC -> emptySet()
+            }
+
             val snapshot = VehicleSnapshot(
                 rpm = rpm.roundToInt().toDouble(),
                 speedKmh = speed.roundToInt().toDouble(),
                 coolantC = coolant.roundToInt().toDouble(),
-                coolant2C = null,
+                coolant2C = if (flavour == DemoFlavour.GENERIC) coolant.roundToInt().toDouble() + 1.0 else null,
                 intakeC = 32.0,
-                ambientC = null,
+                ambientC = if (flavour == DemoFlavour.GENERIC) 28.0 else null,
                 engineLoadPct = load,
                 throttlePct = throttle,
                 timingAdvance = 12.0,
                 mafGps = 4.0 + load / 5.0,
                 mapKpa = 30.0 + load,
                 stftPct = 2.0 * sin(t / 5.0),
-                ltftPct = null,
+                ltftPct = if (flavour == DemoFlavour.GENERIC) 1.5 else null,
                 batteryVolts = 14.2 + 0.1 * sin(t / 7.0),
                 fuelSystemStatus = fuelLoop,
                 gear = null,
                 gearSource = GearSource.NONE,
                 gearConfidencePct = null,
-                unsupportedPids = setOf(0x67, 0x46, 0x07), // Coolant2, Ambient, LTFT
+                unsupportedPids = unsupported,
             ).let { snap ->
-                val est = gearEstimator.estimateDetailed(speed, rpm)
-                snap.copy(
+                val est = if (flavour == DemoFlavour.FB2) {
+                    gearEstimator.estimateDetailed(speed, rpm)
+                } else {
+                    null
+                }
+                val withGear = snap.copy(
                     gear = est?.gear,
                     gearSource = if (est != null) GearSource.ESTIMATED else GearSource.NONE,
                     gearConfidencePct = est?.confidencePct,
                 )
+                val now = System.currentTimeMillis()
+                withGear.copy(freshAtMs = SnapshotFreshness.mapForPresentFields(withGear, now))
             }
             emit(snapshot)
             t += 1.0
-            delay(250L)
+            // ~1.25 Hz UI feed — 250 ms was thrashing low-RAM HU scroll/swipe.
+            delay(800L)
         }
     }
 
@@ -98,6 +120,13 @@ class DemoObdSource(
     override suspend fun readPendingDtcs(): List<Dtc> = if (demoCleared) emptyList() else listOf(
         Dtc("P0300", DtcCatalog.describe("P0300")),
     )
+
+    override suspend fun readPermanentDtcs(): List<Dtc> =
+        if (demoCleared) {
+            emptyList()
+        } else {
+            listOf(Dtc("U0100", DtcCatalog.describe("U0100")))
+        }
 
     override suspend fun clearDtcs(): Boolean {
         demoCleared = true
@@ -184,7 +213,10 @@ class DemoObdSource(
         "221316" to 12.0, // total misfire
     )
 
-    override suspend fun probePids(pids: List<PidDefinition>) = pids.map { pid ->
+    override suspend fun probePids(
+        pids: List<PidDefinition>,
+        recoverFirst: Boolean,
+    ) = pids.map { pid ->
         when {
             pid.request.equals("0103", true) -> {
                 // Byte A = 0x02 → CLOSED LOOP

@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -38,17 +39,18 @@ private val TIME_FMT = SimpleDateFormat("HH:mm:ss.SSS", Locale.US)
 private val FILE_FMT = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US)
 
 @Composable
-private fun HeaderAction(text: String, onClick: () -> Unit, color: androidx.compose.ui.graphics.Color = Accent) {
+private fun HeaderAction(text: String, onClick: () -> Unit, color: androidx.compose.ui.graphics.Color? = null) {
+    val actionColor = color ?: MaterialTheme.colorScheme.primary
     Text(
         text = text,
-        color = color,
+        color = actionColor,
         fontSize = 14.sp,
         fontWeight = FontWeight.Bold,
         modifier = Modifier
             .padding(start = 8.dp)
             .clip(RoundedCornerShape(8.dp))
             .clickable { onClick() }
-            .background(Surface)
+            .background(MaterialTheme.colorScheme.surface)
             .padding(horizontal = 12.dp, vertical = 8.dp),
     )
 }
@@ -64,7 +66,7 @@ fun DebugLogScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(Background)
+            .background(MaterialTheme.colorScheme.background)
             .padding(16.dp),
     ) {
         ScreenHeader(title = "Debug log", onBack = onBack) {
@@ -88,7 +90,7 @@ fun DebugLogScreen(
             ) {
                 lines.takeLast(400).forEach { line ->
                     val color = when (line.dir) {
-                        ObdLogger.Dir.TX -> Accent
+                        ObdLogger.Dir.TX -> MaterialTheme.colorScheme.primary
                         ObdLogger.Dir.RX -> GoodGreen
                         ObdLogger.Dir.INFO -> TextMuted
                     }
@@ -124,12 +126,12 @@ fun ValueLogScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(Background)
+            .background(MaterialTheme.colorScheme.background)
             .padding(16.dp),
     ) {
         ScreenHeader(title = "Value log", onBack = onBack) {
             Row {
-                HeaderAction("Upload", onUpload, color = if (uploadEnabled) Accent else TextMuted)
+                HeaderAction("Upload", onUpload, color = if (uploadEnabled) MaterialTheme.colorScheme.primary else TextMuted)
                 HeaderAction("Save", onShare)
                 HeaderAction("Clear current", onClear)
             }
@@ -192,7 +194,7 @@ fun ValueLogScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(10.dp))
-                            .background(Surface)
+                            .background(MaterialTheme.colorScheme.surface)
                             .padding(horizontal = 12.dp, vertical = 10.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically,
@@ -207,7 +209,7 @@ fun ValueLogScreen(
                         }
                         Text(
                             text = "Save",
-                            color = Accent,
+                            color = MaterialTheme.colorScheme.primary,
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
                             modifier = Modifier

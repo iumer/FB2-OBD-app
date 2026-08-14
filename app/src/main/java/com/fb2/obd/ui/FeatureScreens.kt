@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -44,31 +45,32 @@ import com.fb2.obd.ui.theme.WarnAmber
 private fun Chip(text: String, selected: Boolean = false, onClick: () -> Unit) {
     Text(
         text = text,
-        color = if (selected) Background else Accent,
+        color = if (selected) MaterialTheme.colorScheme.background else MaterialTheme.colorScheme.primary,
         fontSize = 13.sp,
         fontWeight = FontWeight.Bold,
         modifier = Modifier
             .padding(end = 8.dp, bottom = 8.dp)
             .clip(RoundedCornerShape(8.dp))
             .clickable { onClick() }
-            .background(if (selected) Accent else Surface)
+            .background(if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface)
             .padding(horizontal = 12.dp, vertical = 8.dp),
     )
 }
 
 @Composable
-private fun CardRow(left: String, right: String, rightColor: androidx.compose.ui.graphics.Color = Accent) {
+private fun CardRow(left: String, right: String, rightColor: androidx.compose.ui.graphics.Color? = null) {
+    val valueColor = rightColor ?: MaterialTheme.colorScheme.primary
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .padding(bottom = 8.dp)
             .clip(RoundedCornerShape(12.dp))
-            .background(Surface)
+            .background(MaterialTheme.colorScheme.surface)
             .padding(14.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {
         Text(text = left, color = TextPrimary, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
-        Text(text = right, color = rightColor, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+        Text(text = right, color = valueColor, fontSize = 14.sp, fontWeight = FontWeight.Bold)
     }
 }
 
@@ -85,7 +87,7 @@ fun CustomSensorsScreen(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Column(modifier.fillMaxSize().background(Background).padding(16.dp)) {
+    Column(modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(16.dp)) {
         ScreenHeader(title = "Custom sensors", onBack = onBack) {
             Chip(if (probing) "Probing\u2026" else "Probe selected") { onProbeSelected() }
         }
@@ -108,7 +110,7 @@ fun CustomSensorsScreen(
                         .fillMaxWidth()
                         .padding(bottom = 6.dp)
                         .clip(RoundedCornerShape(10.dp))
-                        .background(Surface)
+                        .background(MaterialTheme.colorScheme.surface)
                         .clickable { onToggle(pid) }
                         .padding(12.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -125,13 +127,13 @@ fun CustomSensorsScreen(
                             shown == null -> ""
                             else -> shown
                         },
-                        color = if (shown != null && shown.startsWith("n/s")) TextMuted else Accent,
+                        color = if (shown != null && shown.startsWith("n/s")) TextMuted else MaterialTheme.colorScheme.primary,
                         fontSize = 12.sp,
                         modifier = Modifier.padding(horizontal = 8.dp),
                     )
                     Text(
                         if (on) "SEL" else "+",
-                        color = if (on) GoodGreen else Accent,
+                        color = if (on) GoodGreen else MaterialTheme.colorScheme.primary,
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Bold,
                     )
@@ -150,7 +152,7 @@ fun IdleDiagnosticsScreen(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Column(modifier.fillMaxSize().background(Background).padding(16.dp)) {
+    Column(modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(16.dp)) {
         ScreenHeader(title = "Cold start / rough idle", onBack = onBack) {
             Chip(if (loading) "Probing\u2026" else "Probe now") { onRefresh() }
         }
@@ -194,7 +196,7 @@ fun IdleDiagnosticsScreen(
                         display.startsWith("n/s") || display == "—" -> TextMuted
                         pid.label.contains("Misfire", true) && numeric != null && numeric > 0 -> CritRed
                         pid.label.contains("Misfire", true) && numeric == 0.0 -> GoodGreen
-                        else -> Accent
+                        else -> MaterialTheme.colorScheme.primary
                     }
                     CardRow(pid.label, display, color)
                 }
@@ -210,7 +212,7 @@ fun FuelPageScreen(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Column(modifier.fillMaxSize().background(Background).padding(16.dp)) {
+    Column(modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(16.dp)) {
         ScreenHeader(title = "Fuel system", onBack = onBack) { Chip("Refresh") { onRefresh() } }
         Column(Modifier.verticalScroll(rememberScrollState())) {
             listOf(
@@ -242,7 +244,7 @@ fun TripScreen(
     Column(
         modifier
             .fillMaxSize()
-            .background(Background)
+            .background(MaterialTheme.colorScheme.background)
             .verticalScroll(rememberScrollState())
             .padding(if (embedded) 4.dp else 16.dp)
             .padding(bottom = 16.dp),
@@ -269,7 +271,7 @@ fun TripScreen(
                 .fillMaxWidth()
                 .padding(bottom = 8.dp)
                 .clip(RoundedCornerShape(12.dp))
-                .background(Surface)
+                .background(MaterialTheme.colorScheme.surface)
                 .padding(horizontal = 14.dp, vertical = 10.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
@@ -281,31 +283,31 @@ fun TripScreen(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     text = "−10",
-                    color = Accent,
+                    color = MaterialTheme.colorScheme.primary,
                     fontSize = 13.sp,
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier
                         .clip(RoundedCornerShape(8.dp))
                         .clickable { onFuelPriceChange((fuelPrice - 10.0).coerceAtLeast(50.0)) }
-                        .background(Background)
+                        .background(MaterialTheme.colorScheme.background)
                         .padding(horizontal = 10.dp, vertical = 6.dp),
                 )
                 Text(
                     text = "%.0f".format(fuelPrice),
-                    color = Accent,
+                    color = MaterialTheme.colorScheme.primary,
                     fontSize = 16.sp,
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.padding(horizontal = 10.dp),
                 )
                 Text(
                     text = "+10",
-                    color = Accent,
+                    color = MaterialTheme.colorScheme.primary,
                     fontSize = 13.sp,
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier
                         .clip(RoundedCornerShape(8.dp))
                         .clickable { onFuelPriceChange((fuelPrice + 10.0).coerceAtMost(1000.0)) }
-                        .background(Background)
+                        .background(MaterialTheme.colorScheme.background)
                         .padding(horizontal = 10.dp, vertical = 6.dp),
                 )
             }
@@ -316,7 +318,7 @@ fun TripScreen(
 
 @Composable
 fun VehicleInfoScreen(info: VehicleInfo, loading: Boolean, onRefresh: () -> Unit, onBack: () -> Unit, modifier: Modifier = Modifier) {
-    Column(modifier.fillMaxSize().background(Background).padding(16.dp)) {
+    Column(modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(16.dp)) {
         ScreenHeader(title = "Vehicle info", onBack = onBack) {
             Chip(if (loading) "Reading\u2026" else "Read Mode 09") { onRefresh() }
         }
@@ -340,7 +342,7 @@ fun DiagnosticsDepthScreen(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Column(modifier.fillMaxSize().background(Background).padding(16.dp)) {
+    Column(modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(16.dp)) {
         ScreenHeader(title = "Deep diagnostics", onBack = onBack) {
             Chip(if (loading) "Scanning\u2026" else "Scan all") { onScan() }
         }
@@ -383,7 +385,7 @@ fun TransmissionDashScreen(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Column(modifier.fillMaxSize().background(Background).padding(16.dp)) {
+    Column(modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(16.dp)) {
         ScreenHeader(title = "Transmission", onBack = onBack) { Chip("Probe / refresh") { onRefresh() } }
         health?.let {
             val label = if (it.transmissionDataOk && it.transmissionPct != null) {
@@ -421,7 +423,7 @@ fun HealthScoresScreen(
     Column(
         modifier
             .fillMaxSize()
-            .background(Background)
+            .background(MaterialTheme.colorScheme.background)
             .verticalScroll(rememberScrollState())
             .padding(if (embedded) 4.dp else 16.dp)
             .padding(bottom = 16.dp),
@@ -467,13 +469,13 @@ fun MaintenanceScreen(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Column(modifier.fillMaxSize().background(Background).padding(16.dp)) {
+    Column(modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(16.dp)) {
         ScreenHeader(title = "Maintenance log", onBack = onBack)
         Text("Edit via JSON later / next build — template for FB2 service items:", color = TextMuted, fontSize = 12.sp)
         Column(Modifier.verticalScroll(rememberScrollState()).padding(top = 8.dp)) {
             entries.forEach { e ->
                 Row(
-                    modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp).clip(RoundedCornerShape(12.dp)).background(Surface).padding(14.dp),
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp).clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surface).padding(14.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                 ) {
                     Column {
@@ -495,7 +497,7 @@ fun HiddenHondaMenuScreen(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Column(modifier.fillMaxSize().background(Background).padding(16.dp)) {
+    Column(modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(16.dp)) {
         ScreenHeader(title = "Honda modules", onBack = onBack) {
             Chip(if (loading) "Scanning\u2026" else "Full-system probe") { onScan() }
         }
@@ -523,7 +525,7 @@ fun GForceScreen(
     Column(
         modifier
             .fillMaxSize()
-            .background(Background)
+            .background(MaterialTheme.colorScheme.background)
             .verticalScroll(rememberScrollState())
             .padding(if (embedded) 4.dp else 16.dp)
             .padding(bottom = 16.dp),
@@ -539,7 +541,7 @@ fun GForceScreen(
         } else {
             ScreenHeader(title = "G-force", onBack = onBack)
         }
-        CardRow("Total", "%.2f g".format(g), Accent)
+        CardRow("Total", "%.2f g".format(g), MaterialTheme.colorScheme.primary)
         CardRow("X (lat)", "%.2f m/s\u00B2".format(ax))
         CardRow("Y (long)", "%.2f m/s\u00B2".format(ay))
         CardRow("Z (vert)", "%.2f m/s\u00B2".format(az))

@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -43,17 +44,19 @@ fun DiagnosticsHubScreen(
     nav: DiagnosticsNav,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
+    showHondaModules: Boolean = true,
+    blurb: String = "Read / clear codes, AI analysis, deep scans, VIN, Honda modules, and maintenance. Live sensor pages are on the dashboard swipe tabs.",
 ) {
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(Background)
+            .background(MaterialTheme.colorScheme.background)
             .padding(16.dp)
             .verticalScroll(rememberScrollState()),
     ) {
         ScreenHeader(title = "Diagnostics", onBack = onBack)
         Text(
-            text = "Read / clear codes, AI analysis, deep scans, VIN, Honda modules, and maintenance. Live sensor pages are on the dashboard swipe tabs.",
+            text = blurb,
             color = TextMuted,
             fontSize = 12.sp,
             modifier = Modifier.padding(bottom = 12.dp),
@@ -62,7 +65,9 @@ fun DiagnosticsHubScreen(
         DiagRow("Fault codes (read / clear + tips)", nav.onFaults)
         DiagRow("Deep diagnostics (freeze / readiness / Mode 05+06)", nav.onDeepDiag)
         DiagRow("Vehicle info (VIN / Mode 09)", nav.onVehicle)
-        DiagRow("Honda modules / full-system probe", nav.onHonda)
+        if (showHondaModules) {
+            DiagRow("Honda modules / full-system probe", nav.onHonda)
+        }
         DiagRow("Maintenance log book", nav.onMaintenance)
     }
 }
@@ -74,13 +79,13 @@ private fun DiagRow(title: String, onClick: () -> Unit) {
             .fillMaxWidth()
             .padding(bottom = 8.dp)
             .clip(RoundedCornerShape(12.dp))
-            .background(Surface)
+            .background(MaterialTheme.colorScheme.surface)
             .clickable(onClick = onClick)
             .padding(14.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(text = title, color = TextPrimary, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
-        Text(text = "\u203A", color = Accent, fontSize = 20.sp)
+        Text(text = "\u203A", color = MaterialTheme.colorScheme.primary, fontSize = 20.sp)
     }
 }

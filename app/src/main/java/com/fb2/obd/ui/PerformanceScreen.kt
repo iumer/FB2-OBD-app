@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -44,7 +45,7 @@ fun PerformanceScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(Background)
+            .background(MaterialTheme.colorScheme.background)
             .verticalScroll(rememberScrollState())
             .padding(if (embedded) 4.dp else 16.dp)
             .padding(bottom = 16.dp),
@@ -58,13 +59,13 @@ fun PerformanceScreen(
                 Text("Performance", color = TextMuted, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                 Text(
                     text = "Reset",
-                    color = Accent,
+                    color = MaterialTheme.colorScheme.primary,
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier
                         .clip(RoundedCornerShape(8.dp))
                         .clickable { onReset() }
-                        .background(Surface)
+                        .background(MaterialTheme.colorScheme.surface)
                         .padding(horizontal = 10.dp, vertical = 5.dp),
                 )
             }
@@ -72,13 +73,13 @@ fun PerformanceScreen(
             ScreenHeader(title = "Performance", onBack = onBack) {
                 Text(
                     text = "Reset",
-                    color = Accent,
+                    color = MaterialTheme.colorScheme.primary,
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier
                         .clip(RoundedCornerShape(8.dp))
                         .clickable { onReset() }
-                        .background(Surface)
+                        .background(MaterialTheme.colorScheme.surface)
                         .padding(horizontal = 14.dp, vertical = 8.dp),
                 )
             }
@@ -103,7 +104,7 @@ fun PerformanceScreen(
             AccelPhase.ARMED ->
                 "ARMED \u2014 accelerate hard. Timer starts when speed leaves 0." to GoodGreen
             AccelPhase.RUNNING ->
-                "TIMING \u2026 keep accelerating through the milestones." to Accent
+                "TIMING \u2026 keep accelerating through the milestones." to MaterialTheme.colorScheme.primary
         }
         Text(
             text = status,
@@ -142,7 +143,7 @@ private fun ResultRow(label: String, value: String, highlight: Boolean = false) 
             .fillMaxWidth()
             .padding(bottom = 8.dp)
             .clip(RoundedCornerShape(12.dp))
-            .background(Surface)
+            .background(MaterialTheme.colorScheme.surface)
             .padding(horizontal = 16.dp, vertical = 14.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
@@ -150,7 +151,7 @@ private fun ResultRow(label: String, value: String, highlight: Boolean = false) 
         Text(text = label, color = TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
         Text(
             text = value,
-            color = if (highlight) GoodGreen else Accent,
+            color = if (highlight) GoodGreen else MaterialTheme.colorScheme.primary,
             fontSize = 18.sp,
             fontWeight = FontWeight.Bold,
         )

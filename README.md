@@ -43,6 +43,15 @@ Requires JDK 17 and the Android SDK (see `AGENTS.md` for the cloud setup).
 
 After code changes, follow [`REGRESSION.md`](REGRESSION.md) (full automated suite +
 issue inventory + manual car checks).
+
+## Download (always the same link)
+
+Phone sideload — **bookmark this; it does not change between updates:**
+
+https://raw.githubusercontent.com/iumer/FB2-OBD-app/latest/dist/FB2-Diag-debug.apk
+
+After every agent change that rebuilds the app, the APK is published to the
+`latest` branch so that URL stays current.
 Sideload `app-debug.apk` onto your phone (`adb install -r app-debug.apk` or copy
 it over). The app launches straight into the dashboard on the **Demo** source;
 wiring the paired ELM327 device into `Elm327BluetoothSource` switches it to live

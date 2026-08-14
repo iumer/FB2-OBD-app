@@ -26,6 +26,8 @@ interface ObdSource {
 
     suspend fun readStoredDtcs(): List<Dtc> = emptyList()
     suspend fun readPendingDtcs(): List<Dtc> = emptyList()
+    /** Mode 0A permanent DTCs (not cleared by Mode 04 on many ECUs). */
+    suspend fun readPermanentDtcs(): List<Dtc> = emptyList()
     suspend fun clearDtcs(): Boolean = false
     suspend fun command(raw: String): String? = null
 
@@ -35,8 +37,17 @@ interface ObdSource {
     suspend fun readMode05(): List<O2TestResult> = emptyList()
     suspend fun readMode06(): List<Mode06Result> = emptyList()
 
+    /** Pause continuous Mode 01 polling (e.g. during deep search). No-op for Demo. */
+    fun pausePolling() {}
+
+    /** Resume continuous Mode 01 polling after [pausePolling]. */
+    fun resumePolling() {}
+
     /** Probe a list of PIDs; returns support + sample value when possible. */
-    suspend fun probePids(pids: List<PidDefinition>): List<PidProbeResult> = emptyList()
+    suspend fun probePids(
+        pids: List<PidDefinition>,
+        recoverFirst: Boolean = true,
+    ): List<PidProbeResult> = emptyList()
 
     /** Probe all Honda enhanced packs and return per-module results. */
     suspend fun probeHondaModules(): List<ModuleScanResult> = emptyList()
