@@ -77,6 +77,7 @@ import com.fb2.obd.obd.VehicleProfile
 import com.fb2.obd.obd.VehicleProfileConfig
 import com.fb2.obd.obd.VehicleSnapshot
 import com.fb2.obd.obd.isEffectivelyBlank
+import com.fb2.obd.ui.dash.DashLinkStatus
 import com.fb2.obd.ui.dash.OptAThemeDash
 import com.fb2.obd.ui.dash.OptBThemeDash
 import com.fb2.obd.ui.dash.OptCThemeDash
@@ -151,6 +152,7 @@ fun DashboardScreen(
     showEstimatedGear: Boolean = true,
     dashTheme: DashTheme = DashTheme.CLASSIC,
     loggingActive: Boolean = false,
+    networkOnline: Boolean = false,
     pageTitles: List<String> = DefaultDashPageTitles,
     profileBadge: String = VehicleProfile.FB2.badge,
     onConnectClick: () -> Unit = {},
@@ -228,13 +230,19 @@ fun DashboardScreen(
             .padding(horizontal = 10.dp, vertical = 6.dp),
     ) {
         if (immersive) {
+            val link = DashLinkStatus(
+                elmLive = state.connection == ConnectionState.CONNECTED && state.sourceIsLive,
+                demo = state.connection == ConnectionState.CONNECTED && !state.sourceIsLive,
+                logging = loggingActive,
+                online = networkOnline,
+            )
             ThemedTopBar(
                 theme = dashTheme,
-                connected = state.connection == ConnectionState.CONNECTED && state.sourceIsLive,
+                link = link,
                 onOpenSettings = onSettingsClick,
                 onOpenDiag = onDiagnosticsClick,
                 onOpenMin = onMinimizeClick,
-                onOpenLogs = onToggleLogging,
+                onToggleLogging = onToggleLogging,
                 onConnect = onConnectClick,
             )
             Box(
@@ -256,6 +264,7 @@ fun DashboardScreen(
                         onRemapBase = { label -> pickerTarget = PickerTarget.RemapBase(label) },
                         onDeepSearch = onDeepSearch,
                         onEditThresholds = { editMetric = it },
+                        deepFoundValues = deepFoundValues,
                     )
                     DashTheme.OPT_B -> OptBThemeDash(
                         snapshot = s,
@@ -269,6 +278,7 @@ fun DashboardScreen(
                         onRemapBase = { label -> pickerTarget = PickerTarget.RemapBase(label) },
                         onDeepSearch = onDeepSearch,
                         onEditThresholds = { editMetric = it },
+                        deepFoundValues = deepFoundValues,
                     )
                     DashTheme.OPT_C -> OptCThemeDash(
                         snapshot = s,
@@ -283,6 +293,7 @@ fun DashboardScreen(
                         onRemapBase = { label -> pickerTarget = PickerTarget.RemapBase(label) },
                         onDeepSearch = onDeepSearch,
                         onEditThresholds = { editMetric = it },
+                        deepFoundValues = deepFoundValues,
                     )
                     DashTheme.CLASSIC -> Unit
                 }
@@ -291,6 +302,7 @@ fun DashboardScreen(
             TopBar(
                 state = state,
                 loggingActive = loggingActive,
+                networkOnline = networkOnline,
                 profileBadge = profileBadge,
                 onConnectClick = onConnectClick,
                 onSettingsClick = onSettingsClick,
@@ -1511,6 +1523,7 @@ private fun TopBarChip(text: String, color: Color, onClick: () -> Unit) {
 private fun TopBar(
     state: DashboardUiState,
     loggingActive: Boolean,
+    networkOnline: Boolean = false,
     profileBadge: String = VehicleProfile.FB2.badge,
     onConnectClick: () -> Unit,
     onSettingsClick: () -> Unit,
@@ -1565,6 +1578,18 @@ private fun TopBar(
             Text(
                 text = " $text",
                 color = TextMuted,
+                fontSize = DashType.topChip,
+                fontWeight = FontWeight.Bold,
+            )
+            Text(
+                text = if (loggingActive) " · LOGGING" else " · NOT LOGGING",
+                color = if (loggingActive) GoodGreen else TextMuted,
+                fontSize = DashType.topChip,
+                fontWeight = FontWeight.Bold,
+            )
+            Text(
+                text = if (networkOnline) " · NET" else " · OFFLINE",
+                color = if (networkOnline) GoodGreen else TextMuted,
                 fontSize = DashType.topChip,
                 fontWeight = FontWeight.Bold,
             )

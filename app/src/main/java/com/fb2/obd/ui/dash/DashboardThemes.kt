@@ -6,7 +6,11 @@ import android.graphics.Paint
 import android.graphics.Typeface
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
@@ -39,6 +43,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -56,6 +61,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.util.VelocityTracker
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -76,6 +82,7 @@ import com.fb2.obd.obd.VehicleSnapshot
 import com.fb2.obd.ui.FreshnessHeartbeat
 import com.fb2.obd.ui.color
 import com.fb2.obd.ui.theme.ThemePalette
+import kotlin.math.absoluteValue
 import kotlin.math.cos
 import kotlin.math.roundToInt
 import kotlin.math.sin
@@ -96,16 +103,27 @@ fun OptAThemeDash(
     onRemapBase: (String) -> Unit,
     onDeepSearch: (label: String, pidId: String?) -> Unit,
     onEditThresholds: (EditableMetric) -> Unit,
+    deepFoundValues: Map<String, String> = emptyMap(),
     rootModifier: Modifier = Modifier,
 ) {
-    val all = remember(snapshot, healthSnapshot, thresholds, dtcCount, healthScore) {
+    val all = remember(snapshot, healthSnapshot, thresholds, dtcCount, healthScore, deepFoundValues) {
         DashThemeMetrics.sideMetrics(
-            snapshot, healthSnapshot, thresholds, dtcCount, healthScore, latchHealth,
+            snapshot, healthSnapshot, thresholds, dtcCount, healthScore, latchHealth, deepFoundValues,
         )
     }
     val (left, right) = remember(all) { DashThemeMetrics.splitWheels(all) }
-    val rpmFrac = ((snapshot.rpm ?: 0.0) / 8000.0).coerceIn(0.0, 1.0).toFloat()
-    val speedFrac = ((snapshot.speedKmh ?: 0.0) / 200.0).coerceIn(0.0, 1.0).toFloat()
+    val rpmTarget = ((snapshot.rpm ?: 0.0) / 8000.0).coerceIn(0.0, 1.0).toFloat()
+    val speedTarget = ((snapshot.speedKmh ?: 0.0) / 200.0).coerceIn(0.0, 1.0).toFloat()
+    val rpmFrac by animateFloatAsState(
+        targetValue = rpmTarget,
+        animationSpec = tween(durationMillis = 180, easing = FastOutSlowInEasing),
+        label = "opta-rpm",
+    )
+    val speedFrac by animateFloatAsState(
+        targetValue = speedTarget,
+        animationSpec = tween(durationMillis = 180, easing = FastOutSlowInEasing),
+        label = "opta-speed",
+    )
 
     Box(
         modifier = rootModifier
@@ -311,15 +329,26 @@ fun OptBThemeDash(
     onRemapBase: (String) -> Unit,
     onDeepSearch: (label: String, pidId: String?) -> Unit,
     onEditThresholds: (EditableMetric) -> Unit,
+    deepFoundValues: Map<String, String> = emptyMap(),
     rootModifier: Modifier = Modifier,
 ) {
-    val metrics = remember(snapshot, healthSnapshot, thresholds, dtcCount, healthScore) {
+    val metrics = remember(snapshot, healthSnapshot, thresholds, dtcCount, healthScore, deepFoundValues) {
         DashThemeMetrics.sideMetrics(
-            snapshot, healthSnapshot, thresholds, dtcCount, healthScore, latchHealth,
+            snapshot, healthSnapshot, thresholds, dtcCount, healthScore, latchHealth, deepFoundValues,
         ).take(6)
     }
-    val rpmFrac = ((snapshot.rpm ?: 0.0) / 8000.0).coerceIn(0.0, 1.0).toFloat()
-    val speedFrac = ((snapshot.speedKmh ?: 0.0) / 240.0).coerceIn(0.0, 1.0).toFloat()
+    val rpmTarget = ((snapshot.rpm ?: 0.0) / 8000.0).coerceIn(0.0, 1.0).toFloat()
+    val speedTarget = ((snapshot.speedKmh ?: 0.0) / 240.0).coerceIn(0.0, 1.0).toFloat()
+    val rpmFrac by animateFloatAsState(
+        targetValue = rpmTarget,
+        animationSpec = tween(durationMillis = 220, easing = FastOutSlowInEasing),
+        label = "optb-rpm-needle",
+    )
+    val speedFrac by animateFloatAsState(
+        targetValue = speedTarget,
+        animationSpec = tween(durationMillis = 220, easing = FastOutSlowInEasing),
+        label = "optb-speed-needle",
+    )
 
     Column(
         modifier = rootModifier
@@ -451,19 +480,25 @@ fun OptCThemeDash(
     onRemapBase: (String) -> Unit,
     onDeepSearch: (label: String, pidId: String?) -> Unit,
     onEditThresholds: (EditableMetric) -> Unit,
+    deepFoundValues: Map<String, String> = emptyMap(),
     rootModifier: Modifier = Modifier,
 ) {
-    val metrics = remember(snapshot, healthSnapshot, thresholds, dtcCount, healthScore) {
+    val metrics = remember(snapshot, healthSnapshot, thresholds, dtcCount, healthScore, deepFoundValues) {
         val preferred = listOf(
             "Coolant 1", "Battery", "Intake", "Throttle", "MAP", "MAF", "STFT", "Timing", "Health",
         )
         val all = DashThemeMetrics.sideMetrics(
-            snapshot, healthSnapshot, thresholds, dtcCount, healthScore, latchHealth,
+            snapshot, healthSnapshot, thresholds, dtcCount, healthScore, latchHealth, deepFoundValues,
         )
         preferred.mapNotNull { name -> all.firstOrNull { it.label.equals(name, true) } }
             .ifEmpty { all.take(9) }
     }
-    val rpmFrac = ((snapshot.rpm ?: 0.0) / 7000.0).coerceIn(0.0, 1.0).toFloat()
+    val rpmTarget = ((snapshot.rpm ?: 0.0) / 7000.0).coerceIn(0.0, 1.0).toFloat()
+    val rpmFrac by animateFloatAsState(
+        targetValue = rpmTarget,
+        animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing),
+        label = "optc-rpm",
+    )
 
     Column(
         modifier = rootModifier
@@ -497,28 +532,50 @@ fun OptCThemeDash(
                     ),
                 contentAlignment = Alignment.Center,
             ) {
-                val gaugeSize = minOf(maxWidth, maxHeight) * 0.96f
-                PulseRpmGauge(
-                    fraction = rpmFrac,
-                    palette = palette,
-                    modifier = Modifier.size(gaugeSize),
-                )
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        FreshnessHeartbeat(
-                            lastOkMs = snapshot.freshAtMs[SnapshotFreshness.KEY_RPM],
-                            size = 7.dp,
+                // Dial left, digital readout right — digits must not sit on the needle arc.
+                Row(
+                    modifier = Modifier.fillMaxSize(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    val gaugeSize = minOf(maxWidth * 0.62f, maxHeight) * 0.98f
+                    Box(
+                        modifier = Modifier
+                            .weight(0.62f)
+                            .fillMaxHeight(),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        PulseRpmGauge(
+                            fraction = rpmFrac,
+                            palette = palette,
+                            modifier = Modifier.size(gaugeSize),
                         )
-                        Text(" RPM", color = palette.textMuted, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                     }
-                    Text(
-                        text = snapshot.rpm?.roundToInt()?.toString() ?: "--",
-                        color = palette.textPrimary,
-                        fontSize = 36.sp,
-                        fontWeight = FontWeight.Black,
-                        fontFamily = DigitFace,
-                    )
-                    Text("rpm", color = palette.accentSoft, fontSize = 12.sp)
+                    Column(
+                        horizontalAlignment = Alignment.Start,
+                        verticalArrangement = Arrangement.Center,
+                        modifier = Modifier
+                            .weight(0.38f)
+                            .padding(end = 2.dp),
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            FreshnessHeartbeat(
+                                lastOkMs = snapshot.freshAtMs[SnapshotFreshness.KEY_RPM],
+                                size = 6.dp,
+                            )
+                            Text(" RPM", color = palette.textMuted, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                        }
+                        Text(
+                            text = snapshot.rpm?.roundToInt()?.toString() ?: "--",
+                            color = palette.textPrimary,
+                            fontSize = 26.sp,
+                            fontWeight = FontWeight.Black,
+                            fontFamily = DigitFace,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        Text("rpm", color = palette.accentSoft, fontSize = 11.sp)
+                    }
                 }
             }
 
@@ -730,7 +787,7 @@ private fun OrbitValuePanel(
     }
 }
 
-/** Fixed-slot vertical slider — focus stays centered; values circulate in/out. */
+/** Dialer-style vertical picker — steps mid-drag like a phone wheel, not sticky snap-on-release. */
 @Composable
 private fun OrbitWheel(
     metrics: List<DashThemeMetric>,
@@ -741,23 +798,20 @@ private fun OrbitWheel(
     modifier: Modifier = Modifier,
 ) {
     val pages = metrics.ifEmpty { listOf(DashThemeMetric("–", "--", "")) }
-    var centerLabel by remember {
-        mutableStateOf(pages.getOrNull(1)?.label ?: pages.first().label)
+    var centerIndex by remember(pages.map { it.label }) {
+        mutableIntStateOf((1).coerceAtMost(pages.lastIndex.coerceAtLeast(0)))
     }
-    val center = pages.indexOfFirst { it.label == centerLabel }.takeIf { it >= 0 } ?: 0
+    val safeCenter = centerIndex.floorMod(pages.size.coerceAtLeast(1))
     val scope = rememberCoroutineScope()
     val dragPx = remember { Animatable(0f) }
     val density = LocalDensity.current
+    val stepPx = with(density) { 36.dp.toPx() }
 
     fun idx(delta: Int): Int {
         if (pages.isEmpty()) return 0
-        var i = (center + delta) % pages.size
+        var i = (safeCenter + delta) % pages.size
         if (i < 0) i += pages.size
         return i
-    }
-
-    fun step(dir: Int) {
-        centerLabel = pages[idx(dir)].label
     }
 
     Column(
@@ -769,22 +823,67 @@ private fun OrbitWheel(
                 ),
             )
             .border(2.dp, palette.accent.copy(alpha = 0.8f), RoundedCornerShape(999.dp))
-            .pointerInput(pages.size, centerLabel) {
+            .pointerInput(pages.size, stepPx) {
+                val tracker = VelocityTracker()
+                var carry = 0f
                 detectVerticalDragGestures(
+                    onDragStart = {
+                        tracker.resetTracking()
+                        carry = 0f
+                        scope.launch { dragPx.stop(); dragPx.snapTo(0f) }
+                    },
                     onDragEnd = {
+                        val vy = tracker.calculateVelocity().y
                         scope.launch {
-                            val threshold = with(density) { 28.dp.toPx() }
-                            when {
-                                dragPx.value > threshold -> step(-1)
-                                dragPx.value < -threshold -> step(1)
+                            val flingSteps = when {
+                                vy.absoluteValue > 3500f -> 2
+                                vy.absoluteValue > 1800f -> 1
+                                else -> 0
                             }
-                            dragPx.animateTo(0f, spring(stiffness = 500f, dampingRatio = 0.85f))
+                            val dir = if (vy > 0f) -1 else 1
+                            if (flingSteps > 0 && vy.absoluteValue > 1800f) {
+                                repeat(flingSteps) {
+                                    centerIndex = (centerIndex + dir).floorMod(pages.size)
+                                }
+                            }
+                            dragPx.animateTo(
+                                0f,
+                                spring(
+                                    dampingRatio = Spring.DampingRatioNoBouncy,
+                                    stiffness = Spring.StiffnessMediumLow,
+                                ),
+                            )
+                            carry = 0f
+                        }
+                    },
+                    onDragCancel = {
+                        scope.launch {
+                            dragPx.animateTo(0f, spring(stiffness = Spring.StiffnessMedium))
+                            carry = 0f
                         }
                     },
                     onVerticalDrag = { change, amount ->
                         change.consume()
+                        tracker.addPosition(change.uptimeMillis, change.position)
+                        carry += amount
+                        // Step as soon as the finger crosses a slot — dialer, not sticky release-snap.
+                        var stepped = false
+                        while (carry > stepPx && pages.isNotEmpty()) {
+                            centerIndex = (centerIndex - 1).floorMod(pages.size)
+                            carry -= stepPx
+                            stepped = true
+                        }
+                        while (carry < -stepPx && pages.isNotEmpty()) {
+                            centerIndex = (centerIndex + 1).floorMod(pages.size)
+                            carry += stepPx
+                            stepped = true
+                        }
                         scope.launch {
-                            dragPx.snapTo((dragPx.value + amount).coerceIn(-80f, 80f))
+                            if (stepped) {
+                                dragPx.snapTo(carry.coerceIn(-stepPx * 0.45f, stepPx * 0.45f))
+                            } else {
+                                dragPx.snapTo(carry.coerceIn(-stepPx, stepPx))
+                            }
                         }
                     },
                 )
@@ -817,8 +916,8 @@ private fun OrbitWheel(
                             AnimatedContent(
                                 targetState = pages[idx(delta)],
                                 transitionSpec = {
-                                    (slideInVertically { h -> h / 4 } + fadeIn()) togetherWith
-                                        (slideOutVertically { h -> -h / 4 } + fadeOut())
+                                    (slideInVertically { h -> h / 5 } + fadeIn(tween(90))) togetherWith
+                                        (slideOutVertically { h -> -h / 5 } + fadeOut(tween(90)))
                                 },
                                 label = "orbit-slot-$delta",
                                 contentKey = { it.label },
@@ -836,7 +935,6 @@ private fun OrbitWheel(
                         }
                     }
                 }
-                // Focus frame only — no heavy fade that eats the peek values
                 Box(
                     modifier = Modifier
                         .align(Alignment.Center)
@@ -849,6 +947,12 @@ private fun OrbitWheel(
         }
         Text("▾", color = palette.accent.copy(alpha = 0.9f), fontSize = 12.sp, fontWeight = FontWeight.Bold)
     }
+}
+
+private fun Int.floorMod(m: Int): Int {
+    if (m <= 0) return 0
+    val r = this % m
+    return if (r < 0) r + m else r
 }
 
 @Composable
@@ -900,13 +1004,14 @@ private fun OrbitWheelItem(
                 metric.health == Health.UNKNOWN -> palette.textPrimary
                 else -> metric.health.color()
             }.copy(alpha = if (focused) 1f else 0.8f),
-            fontSize = if (focused) 24.sp else 16.sp,
+            fontSize = if (focused) 22.sp else 15.sp,
             fontWeight = FontWeight.Black,
             fontFamily = DigitFace,
             maxLines = 1,
-            overflow = TextOverflow.Visible,
+            overflow = TextOverflow.Ellipsis,
             softWrap = false,
             textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 2.dp),
         )
     }
 }

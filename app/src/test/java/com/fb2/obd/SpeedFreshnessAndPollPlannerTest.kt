@@ -44,14 +44,16 @@ class SpeedFreshnessAndPollPlannerTest {
 
     @Test
     fun planner_alwaysIncludesHeroesEvenWithHighFailStreak() {
-        val fail = mapOf(ObdPid.SPEED to 5, ObdPid.ENGINE_RPM to 3, ObdPid.MAF to 4)
+        val fail = mapOf(ObdPid.SPEED to 5, ObdPid.ENGINE_RPM to 3, ObdPid.INTAKE_TEMP to 4)
         for (cycle in 1..25) {
             val chosen = PidPollPlanner.selectForCycle(catalog, fail, cycle, recovering = false)
             assertTrue("cycle $cycle missing RPM", ObdPid.ENGINE_RPM in chosen)
             assertTrue("cycle $cycle missing SPEED", ObdPid.SPEED in chosen)
-            // Flaky secondary still skipped most cycles.
+            assertTrue("cycle $cycle missing Coolant", ObdPid.COOLANT_TEMP in chosen)
+            assertTrue("cycle $cycle missing MAF", ObdPid.MAF in chosen)
+            // Flaky rotating secondary still skipped most cycles.
             if (cycle % 20 != 0) {
-                assertFalse("cycle $cycle should skip MAF", ObdPid.MAF in chosen)
+                assertFalse("cycle $cycle should skip Intake", ObdPid.INTAKE_TEMP in chosen)
             }
         }
     }
@@ -65,9 +67,12 @@ class SpeedFreshnessAndPollPlannerTest {
             recovering = false,
             secondaryBudget = 4,
         )
-        assertEquals(2 /* heroes */ + 4, chosen.size)
+        // RPM + Speed + Coolant + MAF always, plus up to 4 rotating secondaries.
+        assertEquals(4 /* always */ + 4, chosen.size)
         assertEquals(ObdPid.ENGINE_RPM, chosen[0])
         assertEquals(ObdPid.SPEED, chosen[1])
+        assertEquals(ObdPid.COOLANT_TEMP, chosen[2])
+        assertEquals(ObdPid.MAF, chosen[3])
 
         val next = PidPollPlanner.selectForCycle(
             activePids = catalog,
@@ -77,7 +82,15 @@ class SpeedFreshnessAndPollPlannerTest {
             secondaryBudget = 4,
         )
         // Rotation should advance the secondary window.
-        assertTrue(chosen.drop(2) != next.drop(2))
+        assertTrue(chosen.drop(4) != next.drop(4))
+    }
+
+    @Test
+    fun planner_isAlways_coversCoolantAndMaf() {
+        assertTrue(PidPollPlanner.isAlways(ObdPid.COOLANT_TEMP))
+        assertTrue(PidPollPlanner.isAlways(ObdPid.MAF))
+        assertTrue(PidPollPlanner.isHero(ObdPid.ENGINE_RPM))
+        assertFalse(PidPollPlanner.isHero(ObdPid.COOLANT_TEMP))
     }
 
     @Test
@@ -140,10 +153,23 @@ class SpeedFreshnessAndPollPlannerTest {
         fresh.markOk(SnapshotFreshness.KEY_BATTERY, 0L)
         fresh.markOk(SnapshotFreshness.KEY_RPM, 0L)
         val snap = VehicleSnapshot(rpm = 1800.0, coolantC = 90.0, batteryVolts = 12.5)
-        val out = fresh.sanitize(snap, nowMs = 5_000L, rpmUpdatedThisCycle = true)
+        // Coolant TTL is 5s; battery TTL is 4s — past both.
+        val out = fresh.sanitize(snap, nowMs = 5_001L, rpmUpdatedThisCycle = true)
         assertNull(out.coolantC)
         assertNull(out.batteryVolts)
         assertNull(out.rpm) // RPM also past TTL
+    }
+
+    @Test
+    fun freshness_coolantSurvivesBriefSlowCycle() {
+        val fresh = SnapshotFreshness(staleAfterMs = 2_500L)
+        fresh.markOk(SnapshotFreshness.KEY_COOLANT, 0L)
+        fresh.markOk(SnapshotFreshness.KEY_MAF, 0L)
+        val snap = VehicleSnapshot(coolantC = 92.0, mafGps = 4.5)
+        // Generic TTL would blank at 2501ms; Coolant/MAF keep until 5s.
+        val still = fresh.sanitize(snap, nowMs = 3_500L, rpmUpdatedThisCycle = false)
+        assertEquals(92.0, still.coolantC!!, 0.01)
+        assertEquals(4.5, still.mafGps!!, 0.01)
     }
 
     @Test

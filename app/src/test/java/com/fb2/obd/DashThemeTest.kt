@@ -44,4 +44,23 @@ class DashThemeTest {
         assertTrue(left.isNotEmpty())
         assertTrue(right.isNotEmpty())
     }
+
+    @Test
+    fun fuelLoop_abbreviatesClosedOpen() {
+        assertEquals("CLOSED", DashThemeMetrics.abbreviateFuelLoop("CLOSED LOOP"))
+        assertEquals("OPEN", DashThemeMetrics.abbreviateFuelLoop("OPEN LOOP"))
+        assertEquals("--", DashThemeMetrics.abbreviateFuelLoop(null))
+    }
+
+    @Test
+    fun sideMetrics_appliesDeepFoundWhenBlank() {
+        val snap = VehicleSnapshot(rpm = 1000.0, coolantC = null)
+        val metrics = DashThemeMetrics.sideMetrics(
+            snap,
+            deepFoundValues = mapOf("Coolant 1" to "91 °C"),
+        )
+        val cool = metrics.first { it.label == "Coolant 1" }
+        assertEquals("91", cool.value)
+        assertEquals("°C", cool.unit)
+    }
 }

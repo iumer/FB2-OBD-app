@@ -342,14 +342,20 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
                 _deepFoundValues.update {
                     it + (label to text) + (report.targetId to text)
                 }
-                // Battery deep-search (esp. ATRV) must also feed the live snapshot
-                // so health score / voice / CSV see volts, not just the tile overlay.
+                // Battery / Coolant deep-search must also feed the live snapshot
+                // so health / voice / CSV / Opt themes see the value, not just Classic overlay.
                 val isBattery = label.contains("battery", true) ||
                     label.contains("ecu v", true) ||
                     report.targetId.contains("0142", true)
-                if (isBattery) {
-                    _uiState.update { st ->
+                val isCoolant1 = label.contains("coolant 1", true) ||
+                    label.equals("coolant", true) ||
+                    report.targetId.contains("0105", true)
+                when {
+                    isBattery -> _uiState.update { st ->
                         st.copy(snapshot = st.snapshot.copy(batteryVolts = hit.value))
+                    }
+                    isCoolant1 -> _uiState.update { st ->
+                        st.copy(snapshot = st.snapshot.copy(coolantC = hit.value))
                     }
                 }
             }

@@ -5,8 +5,11 @@ package com.fb2.obd.obd
  *
  * Cheap clones hang and time out; polling every supported Dash PID every
  * cycle made hero Speed fall behind (last-good freeze while RPM kept
- * updating). Heroes (RPM + Speed) are requested every cycle and are never
- * skipped for fail-streak. Secondary PIDs rotate so each cycle stays short.
+ * updating). RPM + Speed are requested every cycle. Coolant 1 + MAF are also
+ * requested every cycle — Coolant is the primary reason this app exists and
+ * must not blank from rotation TTL races.
+ *
+ * Remaining secondary PIDs rotate so each cycle stays short.
  *
  * Pure Kotlin — unit-testable without Android / Bluetooth.
  */
@@ -16,6 +19,15 @@ object PidPollPlanner {
     val HERO_NUMBERS: Set<Int> = setOf(
         ObdPid.ENGINE_RPM.number,
         ObdPid.SPEED.number,
+    )
+
+    /**
+     * Polled every cycle in addition to heroes. Kept small so cycles stay short
+     * on cheap ELMs, but Coolant/MAF must not vanish between rotations.
+     */
+    val ALWAYS_NUMBERS: Set<Int> = HERO_NUMBERS + setOf(
+        ObdPid.COOLANT_TEMP.number,
+        ObdPid.MAF.number,
     )
 
     /** Prefer these while the bus is recovering from UNABLE / dead cycles. */
@@ -36,7 +48,7 @@ object PidPollPlanner {
      * @param failStreak consecutive failures per PID
      * @param cycle 1-based cycle counter
      * @param recovering true after bus-lost / dead cycle
-     * @param secondaryBudget max non-hero PIDs per cycle (keeps Dash snappy)
+     * @param secondaryBudget max rotating (non-always) PIDs per cycle
      */
     fun selectForCycle(
         activePids: List<ObdPid>,
@@ -45,8 +57,8 @@ object PidPollPlanner {
         recovering: Boolean,
         secondaryBudget: Int = 4,
     ): List<ObdPid> {
-        val heroes = activePids.filter { it.number in HERO_NUMBERS }
-        val secondaryPool = activePids.filter { it.number !in HERO_NUMBERS }
+        val always = activePids.filter { it.number in ALWAYS_NUMBERS }
+        val secondaryPool = activePids.filter { it.number !in ALWAYS_NUMBERS }
 
         val eligibleSecondary = secondaryPool.filter { pid ->
             if (recovering && pid.number !in CORE_NUMBERS) return@filter false
@@ -55,18 +67,23 @@ object PidPollPlanner {
 
         val secondaries = rotate(eligibleSecondary, cycle, secondaryBudget.coerceAtLeast(0))
 
-        // Stable order: RPM, Speed, then this cycle's secondaries (catalog order).
-        val heroOrdered = listOfNotNull(
-            heroes.firstOrNull { it == ObdPid.ENGINE_RPM },
-            heroes.firstOrNull { it == ObdPid.SPEED },
-        ) + heroes.filter { it != ObdPid.ENGINE_RPM && it != ObdPid.SPEED }
+        // Stable order: RPM, Speed, Coolant, MAF, then this cycle's secondaries.
+        val alwaysOrdered = listOfNotNull(
+            always.firstOrNull { it == ObdPid.ENGINE_RPM },
+            always.firstOrNull { it == ObdPid.SPEED },
+            always.firstOrNull { it == ObdPid.COOLANT_TEMP },
+            always.firstOrNull { it == ObdPid.MAF },
+        ) + always.filter {
+            it != ObdPid.ENGINE_RPM && it != ObdPid.SPEED &&
+                it != ObdPid.COOLANT_TEMP && it != ObdPid.MAF
+        }
 
-        return heroOrdered + secondaries
+        return alwaysOrdered + secondaries
     }
 
     /**
      * Secondary PIDs may be skipped after repeated failures so one flaky PID
-     * does not burn every cycle. Heroes never use this gate.
+     * does not burn every cycle. Always-polled PIDs never use this gate.
      */
     fun shouldRetrySecondary(
         pid: ObdPid,
@@ -74,7 +91,7 @@ object PidPollPlanner {
         cycle: Int,
         recovering: Boolean,
     ): Boolean {
-        if (pid.number in HERO_NUMBERS) return true
+        if (pid.number in ALWAYS_NUMBERS) return true
         if (streak >= 2 && cycle % 20 != 0) return false
         if (streak >= 1 && recovering && cycle % 5 != 0) return false
         return true
@@ -82,6 +99,9 @@ object PidPollPlanner {
 
     /** True when this PID must be requested every cycle regardless of streak. */
     fun isHero(pid: ObdPid): Boolean = pid.number in HERO_NUMBERS
+
+    /** True when this PID is requested every cycle (heroes + Coolant/MAF). */
+    fun isAlways(pid: ObdPid): Boolean = pid.number in ALWAYS_NUMBERS
 
     private fun rotate(eligible: List<ObdPid>, cycle: Int, budget: Int): List<ObdPid> {
         if (eligible.isEmpty() || budget <= 0) return emptyList()

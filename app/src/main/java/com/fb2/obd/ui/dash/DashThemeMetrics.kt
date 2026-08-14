@@ -39,6 +39,7 @@ object DashThemeMetrics {
         dtcCount: Int? = null,
         healthScore: HealthScore? = null,
         latchHealth: (String, MetricStatus) -> MetricStatus = { _, s -> s },
+        deepFoundValues: Map<String, String> = emptyMap(),
     ): List<DashThemeMetric> {
         val hs = healthSnapshot
         val engineRunning = (hs.rpm ?: snapshot.rpm ?: 0.0) > 0.0
@@ -142,7 +143,7 @@ object DashThemeMetrics {
             ),
             row(
                 "Fuel loop",
-                snapshot.fuelSystemStatus?.take(10) ?: "--",
+                abbreviateFuelLoop(snapshot.fuelSystemStatus),
                 "",
                 HealthEvaluator.fuelSystem(snapshot.fuelSystemStatus, snapshot.coolantC),
                 SnapshotFreshness.KEY_FUEL_LOOP, ObdPid.FUEL_SYSTEM_STATUS,
@@ -155,7 +156,32 @@ object DashThemeMetrics {
                 HealthEvaluator.vehicleHealth(healthScore?.vehiclePct),
                 null, null,
             ),
-        )
+        ).map { applyDeepFound(it, deepFoundValues) }
+    }
+
+    /** Keep Fuel loop readable in narrow OptA wheel slots (avoid "CLOSED LOO"). */
+    fun abbreviateFuelLoop(raw: String?): String {
+        if (raw.isNullOrBlank()) return "--"
+        val u = raw.trim().uppercase()
+        return when {
+            u.contains("CLOSED") -> "CLOSED"
+            u.contains("OPEN") -> "OPEN"
+            else -> raw.take(8)
+        }
+    }
+
+    private fun applyDeepFound(
+        metric: DashThemeMetric,
+        deepFound: Map<String, String>,
+    ): DashThemeMetric {
+        if (deepFound.isEmpty()) return metric
+        if (metric.value != "--" && metric.value.isNotBlank()) return metric
+        val recovered = deepFound[metric.label]
+            ?: metric.pidRequest?.let { deepFound[it] }
+            ?: return metric
+        val valuePart = recovered.substringBefore(" ").ifBlank { recovered }
+        val unitPart = recovered.substringAfter(" ", "").ifBlank { metric.unit }
+        return metric.copy(value = valuePart, unit = unitPart)
     }
 
     fun splitWheels(all: List<DashThemeMetric>): Pair<List<DashThemeMetric>, List<DashThemeMetric>> {
