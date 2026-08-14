@@ -7,7 +7,8 @@ package com.fb2.obd.ui.dash
  * Contract:
  * - double-tap → remap
  * - triple-tap → deep search
- * - long-press → deep search if available, else threshold editor
+ * - long-press → threshold editor when available, else deep search
+ *   (hold must reach thresholds on Opt; deep search stays on triple-tap)
  */
 object ThemeGestureLogic {
     const val TAP_WINDOW_MS = 520L
@@ -43,8 +44,8 @@ object ThemeGestureLogic {
     enum class HoldAction { DEEP_SEARCH, EDIT_THRESHOLDS, NONE }
 
     fun onHold(hasDeepSearch: Boolean, hasEditThresholds: Boolean): HoldAction = when {
-        hasDeepSearch -> HoldAction.DEEP_SEARCH
         hasEditThresholds -> HoldAction.EDIT_THRESHOLDS
+        hasDeepSearch -> HoldAction.DEEP_SEARCH
         else -> HoldAction.NONE
     }
 

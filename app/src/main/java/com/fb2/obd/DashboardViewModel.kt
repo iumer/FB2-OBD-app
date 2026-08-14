@@ -48,13 +48,14 @@ import com.fb2.obd.obd.ModuleScanResult
 import com.fb2.obd.obd.O2TestResult
 import com.fb2.obd.obd.PidCategory
 import com.fb2.obd.obd.PidDefinition
+import com.fb2.obd.obd.SnapshotFreshness
+import com.fb2.obd.obd.VehicleSnapshot
+import com.fb2.obd.obd.isEffectivelyBlank
 import com.fb2.obd.obd.PidProbeResult
 import com.fb2.obd.obd.ReadinessStatus
 import com.fb2.obd.obd.StandardPidCatalog
 import com.fb2.obd.obd.TripComputer
 import com.fb2.obd.obd.VehicleInfo
-import com.fb2.obd.obd.VehicleSnapshot
-import com.fb2.obd.obd.isEffectivelyBlank
 import com.fb2.obd.obd.withField
 import com.fb2.obd.perf.AccelResult
 import com.fb2.obd.perf.AccelerationTimer
@@ -342,21 +343,18 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
                 _deepFoundValues.update {
                     it + (label to text) + (report.targetId to text)
                 }
-                // Battery / Coolant deep-search must also feed the live snapshot
-                // so health / voice / CSV / Opt themes see the value, not just Classic overlay.
-                val isBattery = label.contains("battery", true) ||
-                    label.contains("ecu v", true) ||
-                    report.targetId.contains("0142", true)
-                val isCoolant1 = label.contains("coolant 1", true) ||
-                    label.equals("coolant", true) ||
-                    report.targetId.contains("0105", true)
-                when {
-                    isBattery -> _uiState.update { st ->
-                        st.copy(snapshot = st.snapshot.copy(batteryVolts = hit.value))
-                    }
-                    isCoolant1 -> _uiState.update { st ->
-                        st.copy(snapshot = st.snapshot.copy(coolantC = hit.value))
-                    }
+                // Feed recovered sensors into the live snapshot so Opt themes,
+                // health, voice, and CSV see them — not just Classic overlays.
+                val now = System.currentTimeMillis()
+                _uiState.update { st ->
+                    val applied = applyDeepSearchHit(
+                        snapshot = st.snapshot,
+                        label = label,
+                        targetId = report.targetId,
+                        value = hit.value,
+                        nowMs = now,
+                    )
+                    st.copy(snapshot = applied)
                 }
             }
             _deepSearch.update {
@@ -444,8 +442,9 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
     init {
         ObdLogger.valueLoggingEnabled = false
         val loadedProfile = profileStore.load()
+        val profileGearDefault = VehicleProfileConfig.defaultShowEstimatedGear(loadedProfile)
         _settings.value = SettingsState(
-            showEstimatedGear = VehicleProfileConfig.defaultShowEstimatedGear(loadedProfile),
+            showEstimatedGear = dashThemeStore.loadShowEstimatedGear(profileGearDefault),
             vehicleProfile = loadedProfile,
             dashTheme = dashThemeStore.load(),
         )
@@ -505,10 +504,12 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
     fun setVehicleProfile(profile: VehicleProfile) {
         if (profile == vehicleProfile) return
         profileStore.save(profile)
+        val gearDefault = VehicleProfileConfig.defaultShowEstimatedGear(profile)
+        dashThemeStore.saveShowEstimatedGear(gearDefault)
         _settings.update {
             it.copy(
                 vehicleProfile = profile,
-                showEstimatedGear = VehicleProfileConfig.defaultShowEstimatedGear(profile),
+                showEstimatedGear = gearDefault,
             )
         }
         // Drop Honda-only extras / overlays that are invisible in Generic.
@@ -989,6 +990,7 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun setShowEstimatedGear(enabled: Boolean) {
+        dashThemeStore.saveShowEstimatedGear(enabled)
         _settings.update { it.copy(showEstimatedGear = enabled) }
     }
 
@@ -1621,5 +1623,47 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
     companion object {
         /** How often the live LOG buffer is flushed to the session CSV on disk. */
         private const val CHECKPOINT_INTERVAL_MS = 60_000L
+
+        /**
+         * Map a deep-search hit into live snapshot fields + freshness timestamps
+         * so Dash / health / CSV keep the recovered value until the next good poll.
+         */
+        internal fun applyDeepSearchHit(
+            snapshot: VehicleSnapshot,
+            label: String,
+            targetId: String,
+            value: Double,
+            nowMs: Long,
+        ): VehicleSnapshot {
+            val lab = label.lowercase()
+            val tid = targetId.lowercase()
+            fun withFresh(key: String, block: VehicleSnapshot.() -> VehicleSnapshot): VehicleSnapshot {
+                val next = snapshot.block()
+                return next.copy(freshAtMs = next.freshAtMs + (key to nowMs))
+            }
+            return when {
+                lab.contains("battery") || lab.contains("ecu v") || tid.contains("0142") ->
+                    withFresh(SnapshotFreshness.KEY_BATTERY) { copy(batteryVolts = value) }
+                lab.contains("coolant 2") || tid.contains("0167") ->
+                    withFresh(SnapshotFreshness.KEY_COOLANT2) { copy(coolant2C = value) }
+                lab.contains("coolant") || tid.contains("0105") ->
+                    withFresh(SnapshotFreshness.KEY_COOLANT) { copy(coolantC = value) }
+                lab.contains("maf") || tid.contains("0110") ->
+                    withFresh(SnapshotFreshness.KEY_MAF) { copy(mafGps = value) }
+                lab.contains("ambient") || tid.contains("0146") ->
+                    withFresh(SnapshotFreshness.KEY_AMBIENT) { copy(ambientC = value) }
+                lab.startsWith("ltft") || tid.contains("0107") ->
+                    withFresh(SnapshotFreshness.KEY_LTFT) { copy(ltftPct = value) }
+                lab.startsWith("stft") || tid.contains("0106") ->
+                    withFresh(SnapshotFreshness.KEY_STFT) { copy(stftPct = value) }
+                lab.contains("intake") || tid.contains("010f") ->
+                    withFresh(SnapshotFreshness.KEY_INTAKE) { copy(intakeC = value) }
+                lab.contains("map") || tid.contains("010b") ->
+                    withFresh(SnapshotFreshness.KEY_MAP) { copy(mapKpa = value) }
+                lab.contains("timing") || tid.contains("010e") ->
+                    withFresh(SnapshotFreshness.KEY_TIMING) { copy(timingAdvance = value) }
+                else -> snapshot
+            }
+        }
     }
 }

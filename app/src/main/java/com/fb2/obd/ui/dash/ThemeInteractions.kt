@@ -20,7 +20,7 @@ import kotlinx.coroutines.launch
  * Classic + Opt theme Dash gesture contract (see [ThemeGestureLogic]):
  * - double-tap → remap / change value
  * - triple-tap → deep search
- * - long-press → deep search when available, else threshold editor
+ * - long-press → threshold editor when available, else deep search
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -75,8 +75,11 @@ fun DashThemeMetric.interaction(
     onRemapBase: (String) -> Unit,
     onDeepSearch: (label: String, pidId: String?) -> Unit,
     onEdit: (EditableMetric) -> Unit,
-): Triple<() -> Unit, () -> Unit, (() -> Unit)?> = Triple(
-    { onRemapBase(label) },
-    { onDeepSearch(label, pidRequest) },
-    editMetric?.let { e -> { onEdit(e) } },
-)
+): Triple<() -> Unit, () -> Unit, (() -> Unit)?> {
+    val remapKey = remapBaseLabel ?: label
+    return Triple(
+        { onRemapBase(remapKey) },
+        { onDeepSearch(label, pidRequest) },
+        editMetric?.let { e -> { onEdit(e) } },
+    )
+}

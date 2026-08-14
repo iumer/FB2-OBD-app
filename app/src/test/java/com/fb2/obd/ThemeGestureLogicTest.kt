@@ -61,10 +61,14 @@ class ThemeGestureLogicTest {
     }
 
     @Test
-    fun hold_prefersDeepSearchOverThresholds() {
+    fun hold_prefersThresholdsOverDeepSearch() {
+        assertEquals(
+            ThemeGestureLogic.HoldAction.EDIT_THRESHOLDS,
+            ThemeGestureLogic.onHold(hasDeepSearch = true, hasEditThresholds = true),
+        )
         assertEquals(
             ThemeGestureLogic.HoldAction.DEEP_SEARCH,
-            ThemeGestureLogic.onHold(hasDeepSearch = true, hasEditThresholds = true),
+            ThemeGestureLogic.onHold(hasDeepSearch = true, hasEditThresholds = false),
         )
         assertEquals(
             ThemeGestureLogic.HoldAction.EDIT_THRESHOLDS,

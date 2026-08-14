@@ -104,11 +104,16 @@ fun OptAThemeDash(
     onDeepSearch: (label: String, pidId: String?) -> Unit,
     onEditThresholds: (EditableMetric) -> Unit,
     deepFoundValues: Map<String, String> = emptyMap(),
+    tileOverrides: Map<String, String> = emptyMap(),
+    catalog: List<com.fb2.obd.obd.PidDefinition> = emptyList(),
     rootModifier: Modifier = Modifier,
 ) {
-    val all = remember(snapshot, healthSnapshot, thresholds, dtcCount, healthScore, deepFoundValues) {
+    val all = remember(
+        snapshot, healthSnapshot, thresholds, dtcCount, healthScore, deepFoundValues, tileOverrides, catalog,
+    ) {
         DashThemeMetrics.sideMetrics(
-            snapshot, healthSnapshot, thresholds, dtcCount, healthScore, latchHealth, deepFoundValues,
+            snapshot, healthSnapshot, thresholds, dtcCount, healthScore, latchHealth,
+            deepFoundValues, tileOverrides, catalog,
         )
     }
     val (left, right) = remember(all) { DashThemeMetrics.splitWheels(all) }
@@ -330,11 +335,16 @@ fun OptBThemeDash(
     onDeepSearch: (label: String, pidId: String?) -> Unit,
     onEditThresholds: (EditableMetric) -> Unit,
     deepFoundValues: Map<String, String> = emptyMap(),
+    tileOverrides: Map<String, String> = emptyMap(),
+    catalog: List<com.fb2.obd.obd.PidDefinition> = emptyList(),
     rootModifier: Modifier = Modifier,
 ) {
-    val metrics = remember(snapshot, healthSnapshot, thresholds, dtcCount, healthScore, deepFoundValues) {
+    val metrics = remember(
+        snapshot, healthSnapshot, thresholds, dtcCount, healthScore, deepFoundValues, tileOverrides, catalog,
+    ) {
         DashThemeMetrics.sideMetrics(
-            snapshot, healthSnapshot, thresholds, dtcCount, healthScore, latchHealth, deepFoundValues,
+            snapshot, healthSnapshot, thresholds, dtcCount, healthScore, latchHealth,
+            deepFoundValues, tileOverrides, catalog,
         ).take(6)
     }
     val rpmTarget = ((snapshot.rpm ?: 0.0) / 8000.0).coerceIn(0.0, 1.0).toFloat()
@@ -481,17 +491,26 @@ fun OptCThemeDash(
     onDeepSearch: (label: String, pidId: String?) -> Unit,
     onEditThresholds: (EditableMetric) -> Unit,
     deepFoundValues: Map<String, String> = emptyMap(),
+    tileOverrides: Map<String, String> = emptyMap(),
+    catalog: List<com.fb2.obd.obd.PidDefinition> = emptyList(),
     rootModifier: Modifier = Modifier,
 ) {
-    val metrics = remember(snapshot, healthSnapshot, thresholds, dtcCount, healthScore, deepFoundValues) {
+    val metrics = remember(
+        snapshot, healthSnapshot, thresholds, dtcCount, healthScore, deepFoundValues, tileOverrides, catalog,
+    ) {
         val preferred = listOf(
             "Coolant 1", "Battery", "Intake", "Throttle", "MAP", "MAF", "STFT", "Timing", "Health",
         )
         val all = DashThemeMetrics.sideMetrics(
-            snapshot, healthSnapshot, thresholds, dtcCount, healthScore, latchHealth, deepFoundValues,
+            snapshot, healthSnapshot, thresholds, dtcCount, healthScore, latchHealth,
+            deepFoundValues, tileOverrides, catalog,
         )
-        preferred.mapNotNull { name -> all.firstOrNull { it.label.equals(name, true) } }
-            .ifEmpty { all.take(9) }
+        // Prefer by remap base or displayed label.
+        preferred.mapNotNull { name ->
+            all.firstOrNull {
+                it.remapBaseLabel.equals(name, true) || it.label.equals(name, true)
+            }
+        }.ifEmpty { all.take(9) }
     }
     val rpmTarget = ((snapshot.rpm ?: 0.0) / 7000.0).coerceIn(0.0, 1.0).toFloat()
     val rpmFrac by animateFloatAsState(
