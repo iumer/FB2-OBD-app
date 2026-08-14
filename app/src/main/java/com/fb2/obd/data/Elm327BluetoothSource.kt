@@ -64,6 +64,10 @@ class Elm327BluetoothSource(
     @Volatile
     private var pollingPaused: Boolean = false
 
+    /** After deep search, force a soft recover + clear fail streaks on resume. */
+    @Volatile
+    private var recoverAfterResume: Boolean = false
+
     /** Rolling ATRV samples for median filter (cheap clones spit occasional false lows). */
     private val atrvWindow = ArrayDeque<Double>(3)
 
@@ -74,7 +78,8 @@ class Elm327BluetoothSource(
 
     override fun resumePolling() {
         pollingPaused = false
-        logger.logDebug(ObdLogger.Dir.INFO, "ELM poll resumed")
+        recoverAfterResume = true
+        logger.logDebug(ObdLogger.Dir.INFO, "ELM poll resumed (recover pending)")
     }
 
     private val polled = listOf(
@@ -153,6 +158,14 @@ class Elm327BluetoothSource(
                     }
                     if (!isActive) break
 
+                    if (recoverAfterResume) {
+                        recoverAfterResume = false
+                        softRecover(conn)
+                        failStreak.clear()
+                        deadCycles = 0
+                        logger.logDebug(ObdLogger.Dir.INFO, "post-deep-search soft recover + streaks cleared")
+                    }
+
                     cycles++
                     var responded = 0
                     var timedOut = 0
@@ -230,7 +243,7 @@ class Elm327BluetoothSource(
                             responded++
                             mode01Ok = true
                             // Heroes keep retrying next cycle; cap streak so planner never skips them.
-                            failStreak[pid] = if (PidPollPlanner.isHero(pid)) {
+                            failStreak[pid] = if (PidPollPlanner.isAlways(pid)) {
                                 (streak + 1).coerceAtMost(1)
                             } else {
                                 (streak + 1).coerceAtMost(2)

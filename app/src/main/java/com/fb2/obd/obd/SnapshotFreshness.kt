@@ -72,7 +72,9 @@ class SnapshotFreshness(
         }
 
         // Coolant / Battery / MAF / MAP: never show hours-old "OK" numbers.
-        if (isStale(KEY_COOLANT)) {
+        // Coolant + MAF are always-polled; still allow a slightly longer TTL so a
+        // single slow ELM cycle (ATRV + heroes + secondaries) cannot blank them.
+        if (isStale(KEY_COOLANT, ttl = COOLANT_STALE_AFTER_MS)) {
             clearKey(KEY_COOLANT)
             out = out.copy(coolantC = null)
         }
@@ -80,7 +82,7 @@ class SnapshotFreshness(
             clearKey(KEY_BATTERY)
             out = out.copy(batteryVolts = null)
         }
-        if (isStale(KEY_MAF)) {
+        if (isStale(KEY_MAF, ttl = MAF_STALE_AFTER_MS)) {
             clearKey(KEY_MAF)
             out = out.copy(mafGps = null)
         }
@@ -125,6 +127,12 @@ class SnapshotFreshness(
 
         /** ~2–3 slow ELM cycles; short enough to avoid 65-vs-98 freezes. */
         const val STALE_AFTER_MS = 2_500L
+
+        /** Coolant is always-polled but cycles can stretch on cheap clones. */
+        const val COOLANT_STALE_AFTER_MS = 5_000L
+
+        /** MAF is always-polled; same longer TTL as Coolant. */
+        const val MAF_STALE_AFTER_MS = 5_000L
 
         /** ATRV may skip odd cycles — allow a bit longer before blanking volts. */
         const val BATTERY_STALE_AFTER_MS = 4_000L

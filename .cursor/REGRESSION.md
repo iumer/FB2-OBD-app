@@ -46,8 +46,20 @@ Universal APK (only URL):
 19. Confusion: does LOG capture theme widgets or Classic tiles?  
    **Answer under test:** theme-independent canonical Dash CSV (hero + built-in tiles + extras); not Fuel/Trip/Trans/Perf pages.
 
-### Estimated gear
-20. Shows “–” when speed &lt; ~5 km/h (by design) or when setting off / Generic default off / stale RPM+Speed.
+### Drive-test UX / Coolant blanking (2026-08)
+21. **Coolant 1 / MAF intermittent `--` while ELM LINKED** — poll planner now always requests Coolant+MAF; longer Coolant/MAF TTL (5s).
+22. **Logging status invisible on Opt themes** — every Dash shows subtle `LOGGING` / `NOT LOGGING` + `NET`/`OFFLINE` + ELM link chips; menu shows STOP LOG when active.
+23. **OptA side wheels sticky/sloppy** — mid-drag dialer stepping + fling (not snap-only-on-release).
+24. **Deep search Tried 1/6 skipped 5** — simple Mode 01 forces run *before* bus abort; honest skip notes for advanced only.
+25. **Dash hangs after deep search** — always restore + `resumePolling` + soft recover / clear fail streaks.
+26. **OptB needles laggy** — `animateFloatAsState` on needle fraction.
+27. **OptC digital RPM overlaps gauge** — digits sit beside the dial, not on top of the arc.
+28. **Fuel loop truncated `CLOSED LOO`** — abbreviate to CLOSED/OPEN + ellipsis in wheels.
+
+### Must stay covered in code (additions)
+| Coolant/MAF always-poll + TTL | `SpeedFreshnessAndPollPlannerTest` |
+| Deep search Mode 01 before bus skip | `DeepSearchKnowledgeBaseTest` |
+| Theme status chips / Opt layouts | Paparazzi `ThemeDashboardSnapshotTest` |
 
 ---
 
@@ -67,6 +79,8 @@ Runs:
 | Gear estimate floor | `GearEstimatorTest`, `RegressionGateTest` |
 | Theme UI smoke (landscape) | `ThemeDashboardSnapshotTest` |
 | Classic Dash smoke | `DashboardSnapshotTest` |
+| Coolant/MAF always-poll | `SpeedFreshnessAndPollPlannerTest` |
+| Deep search simple-force-first | `DeepSearchKnowledgeBaseTest` |
 
 ---
 
@@ -75,9 +89,10 @@ Runs:
 Use Paparazzi PNGs under `app/build/reports/paparazzi/` first. If a computer-use / emulator path exists, also verify:
 
 - [ ] OptA: side wheels readable, centered focus, swipe circulates, no jump
-- [ ] OptB: twin gauges + bottom chips intact
-- [ ] OptC: large RPM gauge + gear digit visible when speed ≥ 5
+- [ ] OptB: twin gauges + bottom chips intact; needles interpolate
+- [ ] OptC: RPM dial separate from digital digits; gear digit visible when speed ≥ 5
 - [ ] Classic: Idle/Perf/Trip tabs still present; Opt themes hide them
+- [ ] All themes: ELM / LOGGING / NET status visible
 - [ ] Settings: Vehicle profile + Theme dropdowns
 - [ ] LOG start/stop; CSV has Dash columns, no Transmission page dump
 - [ ] Double-tap / hold / triple-tap still wired on themed metrics

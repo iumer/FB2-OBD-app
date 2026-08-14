@@ -35,32 +35,82 @@ import androidx.compose.ui.unit.sp
 import com.fb2.obd.obd.DashTheme
 import com.fb2.obd.ui.theme.LocalThemePalette
 
+/**
+ * Connection / logging status for themed Dash chrome.
+ * [elmLive] = real ELM Bluetooth live link.
+ * [demo] = simulated source with updating values.
+ */
+data class DashLinkStatus(
+    val elmLive: Boolean,
+    val demo: Boolean,
+    val logging: Boolean,
+    val online: Boolean,
+)
+
 @Composable
 fun ThemedTopBar(
     theme: DashTheme,
-    connected: Boolean,
+    link: DashLinkStatus,
     onOpenSettings: () -> Unit,
     onOpenDiag: () -> Unit,
     onOpenMin: () -> Unit,
-    onOpenLogs: () -> Unit,
+    onToggleLogging: () -> Unit,
     onConnect: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     when (theme) {
-        DashTheme.OPT_A -> OptAHeader(connected, onOpenSettings, onOpenDiag, onOpenMin, onOpenLogs, onConnect, modifier)
-        DashTheme.OPT_B -> OptBHeader(connected, onOpenSettings, onOpenDiag, onOpenMin, onOpenLogs, onConnect, modifier)
-        DashTheme.OPT_C -> OptCHeader(connected, onOpenSettings, onOpenDiag, onOpenMin, onOpenLogs, onConnect, modifier)
+        DashTheme.OPT_A -> OptAHeader(link, onOpenSettings, onOpenDiag, onOpenMin, onToggleLogging, onConnect, modifier)
+        DashTheme.OPT_B -> OptBHeader(link, onOpenSettings, onOpenDiag, onOpenMin, onToggleLogging, onConnect, modifier)
+        DashTheme.OPT_C -> OptCHeader(link, onOpenSettings, onOpenDiag, onOpenMin, onToggleLogging, onConnect, modifier)
         DashTheme.CLASSIC -> Unit
     }
 }
 
 @Composable
+private fun StatusPills(link: DashLinkStatus, accent: Color) {
+    val elmLabel = when {
+        link.elmLive -> "ELM · LINKED"
+        link.demo -> "DEMO"
+        else -> "ELM · OFFLINE"
+    }
+    val elmColor = when {
+        link.elmLive -> Color(0xFF5EEBA0)
+        link.demo -> Color(0xFFFFB74D)
+        else -> Color(0xFFFF6B6B)
+    }
+    val logLabel = if (link.logging) "LOGGING" else "NOT LOGGING"
+    val logColor = if (link.logging) Color(0xFF5EEBA0) else Color(0xFF888888)
+    val netLabel = if (link.online) "NET" else "OFFLINE"
+    val netColor = if (link.online) Color(0xFF5EEBA0) else Color(0xFF888888)
+
+    Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+        StatusChip(elmLabel, elmColor)
+        StatusChip(logLabel, logColor)
+        StatusChip(netLabel, netColor)
+    }
+}
+
+@Composable
+private fun StatusChip(text: String, color: Color) {
+    Text(
+        text = text,
+        color = color,
+        fontSize = 9.sp,
+        fontWeight = FontWeight.Bold,
+        letterSpacing = 0.4.sp,
+        modifier = Modifier
+            .border(1.dp, color.copy(alpha = 0.45f), RoundedCornerShape(6.dp))
+            .padding(horizontal = 6.dp, vertical = 2.dp),
+    )
+}
+
+@Composable
 private fun OptAHeader(
-    connected: Boolean,
+    link: DashLinkStatus,
     onOpenSettings: () -> Unit,
     onOpenDiag: () -> Unit,
     onOpenMin: () -> Unit,
-    onOpenLogs: () -> Unit,
+    onToggleLogging: () -> Unit,
     onConnect: () -> Unit,
     modifier: Modifier,
 ) {
@@ -69,34 +119,29 @@ private fun OptAHeader(
         modifier = modifier
             .fillMaxWidth()
             .background(Color(0xFF0A0A0A))
-            .padding(horizontal = 10.dp, vertical = 8.dp),
+            .padding(horizontal = 10.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             ThemeIcon(
                 ThemeIconKind.BLUETOOTH,
-                if (connected) Color(0xFF4AD8FF) else Color(0xFF666666),
-                size = 18.dp,
+                if (link.elmLive || link.demo) Color(0xFF4AD8FF) else Color(0xFF666666),
+                size = 16.dp,
             )
             Column {
                 Text("FB2 DIAG", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Black, letterSpacing = 1.sp)
-                Text(
-                    if (connected) "ELM327 · LINKED" else "ELM327 · OFFLINE",
-                    color = if (connected) Color(0xFF5EEBA0) else Color(0xFFFF6B6B),
-                    fontSize = 9.sp,
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 0.6.sp,
-                )
+                StatusPills(link, p.accent)
             }
         }
         Spacer(Modifier.weight(1f))
         ThemeMenuButton(
             accent = p.accent,
             border = p.accent.copy(alpha = 0.45f),
+            logging = link.logging,
             onOpenSettings = onOpenSettings,
             onOpenDiag = onOpenDiag,
             onOpenMin = onOpenMin,
-            onOpenLogs = onOpenLogs,
+            onToggleLogging = onToggleLogging,
             onConnect = onConnect,
         )
     }
@@ -104,11 +149,11 @@ private fun OptAHeader(
 
 @Composable
 private fun OptBHeader(
-    connected: Boolean,
+    link: DashLinkStatus,
     onOpenSettings: () -> Unit,
     onOpenDiag: () -> Unit,
     onOpenMin: () -> Unit,
-    onOpenLogs: () -> Unit,
+    onToggleLogging: () -> Unit,
     onConnect: () -> Unit,
     modifier: Modifier,
 ) {
@@ -117,26 +162,31 @@ private fun OptBHeader(
         modifier = modifier
             .fillMaxWidth()
             .background(Color(0xFF050505))
-            .padding(horizontal = 12.dp, vertical = 8.dp),
+            .padding(horizontal = 12.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(
-            "FB2 DIAG",
-            color = Color.White,
-            fontSize = 18.sp,
-            fontWeight = FontWeight.Black,
-            letterSpacing = 2.sp,
-            fontFamily = FontFamily.SansSerif,
-        )
+        Column {
+            Text(
+                "FB2 DIAG",
+                color = Color.White,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Black,
+                letterSpacing = 2.sp,
+                fontFamily = FontFamily.SansSerif,
+            )
+            StatusPills(link, p.accent)
+        }
         Spacer(Modifier.weight(1f))
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            MilLamp(on = !connected)
+            // MIL only for real offline — not Demo
+            MilLamp(on = !link.elmLive && !link.demo)
             OverflowMenu(
                 accent = p.accent,
+                logging = link.logging,
                 onOpenSettings = onOpenSettings,
                 onOpenDiag = onOpenDiag,
                 onOpenMin = onOpenMin,
-                onOpenLogs = onOpenLogs,
+                onToggleLogging = onToggleLogging,
                 onConnect = onConnect,
             )
         }
@@ -145,11 +195,11 @@ private fun OptBHeader(
 
 @Composable
 private fun OptCHeader(
-    connected: Boolean,
+    link: DashLinkStatus,
     onOpenSettings: () -> Unit,
     onOpenDiag: () -> Unit,
     onOpenMin: () -> Unit,
-    onOpenLogs: () -> Unit,
+    onToggleLogging: () -> Unit,
     onConnect: () -> Unit,
     modifier: Modifier,
 ) {
@@ -158,37 +208,41 @@ private fun OptCHeader(
         modifier = modifier
             .fillMaxWidth()
             .background(Color(0xFF070707))
-            .padding(horizontal = 12.dp, vertical = 8.dp),
+            .padding(horizontal = 12.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(
-            buildAnnotatedString {
-                withStyle(SpanStyle(color = Color.White, fontWeight = FontWeight.Black)) { append("FB2") }
-                append(" ")
-                withStyle(SpanStyle(color = Color(0xFFFF6A00), fontWeight = FontWeight.Black)) { append("DIAG") }
-            },
-            fontSize = 20.sp,
-            letterSpacing = 1.5.sp,
-        )
+        Column {
+            Text(
+                buildAnnotatedString {
+                    withStyle(SpanStyle(color = Color.White, fontWeight = FontWeight.Black)) { append("FB2") }
+                    append(" ")
+                    withStyle(SpanStyle(color = Color(0xFFFF6A00), fontWeight = FontWeight.Black)) { append("DIAG") }
+                },
+                fontSize = 18.sp,
+                letterSpacing = 1.5.sp,
+            )
+            StatusPills(link, p.accent)
+        }
         Spacer(Modifier.weight(1f))
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             ThemeIcon(
                 ThemeIconKind.BLUETOOTH,
-                if (connected) Color(0xFFFF8A3D) else Color(0xFF666666),
-                size = 18.dp,
+                if (link.elmLive || link.demo) Color(0xFFFF8A3D) else Color(0xFF666666),
+                size = 16.dp,
             )
             ThemeIcon(
                 ThemeIconKind.OBD,
-                if (connected) Color(0xFFFF8A3D) else Color(0xFF666666),
-                size = 20.dp,
+                if (link.elmLive) Color(0xFFFF8A3D) else Color(0xFF666666),
+                size = 18.dp,
             )
             ThemeMenuButton(
                 accent = p.accent,
                 border = p.accent.copy(alpha = 0.45f),
+                logging = link.logging,
                 onOpenSettings = onOpenSettings,
                 onOpenDiag = onOpenDiag,
                 onOpenMin = onOpenMin,
-                onOpenLogs = onOpenLogs,
+                onToggleLogging = onToggleLogging,
                 onConnect = onConnect,
             )
         }
@@ -217,10 +271,11 @@ private fun MilLamp(on: Boolean) {
 @Composable
 private fun OverflowMenu(
     accent: Color,
+    logging: Boolean,
     onOpenSettings: () -> Unit,
     onOpenDiag: () -> Unit,
     onOpenMin: () -> Unit,
-    onOpenLogs: () -> Unit,
+    onToggleLogging: () -> Unit,
     onConnect: () -> Unit,
 ) {
     var open by remember { mutableStateOf(false) }
@@ -238,10 +293,11 @@ private fun OverflowMenu(
             open = open,
             onDismiss = { open = false },
             accent = accent,
+            logging = logging,
             onOpenSettings = onOpenSettings,
             onOpenDiag = onOpenDiag,
             onOpenMin = onOpenMin,
-            onOpenLogs = onOpenLogs,
+            onToggleLogging = onToggleLogging,
             onConnect = onConnect,
         )
     }
@@ -251,10 +307,11 @@ private fun OverflowMenu(
 private fun ThemeMenuButton(
     accent: Color,
     border: Color,
+    logging: Boolean,
     onOpenSettings: () -> Unit,
     onOpenDiag: () -> Unit,
     onOpenMin: () -> Unit,
-    onOpenLogs: () -> Unit,
+    onToggleLogging: () -> Unit,
     onConnect: () -> Unit,
 ) {
     var open by remember { mutableStateOf(false) }
@@ -274,10 +331,11 @@ private fun ThemeMenuButton(
             open = open,
             onDismiss = { open = false },
             accent = accent,
+            logging = logging,
             onOpenSettings = onOpenSettings,
             onOpenDiag = onOpenDiag,
             onOpenMin = onOpenMin,
-            onOpenLogs = onOpenLogs,
+            onToggleLogging = onToggleLogging,
             onConnect = onConnect,
         )
     }
@@ -288,17 +346,26 @@ private fun ThemeDropdown(
     open: Boolean,
     onDismiss: () -> Unit,
     accent: Color,
+    logging: Boolean,
     onOpenSettings: () -> Unit,
     onOpenDiag: () -> Unit,
     onOpenMin: () -> Unit,
-    onOpenLogs: () -> Unit,
+    onToggleLogging: () -> Unit,
     onConnect: () -> Unit,
 ) {
     DropdownMenu(expanded = open, onDismissRequest = onDismiss) {
         DropdownMenuItem(text = { Text("Settings") }, onClick = { onDismiss(); onOpenSettings() })
         DropdownMenuItem(text = { Text("DIAG") }, onClick = { onDismiss(); onOpenDiag() })
         DropdownMenuItem(text = { Text("MIN") }, onClick = { onDismiss(); onOpenMin() })
-        DropdownMenuItem(text = { Text("LOG") }, onClick = { onDismiss(); onOpenLogs() })
+        DropdownMenuItem(
+            text = {
+                Text(
+                    if (logging) "STOP LOG" else "LOG",
+                    color = if (logging) Color(0xFFFF5252) else accent,
+                )
+            },
+            onClick = { onDismiss(); onToggleLogging() },
+        )
         DropdownMenuItem(
             text = { Text("Connect", color = accent) },
             onClick = { onDismiss(); onConnect() },

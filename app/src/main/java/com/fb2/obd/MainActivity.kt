@@ -255,6 +255,7 @@ class MainActivity : ComponentActivity() {
                         showEstimatedGear = settings.showEstimatedGear,
                         dashTheme = settings.dashTheme,
                         loggingActive = settings.valueLogging,
+                        networkOnline = uploadStatus.online,
                         pageTitles = viewModel.dashPageTitles,
                         profileBadge = settings.vehicleProfile.badge,
                         onConnectClick = {

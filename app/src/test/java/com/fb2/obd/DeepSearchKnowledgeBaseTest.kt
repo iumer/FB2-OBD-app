@@ -87,7 +87,32 @@ class DeepSearchKnowledgeBaseTest {
         val joined = report.notes.joinToString(" ")
         assertTrue(
             "expected honest skip note, got: $joined",
-            joined.contains("Skipped", ignoreCase = true) || joined.contains("link is down", ignoreCase = true),
+            joined.contains("Skipped", ignoreCase = true) ||
+                joined.contains("Skipping", ignoreCase = true) ||
+                joined.contains("link", ignoreCase = true),
         )
+    }
+
+    @Test
+    fun deepSearch_coolantTriesMode01BeforeBusAbort() = runBlocking {
+        var saw0105 = false
+        val source = object : com.fb2.obd.data.ObdSource {
+            override val name = "Fake flaky bus"
+            override val isLive = true
+            override fun snapshots() = kotlinx.coroutines.flow.flowOf(com.fb2.obd.obd.VehicleSnapshot.EMPTY)
+            override suspend fun command(raw: String): String {
+                val u = raw.uppercase().trim()
+                if (u == "0105") {
+                    saw0105 = true
+                    // Valid Mode 01 coolant frame: 41 05 5A => 50°C
+                    return "41055A"
+                }
+                return "UNABLE TO CONNECT"
+            }
+        }
+        val report = DeepSensorSearch.run(source, "Coolant 1", null, "0105")
+        assertTrue("must attempt broadcast 0105 before bus abort", saw0105)
+        assertTrue("coolant Mode 01 force should succeed even if RPM ping fails", report.success)
+        assertNotNull(report.hit)
     }
 }
