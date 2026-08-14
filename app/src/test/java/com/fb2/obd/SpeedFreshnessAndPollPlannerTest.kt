@@ -161,15 +161,21 @@ class SpeedFreshnessAndPollPlannerTest {
     }
 
     @Test
-    fun freshness_coolantSurvivesBriefSlowCycle() {
+    fun freshness_successStampSurvivesLongCycle() {
+        // Documents the old bug: mark at cycleStart, sanitize at cycleEnd > TTL → wipe.
         val fresh = SnapshotFreshness(staleAfterMs = 2_500L)
-        fresh.markOk(SnapshotFreshness.KEY_COOLANT, 0L)
-        fresh.markOk(SnapshotFreshness.KEY_MAF, 0L)
-        val snap = VehicleSnapshot(coolantC = 92.0, mafGps = 4.5)
-        // Generic TTL would blank at 2501ms; Coolant/MAF keep until 5s.
-        val still = fresh.sanitize(snap, nowMs = 3_500L, rpmUpdatedThisCycle = false)
-        assertEquals(92.0, still.coolantC!!, 0.01)
-        assertEquals(4.5, still.mafGps!!, 0.01)
+        val markAt = 1_000L
+        fresh.markOk(SnapshotFreshness.KEY_COOLANT, markAt)
+        fresh.markOk(SnapshotFreshness.KEY_MAF, markAt)
+        val snap = VehicleSnapshot(coolantC = 90.0, mafGps = 5.0)
+        // Success-time stamp + 5s Coolant/MAF TTL: still fresh 4s later.
+        val ok = fresh.sanitize(snap, nowMs = markAt + 4_000L, rpmUpdatedThisCycle = false)
+        assertEquals(90.0, ok.coolantC!!, 0.01)
+        assertEquals(5.0, ok.mafGps!!, 0.01)
+        // Past 5s TTL — must blank.
+        val gone = fresh.sanitize(snap, nowMs = markAt + 5_001L, rpmUpdatedThisCycle = false)
+        assertNull(gone.coolantC)
+        assertNull(gone.mafGps)
     }
 
     @Test

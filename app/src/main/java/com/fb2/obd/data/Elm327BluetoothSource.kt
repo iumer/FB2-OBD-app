@@ -173,7 +173,6 @@ class Elm327BluetoothSource(
                     var busLost = false
                     var rpmUpdated = false
                     var mode01Ok = false
-                    val cycleStartMs = System.currentTimeMillis()
 
                     // ATRV first every cycle — adapter rail voltage does NOT need the ECU.
                     // Prefer ATRV over Mode 01 0142 (ECU module V can differ / lag; Torque uses ATRV).
@@ -183,7 +182,9 @@ class Elm327BluetoothSource(
                             responded++
                             atrvThisCycle = v
                             snapshot = snapshot.copy(batteryVolts = v)
-                            freshness.markOk(SnapshotFreshness.KEY_BATTERY, cycleStartMs)
+                            // Stamp success time — not cycleStart — so a long cycle cannot
+                            // TTL-wipe a value that was just decoded this same cycle.
+                            freshness.markOk(SnapshotFreshness.KEY_BATTERY, System.currentTimeMillis())
                         }
                     }
 
@@ -230,12 +231,13 @@ class Elm327BluetoothSource(
                             responded++
                             mode01Ok = true
                             failStreak[pid] = 0
+                            val okAt = System.currentTimeMillis()
                             // Do not let 0142 overwrite a fresh ATRV reading this cycle.
                             if (pid == ObdPid.CONTROL_MODULE_VOLTAGE && atrvThisCycle != null) {
-                                freshness.markPid(pid, cycleStartMs)
+                                freshness.markPid(pid, okAt)
                             } else {
                                 snapshot = snapshot.merge(pid, value)
-                                freshness.markPid(pid, cycleStartMs)
+                                freshness.markPid(pid, okAt)
                             }
                             if (pid == ObdPid.ENGINE_RPM) rpmUpdated = true
                         } else {

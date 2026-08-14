@@ -1090,15 +1090,18 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
                 lastLiveSnapshotMs = System.currentTimeMillis()
                 val prev = _uiState.value.snapshot
                 // Never wipe a live Dash with a blank reconnect frame.
-                val snapshot = if (incoming.isEffectivelyBlank() && !prev.isEffectivelyBlank()) {
+                val base = if (incoming.isEffectivelyBlank() && !prev.isEffectivelyBlank()) {
                     prev
                 } else {
                     incoming
                 }
+                // Keep deep-search recoveries until a live poll fills that field again.
+                val snapshot = overlayDeepFoundOntoSnapshot(base, System.currentTimeMillis())
+                clearDeepFoundWhenLive(incoming)
                 val now = System.currentTimeMillis()
                 if (ObdLogger.valueLoggingEnabled && now - lastSnapshotLogMs >= 1_000L) {
                     lastSnapshotLogMs = now
-                    ObdLogger.logSnapshot(incoming, now)
+                    ObdLogger.logSnapshot(snapshot, now)
                 }
                 // Smooth noisy sensors for health/voice; UI still shows raw [snapshot].
                 val decision = diagnosticBrain.decisionSnapshot(snapshot)
@@ -1618,6 +1621,58 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
         logUploadManager.stop()
         voiceAlerter.shutdown()
         super.onCleared()
+    }
+
+    /**
+     * When a live poll has filled a field again, drop the sticky deep-search
+     * overlay so Classic cannot freeze an old recovered number.
+     */
+    private fun clearDeepFoundWhenLive(incoming: VehicleSnapshot) {
+        if (_deepFoundValues.value.isEmpty()) return
+        val drop = mutableSetOf<String>()
+        fun dropLabel(label: String, idHint: String) {
+            drop += label
+            drop += idHint
+        }
+        if (incoming.coolantC != null) dropLabel("Coolant 1", "0105")
+        if (incoming.coolant2C != null) dropLabel("Coolant 2", "0167")
+        if (incoming.mafGps != null) dropLabel("MAF", "0110")
+        if (incoming.ambientC != null) dropLabel("Ambient", "0146")
+        if (incoming.ltftPct != null) dropLabel("LTFT", "0107")
+        if (incoming.stftPct != null) dropLabel("STFT", "0106")
+        if (incoming.batteryVolts != null) {
+            dropLabel("Battery", "0142")
+            drop += "ECU V"
+        }
+        if (incoming.intakeC != null) dropLabel("Intake", "010F")
+        if (incoming.mapKpa != null) dropLabel("MAP", "010B")
+        if (incoming.timingAdvance != null) dropLabel("Timing", "010E")
+        if (drop.isEmpty()) return
+        _deepFoundValues.update { cur -> cur.filterKeys { it !in drop } }
+    }
+
+    /** Re-apply deep-search hits into null snapshot fields until live poll returns. */
+    private fun overlayDeepFoundOntoSnapshot(snap: VehicleSnapshot, nowMs: Long): VehicleSnapshot {
+        val deep = _deepFoundValues.value
+        if (deep.isEmpty()) return snap
+        var out = snap
+        fun tryApply(label: String, id: String, missing: Boolean) {
+            if (!missing) return
+            val text = deep[label] ?: deep[id] ?: return
+            val raw = text.substringBefore(" ").toDoubleOrNull() ?: return
+            out = applyDeepSearchHit(out, label, id, raw, nowMs)
+        }
+        tryApply("Coolant 1", "0105", out.coolantC == null)
+        tryApply("Coolant 2", "0167", out.coolant2C == null)
+        tryApply("MAF", "0110", out.mafGps == null)
+        tryApply("Ambient", "0146", out.ambientC == null)
+        tryApply("LTFT", "0107", out.ltftPct == null)
+        tryApply("STFT", "0106", out.stftPct == null)
+        tryApply("Battery", "0142", out.batteryVolts == null)
+        tryApply("Intake", "010F", out.intakeC == null)
+        tryApply("MAP", "010B", out.mapKpa == null)
+        tryApply("Timing", "010E", out.timingAdvance == null)
+        return out
     }
 
     companion object {

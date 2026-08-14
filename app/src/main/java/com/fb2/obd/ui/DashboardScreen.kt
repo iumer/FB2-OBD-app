@@ -839,19 +839,19 @@ private fun MetricsPage(
             } else {
                 val unsupported = t.pid != null && t.pid.number in snapshot.unsupportedPids
                 val recovered = deepFoundValues[t.label]
-                // Prefer a live or recovered value over the support-bitmask "n/s"
-                // (Battery often works via ATRV even when ECU omits 0142).
+                // Prefer live over a sticky deep-search recovery (Opt does the same).
                 val hasLive = t.value != "--" && t.value.isNotBlank()
                 val showNs = unsupported && recovered == null && !hasLive
+                val needsDeep = !hasLive // blank OR n/s — Coolant can TTL-blank without being unsupported
                 val value = when {
-                    recovered != null -> recovered.substringBefore(" ")
                     hasLive -> t.value
+                    recovered != null -> recovered.substringBefore(" ")
                     unsupported -> "n/s"
                     else -> t.value
                 }
                 val unit = when {
-                    recovered != null -> recovered.substringAfter(" ", "")
                     hasLive -> t.unit
+                    recovered != null -> recovered.substringAfter(" ", "")
                     unsupported -> ""
                     else -> t.unit
                 }
@@ -862,11 +862,11 @@ private fun MetricsPage(
                     health = if (showNs) null else t.status?.health,
                     statusLabel = if (showNs) null else t.status?.label,
                     muted = showNs,
-                    deepSearchHint = showNs,
+                    deepSearchHint = needsDeep,
                     freshAtMs = t.pid?.let { SnapshotFreshness.keyFor(it) }
                         ?.let { snapshot.freshAtMs[it] }
                         ?.takeUnless { showNs },
-                    onDeepSearch = if (showNs) {
+                    onDeepSearch = if (needsDeep) {
                         { onDeepSearch(t.label, t.pid?.request) }
                     } else {
                         null
