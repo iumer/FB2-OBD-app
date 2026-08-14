@@ -533,12 +533,14 @@ fun OptCThemeDash(
                 contentAlignment = Alignment.Center,
             ) {
                 // Dial left, digital readout right — digits must not sit on the needle arc.
+                val boxW = maxWidth
+                val boxH = maxHeight
+                val gaugeSize = minOf(boxW * 0.62f, boxH) * 0.98f
                 Row(
                     modifier = Modifier.fillMaxSize(),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
-                    val gaugeSize = minOf(maxWidth * 0.62f, maxHeight) * 0.98f
                     Box(
                         modifier = Modifier
                             .weight(0.62f)
