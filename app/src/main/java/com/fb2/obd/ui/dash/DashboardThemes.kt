@@ -417,7 +417,7 @@ fun OptBThemeDash(
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(horizontal = 6.dp, vertical = 10.dp),
+                        .padding(horizontal = 6.dp, vertical = 12.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.SpaceBetween,
                 ) {
@@ -554,7 +554,7 @@ fun OptCThemeDash(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .weight(0.55f)
+                .weight(0.48f)
                 .clip(RoundedCornerShape(26.dp))
                 .background(
                     Brush.radialGradient(
@@ -563,7 +563,7 @@ fun OptCThemeDash(
                     ),
                 )
                 .border(1.dp, palette.accent.copy(alpha = 0.28f), RoundedCornerShape(26.dp))
-                .padding(horizontal = 10.dp, vertical = 10.dp),
+                .padding(start = 10.dp, end = 10.dp, top = 8.dp, bottom = 14.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             BoxWithConstraints(
@@ -681,7 +681,7 @@ fun OptCThemeDash(
                     verticalArrangement = Arrangement.SpaceBetween,
                     modifier = Modifier
                         .fillMaxHeight()
-                        .padding(vertical = 6.dp),
+                        .padding(top = 4.dp, bottom = 2.dp),
                 ) {
                     Text(
                         "GEAR",
@@ -720,7 +720,7 @@ fun OptCThemeDash(
                 modifier = Modifier
                     .weight(0.34f)
                     .fillMaxHeight()
-                    .padding(vertical = 4.dp)
+                    .padding(top = 4.dp, bottom = 2.dp)
                     .themeMetricGestures(
                         onRemap = { onRemapBase("Speed") },
                         onDeepSearch = { onDeepSearch("Speed", "010D") },
@@ -755,7 +755,7 @@ fun OptCThemeDash(
                     Text(
                         text = snapshot.speedKmh?.roundToInt()?.toString() ?: "--",
                         color = palette.textPrimary,
-                        fontSize = 40.sp,
+                        fontSize = 36.sp,
                         fontWeight = FontWeight.Black,
                         fontFamily = DigitFace,
                         maxLines = 1,
@@ -767,6 +767,7 @@ fun OptCThemeDash(
                     fontSize = 12.sp,
                     fontWeight = FontWeight.SemiBold,
                     maxLines = 1,
+                    lineHeight = 14.sp,
                 )
             }
         }
@@ -775,7 +776,7 @@ fun OptCThemeDash(
 
         LazyVerticalGrid(
             columns = GridCells.Fixed(3),
-            modifier = Modifier.fillMaxWidth().weight(0.45f),
+            modifier = Modifier.fillMaxWidth().weight(0.52f),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
