@@ -49,7 +49,7 @@ Universal APK (only URL):
 ### Drive-test UX / Coolant blanking (2026-08)
 21. **Coolant 1 / MAF intermittent `--` while ELM LINKED** — poll planner now always requests Coolant+MAF; longer Coolant/MAF TTL (5s).
 22. **Logging status invisible on Opt themes** — every Dash shows subtle `LOGGING` / `NOT LOGGING` + `NET`/`OFFLINE` + ELM link chips; menu shows STOP LOG when active.
-23. **OptA side wheels sticky/sloppy** — mid-drag dialer stepping + fling (not snap-only-on-release).
+23. **OptA side wheels sticky/sloppy** — continuous fractional dialer scroll + decay fling + spring snap (no per-delta coroutine queue / AnimatedContent).
 24. **Deep search Tried 1/6 skipped 5** — simple Mode 01 forces run *before* bus abort; honest skip notes for advanced only.
 25. **Dash hangs after deep search** — always restore + `resumePolling` + soft recover / clear fail streaks.
 26. **OptB needles laggy** — `animateFloatAsState` on needle fraction.

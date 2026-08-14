@@ -147,6 +147,28 @@ class SpeedFreshnessAndPollPlannerTest {
     }
 
     @Test
+    fun freshness_clearsStaleIntakeAndThrottle() {
+        // 2026-08-14 drive: Intake + Throttle stuck flat for ~56 min (no TTL clear).
+        val fresh = SnapshotFreshness(staleAfterMs = 2_500L)
+        fresh.markOk(SnapshotFreshness.KEY_INTAKE, 0L)
+        fresh.markOk(SnapshotFreshness.KEY_THROTTLE, 0L)
+        fresh.markOk(SnapshotFreshness.KEY_RPM, 3_000L)
+        val sticky = VehicleSnapshot(
+            rpm = 1800.0,
+            intakeC = 60.0,
+            throttlePct = 13.72549019607843,
+        )
+        val stillFresh = fresh.sanitize(sticky, nowMs = 2_000L, rpmUpdatedThisCycle = true)
+        assertEquals(60.0, stillFresh.intakeC!!, 0.01)
+        assertEquals(13.72549019607843, stillFresh.throttlePct!!, 0.01)
+
+        val cleared = fresh.sanitize(sticky, nowMs = 2_501L, rpmUpdatedThisCycle = true)
+        assertNull(cleared.intakeC)
+        assertNull(cleared.throttlePct)
+        assertEquals(1800.0, cleared.rpm!!, 0.01)
+    }
+
+    @Test
     fun freshness_clearsStaleCoolantAndBattery() {
         val fresh = SnapshotFreshness(staleAfterMs = 2_500L)
         fresh.markOk(SnapshotFreshness.KEY_COOLANT, 0L)

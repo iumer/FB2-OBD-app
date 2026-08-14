@@ -4,18 +4,13 @@ package com.fb2.obd.ui.dash
 
 import android.graphics.Paint
 import android.graphics.Typeface
-import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.exponentialDecay
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
-import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -43,7 +38,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -84,6 +79,7 @@ import com.fb2.obd.ui.color
 import com.fb2.obd.ui.theme.ThemePalette
 import kotlin.math.absoluteValue
 import kotlin.math.cos
+import kotlin.math.floor
 import kotlin.math.roundToInt
 import kotlin.math.sin
 
@@ -808,7 +804,13 @@ private fun OrbitValuePanel(
     }
 }
 
-/** Dialer-style vertical picker — steps mid-drag like a phone wheel, not sticky snap-on-release. */
+/**
+ * Dialer-style vertical picker.
+ *
+ * Continuous fractional scroll (phone NumberPicker feel): drag updates index
+ * position synchronously (no per-delta coroutine queue — that felt sticky),
+ * fling uses decay, then spring-snaps to the nearest slot.
+ */
 @Composable
 private fun OrbitWheel(
     metrics: List<DashThemeMetric>,
@@ -819,21 +821,14 @@ private fun OrbitWheel(
     modifier: Modifier = Modifier,
 ) {
     val pages = metrics.ifEmpty { listOf(DashThemeMetric("–", "--", "")) }
-    var centerIndex by remember(pages.map { it.label }) {
-        mutableIntStateOf((1).coerceAtMost(pages.lastIndex.coerceAtLeast(0)))
-    }
-    val safeCenter = centerIndex.floorMod(pages.size.coerceAtLeast(1))
+    val pageCount = pages.size.coerceAtLeast(1)
+    val initial = 1f.coerceAtMost((pageCount - 1).toFloat().coerceAtLeast(0f))
+    val pageKey = pages.map { it.label }
+    var dragPos by remember(pageKey) { mutableFloatStateOf(initial) }
+    val settleAnim = remember(pageKey) { Animatable(initial) }
+    var settling by remember(pageKey) { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
-    val dragPx = remember { Animatable(0f) }
-    val density = LocalDensity.current
-    val stepPx = with(density) { 36.dp.toPx() }
-
-    fun idx(delta: Int): Int {
-        if (pages.isEmpty()) return 0
-        var i = (safeCenter + delta) % pages.size
-        if (i < 0) i += pages.size
-        return i
-    }
+    val displayPos = if (settling) settleAnim.value else dragPos
 
     Column(
         modifier = modifier
@@ -844,71 +839,6 @@ private fun OrbitWheel(
                 ),
             )
             .border(2.dp, palette.accent.copy(alpha = 0.8f), RoundedCornerShape(999.dp))
-            .pointerInput(pages.size, stepPx) {
-                val tracker = VelocityTracker()
-                var carry = 0f
-                detectVerticalDragGestures(
-                    onDragStart = {
-                        tracker.resetTracking()
-                        carry = 0f
-                        scope.launch { dragPx.stop(); dragPx.snapTo(0f) }
-                    },
-                    onDragEnd = {
-                        val vy = tracker.calculateVelocity().y
-                        scope.launch {
-                            val flingSteps = when {
-                                vy.absoluteValue > 3500f -> 2
-                                vy.absoluteValue > 1800f -> 1
-                                else -> 0
-                            }
-                            val dir = if (vy > 0f) -1 else 1
-                            if (flingSteps > 0 && vy.absoluteValue > 1800f) {
-                                repeat(flingSteps) {
-                                    centerIndex = (centerIndex + dir).floorMod(pages.size)
-                                }
-                            }
-                            dragPx.animateTo(
-                                0f,
-                                spring(
-                                    dampingRatio = Spring.DampingRatioNoBouncy,
-                                    stiffness = Spring.StiffnessMediumLow,
-                                ),
-                            )
-                            carry = 0f
-                        }
-                    },
-                    onDragCancel = {
-                        scope.launch {
-                            dragPx.animateTo(0f, spring(stiffness = Spring.StiffnessMedium))
-                            carry = 0f
-                        }
-                    },
-                    onVerticalDrag = { change, amount ->
-                        change.consume()
-                        tracker.addPosition(change.uptimeMillis, change.position)
-                        carry += amount
-                        // Step as soon as the finger crosses a slot — dialer, not sticky release-snap.
-                        var stepped = false
-                        while (carry > stepPx && pages.isNotEmpty()) {
-                            centerIndex = (centerIndex - 1).floorMod(pages.size)
-                            carry -= stepPx
-                            stepped = true
-                        }
-                        while (carry < -stepPx && pages.isNotEmpty()) {
-                            centerIndex = (centerIndex + 1).floorMod(pages.size)
-                            carry += stepPx
-                            stepped = true
-                        }
-                        scope.launch {
-                            if (stepped) {
-                                dragPx.snapTo(carry.coerceIn(-stepPx * 0.45f, stepPx * 0.45f))
-                            } else {
-                                dragPx.snapTo(carry.coerceIn(-stepPx, stepPx))
-                            }
-                        }
-                    },
-                )
-            }
             .padding(vertical = 4.dp, horizontal = 2.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
@@ -919,40 +849,104 @@ private fun OrbitWheel(
                 .fillMaxWidth()
                 .padding(horizontal = 2.dp),
         ) {
-            val slotH = maxHeight / 3
-            Box(modifier = Modifier.fillMaxSize()) {
+            val slotPx = with(LocalDensity.current) { maxHeight.toPx() / 3f }
+            val decay = remember {
+                exponentialDecay<Float>(frictionMultiplier = 1.35f)
+            }
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .pointerInput(pageCount, slotPx) {
+                        val tracker = VelocityTracker()
+                        detectVerticalDragGestures(
+                            onDragStart = {
+                                tracker.resetTracking()
+                                // Animatable.value is readable without suspend — take over mid-fling.
+                                if (settling) {
+                                    dragPos = settleAnim.value
+                                    settling = false
+                                }
+                                scope.launch { settleAnim.stop() }
+                            },
+                            onDragEnd = {
+                                val vy = tracker.calculateVelocity().y
+                                // px/s → index/s (finger down increases y → lower index).
+                                val velIndex = if (slotPx > 0.5f) -vy / slotPx else 0f
+                                scope.launch {
+                                    settling = true
+                                    settleAnim.snapTo(dragPos)
+                                    if (velIndex.absoluteValue > 0.4f) {
+                                        settleAnim.animateDecay(
+                                            initialVelocity = velIndex,
+                                            animationSpec = decay,
+                                        )
+                                    }
+                                    val target = settleAnim.value.roundToInt().toFloat()
+                                    settleAnim.animateTo(
+                                        target,
+                                        spring(
+                                            dampingRatio = 0.92f,
+                                            stiffness = Spring.StiffnessMedium,
+                                        ),
+                                    )
+                                    // Keep unbounded scroll math; wrap only for display.
+                                    dragPos = settleAnim.value
+                                    settling = false
+                                }
+                            },
+                            onDragCancel = {
+                                scope.launch {
+                                    settling = true
+                                    settleAnim.snapTo(dragPos)
+                                    val target = dragPos.roundToInt().toFloat()
+                                    settleAnim.animateTo(
+                                        target,
+                                        spring(stiffness = Spring.StiffnessMedium),
+                                    )
+                                    dragPos = settleAnim.value
+                                    settling = false
+                                }
+                            },
+                            onVerticalDrag = { change, amount ->
+                                change.consume()
+                                tracker.addPosition(change.uptimeMillis, change.position)
+                                if (slotPx > 0.5f) {
+                                    // Sync update — never queue a coroutine per frame.
+                                    dragPos -= amount / slotPx
+                                }
+                            },
+                        )
+                    },
+            ) {
+                val base = floor(displayPos.toDouble()).toInt()
+                val frac = (displayPos - base).toFloat()
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
-                        .offset { IntOffset(0, dragPx.value.roundToInt()) },
+                        .offset {
+                            IntOffset(0, (-frac * slotPx).roundToInt())
+                        },
                 ) {
-                    listOf(-1, 0, 1).forEach { delta ->
-                        val focused = delta == 0
+                    // Four slots so the next item is already painted while scrolling.
+                    val focusedIndex = displayPos.roundToInt().floorMod(pageCount)
+                    for (delta in -1..2) {
+                        val index = (base + delta).floorMod(pageCount)
+                        val metric = pages[index]
+                        val focused = index == focusedIndex
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(slotH),
+                                .height(maxHeight / 3),
                             contentAlignment = Alignment.Center,
                         ) {
-                            AnimatedContent(
-                                targetState = pages[idx(delta)],
-                                transitionSpec = {
-                                    (slideInVertically { h -> h / 5 } + fadeIn(tween(90))) togetherWith
-                                        (slideOutVertically { h -> -h / 5 } + fadeOut(tween(90)))
-                                },
-                                label = "orbit-slot-$delta",
-                                contentKey = { it.label },
-                                modifier = Modifier.fillMaxSize(),
-                            ) { metric ->
-                                OrbitWheelItem(
-                                    metric = metric,
-                                    focused = focused,
-                                    palette = palette,
-                                    onRemapBase = onRemapBase,
-                                    onDeepSearch = onDeepSearch,
-                                    onEditThresholds = onEditThresholds,
-                                )
-                            }
+                            OrbitWheelItem(
+                                metric = metric,
+                                focused = focused,
+                                palette = palette,
+                                onRemapBase = onRemapBase,
+                                onDeepSearch = onDeepSearch,
+                                onEditThresholds = onEditThresholds,
+                            )
                         }
                     }
                 }
@@ -960,7 +954,7 @@ private fun OrbitWheel(
                     modifier = Modifier
                         .align(Alignment.Center)
                         .fillMaxWidth()
-                        .height(slotH)
+                        .height(maxHeight / 3)
                         .padding(horizontal = 2.dp)
                         .border(1.5.dp, palette.accent.copy(alpha = 0.9f), RoundedCornerShape(12.dp)),
                 )
