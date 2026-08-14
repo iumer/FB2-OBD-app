@@ -393,62 +393,74 @@ fun OptBThemeDash(
                         onEditThresholds = { onEditThresholds(EditableMetric.RPM) },
                     ),
             )
-            Column(
+            BoxWithConstraints(
                 modifier = Modifier
                     .width(86.dp)
-                    .fillMaxHeight(0.82f)
-                    .clip(RoundedCornerShape(20.dp))
-                    .background(
-                        Brush.verticalGradient(listOf(Color(0xFF152030), palette.surface)),
-                    )
-                    .border(1.5.dp, palette.accent.copy(alpha = 0.65f), RoundedCornerShape(20.dp))
-                    .padding(horizontal = 6.dp, vertical = 12.dp)
+                    .fillMaxHeight(0.88f)
                     .themeMetricGestures(
                         onRemap = { onRemapBase("Gear") },
                         onDeepSearch = { onDeepSearch("Gear", null) },
                     ),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center,
             ) {
-                Text(
-                    "GEAR",
-                    color = palette.textMuted,
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 1.5.sp,
-                    maxLines = 1,
-                )
-                Spacer(modifier = Modifier.height(6.dp))
+                val gearSp = (maxHeight.value * 0.26f).coerceIn(28f, 44f).sp
+                val labelSp = (maxHeight.value * 0.055f).coerceIn(9f, 11f).sp
+                val badgeSp = (maxHeight.value * 0.05f).coerceIn(9f, 11f).sp
                 Box(
                     modifier = Modifier
-                        .width(28.dp)
-                        .height(2.dp)
-                        .background(palette.accent),
+                        .fillMaxSize()
+                        .clip(RoundedCornerShape(20.dp))
+                        .background(
+                            Brush.verticalGradient(listOf(Color(0xFF152030), palette.surface)),
+                        )
+                        .border(1.5.dp, palette.accent.copy(alpha = 0.65f), RoundedCornerShape(20.dp)),
                 )
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = if (gearSource == GearSource.NONE) "–" else (snapshot.gear?.toString() ?: "–"),
-                    color = palette.textPrimary,
-                    fontSize = 48.sp,
-                    fontWeight = FontWeight.Black,
-                    fontFamily = DigitFace,
-                    maxLines = 1,
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = when (gearSource) {
-                        GearSource.ECU -> "ECU"
-                        GearSource.ESTIMATED -> "EST"
-                        GearSource.NONE -> "—"
-                    },
-                    color = palette.accent,
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.Bold,
-                    maxLines = 1,
+                Column(
                     modifier = Modifier
-                        .border(1.dp, palette.accent, RoundedCornerShape(6.dp))
-                        .padding(horizontal = 8.dp, vertical = 3.dp),
-                )
+                        .fillMaxSize()
+                        .padding(horizontal = 6.dp, vertical = 10.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                            "GEAR",
+                            color = palette.textMuted,
+                            fontSize = labelSp,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 1.5.sp,
+                            maxLines = 1,
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Box(
+                            modifier = Modifier
+                                .width(28.dp)
+                                .height(2.dp)
+                                .background(palette.accent),
+                        )
+                    }
+                    Text(
+                        text = if (gearSource == GearSource.NONE) "–" else (snapshot.gear?.toString() ?: "–"),
+                        color = palette.textPrimary,
+                        fontSize = gearSp,
+                        fontWeight = FontWeight.Black,
+                        fontFamily = DigitFace,
+                        maxLines = 1,
+                    )
+                    Text(
+                        text = when (gearSource) {
+                            GearSource.ECU -> "ECU"
+                            GearSource.ESTIMATED -> "EST"
+                            GearSource.NONE -> "—"
+                        },
+                        color = palette.accent,
+                        fontSize = badgeSp,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        modifier = Modifier
+                            .border(1.dp, palette.accent, RoundedCornerShape(6.dp))
+                            .padding(horizontal = 8.dp, vertical = 3.dp),
+                    )
+                }
             }
             RealisticNeedleGauge(
                 valueText = snapshot.speedKmh?.roundToInt()?.toString() ?: "--",
@@ -542,7 +554,7 @@ fun OptCThemeDash(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .weight(0.52f)
+                .weight(0.55f)
                 .clip(RoundedCornerShape(26.dp))
                 .background(
                     Brush.radialGradient(
@@ -551,7 +563,7 @@ fun OptCThemeDash(
                     ),
                 )
                 .border(1.dp, palette.accent.copy(alpha = 0.28f), RoundedCornerShape(26.dp))
-                .padding(horizontal = 10.dp, vertical = 12.dp),
+                .padding(horizontal = 10.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             BoxWithConstraints(
@@ -614,7 +626,7 @@ fun OptCThemeDash(
                 }
             }
 
-            Box(
+            BoxWithConstraints(
                 modifier = Modifier
                     .weight(0.28f)
                     .fillMaxHeight()
@@ -624,7 +636,9 @@ fun OptCThemeDash(
                     ),
                 contentAlignment = Alignment.Center,
             ) {
-                Canvas(modifier = Modifier.fillMaxSize(0.78f)) {
+                val gearSp = (maxHeight.value * 0.34f).coerceIn(28f, 44f).sp
+                val badgeSp = (maxHeight.value * 0.07f).coerceIn(9f, 11f).sp
+                Canvas(modifier = Modifier.fillMaxSize(0.72f)) {
                     val cx = size.width / 2f
                     val cy = size.height / 2f
                     val r = size.minDimension * 0.40f
@@ -664,8 +678,10 @@ fun OptCThemeDash(
                 }
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center,
-                    modifier = Modifier.padding(vertical = 4.dp),
+                    verticalArrangement = Arrangement.SpaceBetween,
+                    modifier = Modifier
+                        .fillMaxHeight()
+                        .padding(vertical = 6.dp),
                 ) {
                     Text(
                         "GEAR",
@@ -678,12 +694,11 @@ fun OptCThemeDash(
                     Text(
                         text = if (gearSource == GearSource.NONE) "–" else (snapshot.gear?.toString() ?: "–"),
                         color = palette.textPrimary,
-                        fontSize = 44.sp,
+                        fontSize = gearSp,
                         fontWeight = FontWeight.Black,
                         fontFamily = DigitFace,
                         maxLines = 1,
                     )
-                    Spacer(modifier = Modifier.height(6.dp))
                     Text(
                         text = when (gearSource) {
                             GearSource.ECU -> "ECU"
@@ -691,7 +706,7 @@ fun OptCThemeDash(
                             GearSource.NONE -> "—"
                         },
                         color = palette.accent,
-                        fontSize = 10.sp,
+                        fontSize = badgeSp,
                         fontWeight = FontWeight.Bold,
                         maxLines = 1,
                         modifier = Modifier
@@ -705,13 +720,13 @@ fun OptCThemeDash(
                 modifier = Modifier
                     .weight(0.34f)
                     .fillMaxHeight()
-                    .padding(vertical = 2.dp)
+                    .padding(vertical = 4.dp)
                     .themeMetricGestures(
                         onRemap = { onRemapBase("Speed") },
                         onDeepSearch = { onDeepSearch("Speed", "010D") },
                     ),
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center,
+                verticalArrangement = Arrangement.SpaceBetween,
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     FreshnessHeartbeat(
@@ -720,13 +735,12 @@ fun OptCThemeDash(
                     )
                     Text(" SPEED", color = palette.textMuted, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                 }
-                Spacer(modifier = Modifier.height(2.dp))
                 Box(
                     contentAlignment = Alignment.Center,
                     modifier = Modifier
-                        .heightIn(max = 64.dp)
-                        .height(56.dp)
-                        .fillMaxWidth(),
+                        .weight(1f, fill = true)
+                        .fillMaxWidth()
+                        .padding(vertical = 2.dp),
                 ) {
                     Canvas(modifier = Modifier.matchParentSize()) {
                         for (i in 0..6) {
@@ -741,13 +755,12 @@ fun OptCThemeDash(
                     Text(
                         text = snapshot.speedKmh?.roundToInt()?.toString() ?: "--",
                         color = palette.textPrimary,
-                        fontSize = 44.sp,
+                        fontSize = 40.sp,
                         fontWeight = FontWeight.Black,
                         fontFamily = DigitFace,
                         maxLines = 1,
                     )
                 }
-                Spacer(modifier = Modifier.height(4.dp))
                 Text(
                     "km/h",
                     color = palette.accentSoft,
@@ -762,7 +775,7 @@ fun OptCThemeDash(
 
         LazyVerticalGrid(
             columns = GridCells.Fixed(3),
-            modifier = Modifier.fillMaxWidth().weight(0.48f),
+            modifier = Modifier.fillMaxWidth().weight(0.45f),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
@@ -1095,10 +1108,15 @@ private fun RealisticNeedleGauge(
     ) {
         // Fit dial + center readout inside available bounds (fixed 210.dp was clipping km/h).
         val side = minOf(maxWidth, maxHeight)
-        val canvasSize = side * 0.96f
-        val valueSp = (side.value * 0.11f).coerceIn(16f, 26f).sp
-        val unitSp = (side.value * 0.055f).coerceIn(9f, 12f).sp
-        Canvas(modifier = Modifier.size(canvasSize)) {
+        val canvasSize = side * 0.92f
+        val valueSp = (side.value * 0.105f).coerceIn(15f, 24f).sp
+        val unitSp = (side.value * 0.05f).coerceIn(9f, 11f).sp
+        // Constrain dial + readout to one square so units cannot spill past the parent.
+        Box(
+            modifier = Modifier.size(canvasSize),
+            contentAlignment = Alignment.Center,
+        ) {
+            Canvas(modifier = Modifier.fillMaxSize()) {
             val cx = size.width / 2f
             val cy = size.height / 2f
             val r = size.minDimension * 0.40f
@@ -1224,34 +1242,32 @@ private fun RealisticNeedleGauge(
             drawCircle(color = arcColor.copy(alpha = 0.45f), radius = 13f, center = Offset(cx, cy))
             drawCircle(color = arcColor, radius = 9f, center = Offset(cx, cy))
             drawCircle(color = Color.White.copy(alpha = 0.95f), radius = 3.2f, center = Offset(cx, cy))
-        }
-        // Readout sits in the lower dial opening — keep fully inside canvasSize.
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            modifier = Modifier
-                .align(Alignment.Center)
-                .padding(top = canvasSize * 0.30f)
-                .padding(bottom = canvasSize * 0.06f),
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                FreshnessHeartbeat(lastOkMs = freshAtMs, size = 6.dp)
-                Spacer(modifier = Modifier.width(4.dp))
+            }
+            // Just below the hub — stays inside the dial opening, clear of the bottom arc.
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier.offset(y = canvasSize * 0.14f),
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    FreshnessHeartbeat(lastOkMs = freshAtMs, size = 6.dp)
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = valueText,
+                        color = arcColor,
+                        fontSize = valueSp,
+                        fontWeight = FontWeight.Black,
+                        fontFamily = DigitFace,
+                        maxLines = 1,
+                    )
+                }
                 Text(
-                    text = valueText,
-                    color = arcColor,
-                    fontSize = valueSp,
-                    fontWeight = FontWeight.Black,
-                    fontFamily = DigitFace,
+                    unit,
+                    color = palette.textMuted,
+                    fontSize = unitSp,
+                    fontWeight = FontWeight.Bold,
                     maxLines = 1,
                 )
             }
-            Text(
-                unit,
-                color = palette.textMuted,
-                fontSize = unitSp,
-                fontWeight = FontWeight.Bold,
-                maxLines = 1,
-            )
         }
     }
 }
