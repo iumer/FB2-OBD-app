@@ -121,6 +121,18 @@ class SnapshotFreshness(
             out = out.copy(mapKpa = null)
         }
 
+        // Intake / Throttle rotate as secondaries. Without TTL they freeze forever
+        // after one decode (2026-08-14 drive: Intake=60°C and Throttle=13.7% flat
+        // for ~56 min while RPM/Speed/MAF moved). Clear like MAP.
+        if (isStale(KEY_INTAKE)) {
+            clearKey(KEY_INTAKE)
+            out = out.copy(intakeC = null)
+        }
+        if (isStale(KEY_THROTTLE)) {
+            clearKey(KEY_THROTTLE)
+            out = out.copy(throttlePct = null)
+        }
+
         // Gear estimate needs both RPM and Speed fresh in this window.
         val rpmFresh = lastOkMs[KEY_RPM]?.let { nowMs - it <= staleAfterMs } == true
         val speedFresh = lastOkMs[KEY_SPEED]?.let { nowMs - it <= staleAfterMs } == true
