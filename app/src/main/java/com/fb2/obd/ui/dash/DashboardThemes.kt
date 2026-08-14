@@ -59,8 +59,11 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.util.VelocityTracker
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.PlatformTextStyle
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
@@ -85,6 +88,17 @@ import kotlin.math.roundToInt
 import kotlin.math.sin
 
 private val DigitFace = FontFamily.SansSerif
+
+/** Avoid Android font padding clipping bottoms of bold labels in short theme stacks. */
+private fun tightLabelStyle(size: androidx.compose.ui.unit.TextUnit) = TextStyle(
+    fontSize = size,
+    lineHeight = size * 1.15f,
+    platformStyle = PlatformTextStyle(includeFontPadding = false),
+    lineHeightStyle = LineHeightStyle(
+        alignment = LineHeightStyle.Alignment.Center,
+        trim = LineHeightStyle.Trim.Both,
+    ),
+)
 
 @Composable
 fun OptAThemeDash(
@@ -453,12 +467,12 @@ fun OptBThemeDash(
                             GearSource.NONE -> "—"
                         },
                         color = palette.accent,
-                        fontSize = badgeSp,
                         fontWeight = FontWeight.Bold,
                         maxLines = 1,
+                        style = tightLabelStyle(badgeSp),
                         modifier = Modifier
                             .border(1.dp, palette.accent, RoundedCornerShape(6.dp))
-                            .padding(horizontal = 8.dp, vertical = 3.dp),
+                            .padding(horizontal = 8.dp, vertical = 4.dp),
                     )
                 }
             }
@@ -563,7 +577,7 @@ fun OptCThemeDash(
                     ),
                 )
                 .border(1.dp, palette.accent.copy(alpha = 0.28f), RoundedCornerShape(26.dp))
-                .padding(start = 10.dp, end = 10.dp, top = 8.dp, bottom = 14.dp),
+                .padding(start = 10.dp, end = 10.dp, top = 8.dp, bottom = 18.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             BoxWithConstraints(
@@ -706,12 +720,12 @@ fun OptCThemeDash(
                             GearSource.NONE -> "—"
                         },
                         color = palette.accent,
-                        fontSize = badgeSp,
                         fontWeight = FontWeight.Bold,
                         maxLines = 1,
+                        style = tightLabelStyle(badgeSp),
                         modifier = Modifier
                             .border(1.dp, palette.accent, RoundedCornerShape(6.dp))
-                            .padding(horizontal = 8.dp, vertical = 3.dp),
+                            .padding(horizontal = 8.dp, vertical = 4.dp),
                     )
                 }
             }
@@ -764,10 +778,10 @@ fun OptCThemeDash(
                 Text(
                     "km/h",
                     color = palette.accentSoft,
-                    fontSize = 12.sp,
                     fontWeight = FontWeight.SemiBold,
                     maxLines = 1,
-                    lineHeight = 14.sp,
+                    style = tightLabelStyle(12.sp),
+                    modifier = Modifier.padding(bottom = 2.dp),
                 )
             }
         }
@@ -1103,173 +1117,165 @@ private fun RealisticNeedleGauge(
     palette: ThemePalette,
     modifier: Modifier = Modifier,
 ) {
-    BoxWithConstraints(
+    Column(
         modifier = modifier.fillMaxHeight(),
-        contentAlignment = Alignment.Center,
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
     ) {
-        // Fit dial + center readout inside available bounds (fixed 210.dp was clipping km/h).
-        val side = minOf(maxWidth, maxHeight)
-        val canvasSize = side * 0.92f
-        val valueSp = (side.value * 0.105f).coerceIn(15f, 24f).sp
-        val unitSp = (side.value * 0.05f).coerceIn(9f, 11f).sp
-        // Constrain dial + readout to one square so units cannot spill past the parent.
-        Box(
-            modifier = Modifier.size(canvasSize),
+        BoxWithConstraints(
+            modifier = Modifier
+                .weight(1f, fill = true)
+                .fillMaxWidth(),
             contentAlignment = Alignment.Center,
         ) {
-            Canvas(modifier = Modifier.fillMaxSize()) {
-            val cx = size.width / 2f
-            val cy = size.height / 2f
-            val r = size.minDimension * 0.40f
-            val start = 135f
-            val sweep = 270f
+            val side = minOf(maxWidth, maxHeight)
+            Canvas(modifier = Modifier.size(side * 0.98f)) {
+                val cx = size.width / 2f
+                val cy = size.height / 2f
+                val r = size.minDimension * 0.40f
+                val start = 135f
+                val sweep = 270f
 
-            // Dial depth rings
-            drawCircle(
-                brush = Brush.radialGradient(
-                    colors = listOf(Color(0xFF1A2838), Color(0xFF0A1018)),
+                drawCircle(
+                    brush = Brush.radialGradient(
+                        colors = listOf(Color(0xFF1A2838), Color(0xFF0A1018)),
+                        center = Offset(cx, cy),
+                        radius = r + 28f,
+                    ),
+                    radius = r + 26f,
                     center = Offset(cx, cy),
-                    radius = r + 28f,
-                ),
-                radius = r + 26f,
-                center = Offset(cx, cy),
-            )
-            drawCircle(
-                color = Color(0xFF243040),
-                radius = r + 22f,
-                center = Offset(cx, cy),
-                style = Stroke(width = 8f),
-            )
-            drawCircle(
-                color = arcColor.copy(alpha = 0.25f),
-                radius = r + 18f,
-                center = Offset(cx, cy),
-                style = Stroke(width = 2f),
-            )
+                )
+                drawCircle(
+                    color = Color(0xFF243040),
+                    radius = r + 22f,
+                    center = Offset(cx, cy),
+                    style = Stroke(width = 8f),
+                )
+                drawCircle(
+                    color = arcColor.copy(alpha = 0.25f),
+                    radius = r + 18f,
+                    center = Offset(cx, cy),
+                    style = Stroke(width = 2f),
+                )
 
-            val track = Stroke(width = 14f, cap = StrokeCap.Round)
-            drawArc(
-                color = palette.track,
-                startAngle = start,
-                sweepAngle = sweep,
-                useCenter = false,
-                topLeft = Offset(cx - r, cy - r),
-                size = Size(r * 2, r * 2),
-                style = track,
-            )
-            val f = fraction.coerceIn(0f, 1f)
-            val goodEnd = f.coerceAtMost(redlineFrom.coerceAtMost(1f))
-            drawArc(
-                brush = Brush.sweepGradient(
-                    colors = listOf(arcColor.copy(alpha = 0.55f), arcColor),
-                    center = Offset(cx, cy),
-                ),
-                startAngle = start,
-                sweepAngle = sweep * goodEnd,
-                useCenter = false,
-                topLeft = Offset(cx - r, cy - r),
-                size = Size(r * 2, r * 2),
-                style = track,
-            )
-            if (f > redlineFrom && redlineFrom < 1f) {
+                val track = Stroke(width = 14f, cap = StrokeCap.Round)
                 drawArc(
-                    color = palette.critical,
-                    startAngle = start + sweep * redlineFrom,
-                    sweepAngle = sweep * (f - redlineFrom),
+                    color = palette.track,
+                    startAngle = start,
+                    sweepAngle = sweep,
                     useCenter = false,
                     topLeft = Offset(cx - r, cy - r),
                     size = Size(r * 2, r * 2),
                     style = track,
                 )
-            }
-
-            val labelPaint = Paint().apply {
-                color = palette.textMuted.toArgb()
-                textAlign = Paint.Align.CENTER
-                textSize = (size.minDimension * 0.065f).coerceIn(14f, 20f)
-                isAntiAlias = true
-                typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-            }
-
-            for (i in 0..majorTicks) {
-                val a = Math.toRadians((start + sweep * i / majorTicks).toDouble())
-                val outer = r + 6f
-                val inner = r - (if (i % 2 == 0) 16f else 10f)
-                drawLine(
-                    color = if (i >= (redlineFrom * majorTicks).toInt() && redlineFrom < 1f) {
-                        palette.critical.copy(alpha = 0.9f)
-                    } else {
-                        palette.textPrimary.copy(alpha = 0.75f)
-                    },
-                    start = Offset(cx + outer * cos(a).toFloat(), cy + outer * sin(a).toFloat()),
-                    end = Offset(cx + inner * cos(a).toFloat(), cy + inner * sin(a).toFloat()),
-                    strokeWidth = if (i % 2 == 0) 3.5f else 2f,
-                    cap = StrokeCap.Round,
+                val f = fraction.coerceIn(0f, 1f)
+                val goodEnd = f.coerceAtMost(redlineFrom.coerceAtMost(1f))
+                drawArc(
+                    brush = Brush.sweepGradient(
+                        colors = listOf(arcColor.copy(alpha = 0.55f), arcColor),
+                        center = Offset(cx, cy),
+                    ),
+                    startAngle = start,
+                    sweepAngle = sweep * goodEnd,
+                    useCenter = false,
+                    topLeft = Offset(cx - r, cy - r),
+                    size = Size(r * 2, r * 2),
+                    style = track,
                 )
-                val label = tickLabels.getOrNull(i)
-                if (label != null) {
-                    val lr = r - 28f
-                    val lx = cx + lr * cos(a).toFloat()
-                    val ly = cy + lr * sin(a).toFloat() + 6f
-                    drawContext.canvas.nativeCanvas.drawText(label, lx, ly, labelPaint)
-                }
-            }
-
-            // Glow needle + tapered body
-            val na = Math.toRadians((start + sweep * f).toDouble())
-            val tip = Offset(cx + (r - 6f) * cos(na).toFloat(), cy + (r - 6f) * sin(na).toFloat())
-            val back = Offset(cx - 22f * cos(na).toFloat(), cy - 22f * sin(na).toFloat())
-            val perp = na + Math.PI / 2
-            fun needlePath(halfW: Float) = Path().apply {
-                moveTo(tip.x, tip.y)
-                lineTo((back.x + halfW * cos(perp)).toFloat(), (back.y + halfW * sin(perp)).toFloat())
-                lineTo((back.x - halfW * cos(perp)).toFloat(), (back.y - halfW * sin(perp)).toFloat())
-                close()
-            }
-            drawPath(needlePath(10f), color = arcColor.copy(alpha = 0.18f))
-            drawPath(needlePath(7f), color = arcColor.copy(alpha = 0.35f))
-            drawPath(needlePath(4.5f), color = arcColor)
-            drawLine(
-                color = Color.White.copy(alpha = 0.55f),
-                start = Offset(
-                    (back.x + tip.x) / 2f,
-                    (back.y + tip.y) / 2f,
-                ),
-                end = tip,
-                strokeWidth = 1.5f,
-                cap = StrokeCap.Round,
-            )
-            drawCircle(color = Color(0xFF0A1018), radius = 16f, center = Offset(cx, cy))
-            drawCircle(color = arcColor.copy(alpha = 0.45f), radius = 13f, center = Offset(cx, cy))
-            drawCircle(color = arcColor, radius = 9f, center = Offset(cx, cy))
-            drawCircle(color = Color.White.copy(alpha = 0.95f), radius = 3.2f, center = Offset(cx, cy))
-            }
-            // Just below the hub — stays inside the dial opening, clear of the bottom arc.
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier.offset(y = canvasSize * 0.14f),
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    FreshnessHeartbeat(lastOkMs = freshAtMs, size = 6.dp)
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(
-                        text = valueText,
-                        color = arcColor,
-                        fontSize = valueSp,
-                        fontWeight = FontWeight.Black,
-                        fontFamily = DigitFace,
-                        maxLines = 1,
+                if (f > redlineFrom && redlineFrom < 1f) {
+                    drawArc(
+                        color = palette.critical,
+                        startAngle = start + sweep * redlineFrom,
+                        sweepAngle = sweep * (f - redlineFrom),
+                        useCenter = false,
+                        topLeft = Offset(cx - r, cy - r),
+                        size = Size(r * 2, r * 2),
+                        style = track,
                     )
                 }
-                Text(
-                    unit,
-                    color = palette.textMuted,
-                    fontSize = unitSp,
-                    fontWeight = FontWeight.Bold,
-                    maxLines = 1,
+
+                val labelPaint = Paint().apply {
+                    color = palette.textMuted.toArgb()
+                    textAlign = Paint.Align.CENTER
+                    textSize = (size.minDimension * 0.065f).coerceIn(14f, 20f)
+                    isAntiAlias = true
+                    typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                }
+
+                for (i in 0..majorTicks) {
+                    val a = Math.toRadians((start + sweep * i / majorTicks).toDouble())
+                    val outer = r + 6f
+                    val inner = r - (if (i % 2 == 0) 16f else 10f)
+                    drawLine(
+                        color = if (i >= (redlineFrom * majorTicks).toInt() && redlineFrom < 1f) {
+                            palette.critical.copy(alpha = 0.9f)
+                        } else {
+                            palette.textPrimary.copy(alpha = 0.75f)
+                        },
+                        start = Offset(cx + outer * cos(a).toFloat(), cy + outer * sin(a).toFloat()),
+                        end = Offset(cx + inner * cos(a).toFloat(), cy + inner * sin(a).toFloat()),
+                        strokeWidth = if (i % 2 == 0) 3.5f else 2f,
+                        cap = StrokeCap.Round,
+                    )
+                    val label = tickLabels.getOrNull(i)
+                    if (label != null) {
+                        val lr = r - 28f
+                        val lx = cx + lr * cos(a).toFloat()
+                        val ly = cy + lr * sin(a).toFloat() + 6f
+                        drawContext.canvas.nativeCanvas.drawText(label, lx, ly, labelPaint)
+                    }
+                }
+
+                val na = Math.toRadians((start + sweep * f).toDouble())
+                val tip = Offset(cx + (r - 6f) * cos(na).toFloat(), cy + (r - 6f) * sin(na).toFloat())
+                val back = Offset(cx - 22f * cos(na).toFloat(), cy - 22f * sin(na).toFloat())
+                val perp = na + Math.PI / 2
+                fun needlePath(halfW: Float) = Path().apply {
+                    moveTo(tip.x, tip.y)
+                    lineTo((back.x + halfW * cos(perp)).toFloat(), (back.y + halfW * sin(perp)).toFloat())
+                    lineTo((back.x - halfW * cos(perp)).toFloat(), (back.y - halfW * sin(perp)).toFloat())
+                    close()
+                }
+                drawPath(needlePath(10f), color = arcColor.copy(alpha = 0.18f))
+                drawPath(needlePath(7f), color = arcColor.copy(alpha = 0.35f))
+                drawPath(needlePath(4.5f), color = arcColor)
+                drawLine(
+                    color = Color.White.copy(alpha = 0.55f),
+                    start = Offset((back.x + tip.x) / 2f, (back.y + tip.y) / 2f),
+                    end = tip,
+                    strokeWidth = 1.5f,
+                    cap = StrokeCap.Round,
                 )
+                drawCircle(color = Color(0xFF0A1018), radius = 16f, center = Offset(cx, cy))
+                drawCircle(color = arcColor.copy(alpha = 0.45f), radius = 13f, center = Offset(cx, cy))
+                drawCircle(color = arcColor, radius = 9f, center = Offset(cx, cy))
+                drawCircle(color = Color.White.copy(alpha = 0.95f), radius = 3.2f, center = Offset(cx, cy))
             }
         }
+        // Digits live under the dial — never compete with the bottom arc / parent clip.
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(top = 2.dp),
+        ) {
+            FreshnessHeartbeat(lastOkMs = freshAtMs, size = 6.dp)
+            Spacer(modifier = Modifier.width(4.dp))
+            Text(
+                text = valueText,
+                color = arcColor,
+                fontWeight = FontWeight.Black,
+                fontFamily = DigitFace,
+                maxLines = 1,
+                style = tightLabelStyle(22.sp),
+            )
+        }
+        Text(
+            unit,
+            color = palette.textMuted,
+            fontWeight = FontWeight.Bold,
+            maxLines = 1,
+            style = tightLabelStyle(11.sp),
+            modifier = Modifier.padding(bottom = 2.dp),
+        )
     }
 }
 
