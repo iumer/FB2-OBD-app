@@ -849,7 +849,8 @@ private fun OrbitWheel(
                 .fillMaxWidth()
                 .padding(horizontal = 2.dp),
         ) {
-            val slotPx = with(LocalDensity.current) { maxHeight.toPx() / 3f }
+            val slotH = maxHeight / 3
+            val slotPx = with(LocalDensity.current) { slotH.toPx() }
             val decay = remember {
                 exponentialDecay<Float>(frictionMultiplier = 1.35f)
             }
@@ -936,7 +937,7 @@ private fun OrbitWheel(
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(maxHeight / 3),
+                                .height(slotH),
                             contentAlignment = Alignment.Center,
                         ) {
                             OrbitWheelItem(
@@ -954,7 +955,7 @@ private fun OrbitWheel(
                     modifier = Modifier
                         .align(Alignment.Center)
                         .fillMaxWidth()
-                        .height(maxHeight / 3)
+                        .height(slotH)
                         .padding(horizontal = 2.dp)
                         .border(1.5.dp, palette.accent.copy(alpha = 0.9f), RoundedCornerShape(12.dp)),
                 )
