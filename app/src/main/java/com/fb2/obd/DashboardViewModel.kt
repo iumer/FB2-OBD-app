@@ -36,6 +36,7 @@ import com.fb2.obd.obd.VehicleProfile
 import com.fb2.obd.obd.VehicleProfileConfig
 import com.fb2.obd.obd.DiagnosticEventTracker
 import com.fb2.obd.obd.Dtc
+import com.fb2.obd.obd.ElmLinkForensics
 import com.fb2.obd.obd.FreezeFrame
 import com.fb2.obd.obd.HealthScore
 import com.fb2.obd.obd.HealthScoreCalculator
@@ -1262,6 +1263,14 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
                         ObdLogger.logDebug(
                             ObdLogger.Dir.INFO,
                             "No ELM frames for ${silentFor}ms — marking reconnecting",
+                        )
+                        ObdLogger.logEvent(
+                            ElmLinkForensics.CATEGORY,
+                            ElmLinkForensics.message(
+                                reason = ElmLinkForensics.REASON_STALE_UI,
+                                silenceMs = silentFor,
+                                detail = "UI RETRY — poll may still be soft-recovering/reconnecting",
+                            ),
                         )
                         _uiState.update {
                             it.copy(
