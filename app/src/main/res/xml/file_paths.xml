@@ -4,4 +4,6 @@
     <files-path name="value_logs" path="value_logs/" />
     <!-- Temporary share copies (cache) -->
     <cache-path name="share_cache" path="share/" />
+    <!-- In-app update APK downloads -->
+    <cache-path name="updates" path="updates/" />
 </paths>

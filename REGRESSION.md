@@ -59,6 +59,7 @@ Keep these fixed. If a change might touch one of these areas, re-verify it.
 | I24 | Dash text too small to read while driving on HU | Fixed | `DashType` HU scale (~34/22sp, 88dp tiles); ellipsis; fewer wider columns |
 | I25 | Floating bubble ring too small / overflow on HU | Fixed | `FloatingDashLayout`: 92/100/max400dp; shrinks on short-edge HUs |
 | I26 | Log Share shows “No apps…” / opens Bluetooth search on HU | Fixed | Always save to Downloads/FB2-Diag; ignore BT as share target |
+| I48 | Want in-app Update button (check / download / install or “up to date”) | Fixed | Settings → App update; `version.json` on `latest`; FileProvider install |
 
 When the user reports a **new** bug, add a new `Ixx` row here (Status: Open → Fixed)
 and add a matching automated or manual check in sections 2–3.
@@ -105,6 +106,7 @@ then update the `latest` branch APK (same path) so the bookmarkable download lin
 | `SessionLogStoreTest` | Saved session naming |
 | `CarDashBuilderTest` | Android Auto dash model |
 | `DashboardSnapshotTest` / `ScreensSnapshotTest` / `ConnectSheetSnapshotTest` | Paparazzi UI snapshots |
+| `AppUpdateCheckerTest` | version.json parse + local/remote versionCode compare |
 
 ---
 
