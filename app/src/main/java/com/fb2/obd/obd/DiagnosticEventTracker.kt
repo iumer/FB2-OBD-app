@@ -56,7 +56,7 @@ class DiagnosticEventTracker {
                 if (connected) {
                     if (sourceIsLive) "ELM Connected ($sourceName)" else "Demo Connected"
                 } else {
-                    "ELM Disconnected"
+                    "ELM Disconnected ($sourceName) — see ELM_LINK events for reason"
                 },
             )
         }
