@@ -101,6 +101,11 @@ data class SettingsState(
      * inverse as “CarPlay / Android Auto connected” = Yes).
      */
     val duckMediaDuringAlerts: Boolean = false,
+    /**
+     * When true, simulated Demo may run without an ELM (launch + Connect sheet).
+     * When false, Dash/bubble show disconnected / `--` instead of fake numbers.
+     */
+    val allowDemo: Boolean = true,
     val vehicleProfile: VehicleProfile = VehicleProfile.DEFAULT,
     /** Phone Dash presentation theme (Classic / OptA / OptB / OptC). */
     val dashTheme: DashTheme = DashTheme.DEFAULT,
@@ -450,6 +455,7 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
         val profileGearDefault = VehicleProfileConfig.defaultShowEstimatedGear(loadedProfile)
         _settings.value = SettingsState(
             showEstimatedGear = dashThemeStore.loadShowEstimatedGear(profileGearDefault),
+            allowDemo = dashThemeStore.loadAllowDemo(default = true),
             vehicleProfile = loadedProfile,
             dashTheme = dashThemeStore.load(),
         )
@@ -486,8 +492,8 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
             publishCarDash()
         }
         VehicleLiveStore.onConnectRequest = {
-            // Car cannot pick BT devices — start Demo if offline; live ELM must be chosen on phone.
-            if (!_uiState.value.sourceIsLive) {
+            // Car cannot pick BT devices — Demo only when Settings allow it.
+            if (!_uiState.value.sourceIsLive && _settings.value.allowDemo) {
                 useSource(demoSourceForProfile())
             }
             publishCarDash()
@@ -495,8 +501,12 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
         _custom.update {
             it.copy(selectedIds = StandardPidCatalog.fuelPageDefaults().map { p -> p.id }.toSet())
         }
-        useSource(demoSourceForProfile())
-        publishCarDash()
+        if (_settings.value.allowDemo) {
+            useSource(demoSourceForProfile())
+        } else {
+            // Stay disconnected — bubble/Dash show `--` until a real ELM links.
+            publishCarDash()
+        }
     }
 
     private fun demoSourceForProfile(): DemoObdSource = DemoObdSource(
@@ -536,33 +546,38 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
         if (!thresholdStore.hasUserEdits()) {
             _healthThresholds.value = VehicleProfileConfig.healthDefaults(profile)
         }
-        // Restart Demo under the new flavour when not on a live ELM.
-        if (!_uiState.value.sourceIsLive) {
+        // Restart Demo under the new flavour when not on a live ELM (and Demo is allowed).
+        if (!_uiState.value.sourceIsLive && _settings.value.allowDemo) {
             useSource(demoSourceForProfile())
         }
         publishCarDash()
     }
 
-    /** Push the phone main Dash (tiles + hero) to Android Auto. */
+    /** Push the phone main Dash (tiles + hero) to Android Auto / floating bubble. */
     fun publishCarDash() {
         val ui = _uiState.value
         val decision = ui.decisionSnapshot.takeUnless { it.isEffectivelyBlank() } ?: ui.snapshot
+        // Only CONNECTED (live ELM or Demo) may show numbers. ERROR / DISCONNECTED /
+        // reconnecting blank the bubble so a stale 88°C cannot look "live" over CarPlay.
+        val linkActive = ui.connection == ConnectionState.CONNECTED
+        val snap = if (linkActive) ui.snapshot else VehicleSnapshot.EMPTY
+        val healthSnap = if (linkActive) decision else VehicleSnapshot.EMPTY
         VehicleLiveStore.publish(
             CarDashBuilder.build(
-                snapshot = ui.snapshot,
+                snapshot = snap,
                 thresholds = _healthThresholds.value,
                 extraPidIds = _dashExtraPidIds.value,
-                extraValues = _dashExtraValues.value,
-                deepFoundValues = _deepFoundValues.value,
+                extraValues = if (linkActive) _dashExtraValues.value else emptyMap(),
+                deepFoundValues = if (linkActive) _deepFoundValues.value else emptyMap(),
                 catalog = pidCatalog,
                 connection = ui.connection,
                 sourceIsLive = ui.sourceIsLive,
                 sourceName = ui.sourceName,
                 logging = _settings.value.valueLogging,
                 showEstimatedGear = _settings.value.showEstimatedGear,
-                dtcCount = ui.dtcCount,
-                healthScore = _health.value,
-                healthSnapshot = decision,
+                dtcCount = if (linkActive) ui.dtcCount else null,
+                healthScore = if (linkActive) _health.value else null,
+                healthSnapshot = healthSnap,
                 latch = diagnosticBrain::latch,
             ),
         )
@@ -1002,6 +1017,30 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
         _settings.update { it.copy(showEstimatedGear = enabled) }
     }
 
+    /**
+     * Settings → Demo / simulated data.
+     * Off while on Demo clears the feed to disconnected (`--` on Dash + bubble).
+     * On while disconnected starts the profile Demo source.
+     */
+    fun setAllowDemo(enabled: Boolean) {
+        dashThemeStore.saveAllowDemo(enabled)
+        _settings.update { it.copy(allowDemo = enabled) }
+        val ui = _uiState.value
+        when {
+            !enabled && !ui.sourceIsLive -> {
+                // Leaving Demo / idle — no fake numbers.
+                disconnect()
+            }
+            enabled &&
+                (ui.connection == ConnectionState.DISCONNECTED ||
+                    ui.connection == ConnectionState.ERROR) &&
+                !ui.sourceIsLive -> {
+                useSource(demoSourceForProfile())
+            }
+        }
+        publishCarDash()
+    }
+
     fun setDashTheme(theme: DashTheme) {
         if (theme == _settings.value.dashTheme) return
         dashThemeStore.save(theme)
@@ -1193,9 +1232,11 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
                 ObdLogger.logDebug(ObdLogger.Dir.INFO, "Connection ERROR: $msg")
                 ObdLogger.logEvent("ELM", "Connection error: $msg")
                 eventTracker.onConnection(ConnectionState.ERROR, false, source.name)
-                // Keep last-good snapshot on screen — only flip the status chip.
+                // ERROR = link dead. Clear sticky values so Dash/bubble cannot show a frozen °C.
                 _uiState.update { st ->
                     st.copy(
+                        snapshot = VehicleSnapshot.EMPTY,
+                        decisionSnapshot = VehicleSnapshot.EMPTY,
                         connection = ConnectionState.ERROR,
                         reconnecting = false,
                         lastError = msg,
@@ -1228,6 +1269,7 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
                                 connection = ConnectionState.CONNECTING,
                             )
                         }
+                        // Bubble blanks via publishCarDash (not CONNECTED); phone keeps last-good + RETRY.
                         ensureElmMonitor(ObdMonitorForegroundService.STATUS_RETRY)
                         publishCarDash()
                     }

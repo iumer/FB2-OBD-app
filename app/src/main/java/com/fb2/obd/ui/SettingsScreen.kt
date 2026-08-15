@@ -100,6 +100,7 @@ fun SettingsScreen(
     onVehicleProfileChange: (VehicleProfile) -> Unit = {},
     onDashThemeChange: (DashTheme) -> Unit = {},
     onToggleEstimatedGear: (Boolean) -> Unit,
+    onToggleAllowDemo: (Boolean) -> Unit = {},
     onToggleVoiceAlerts: (Boolean) -> Unit = {},
     onToggleDuckMedia: (Boolean) -> Unit = {},
     onCheckSoundAlert: () -> Unit = {},
@@ -178,10 +179,22 @@ fun SettingsScreen(
             onCheckedChange = onToggleEstimatedGear,
         )
 
+        SectionLabel("Data source")
+        ToggleRow(
+            title = "Demo / simulated data",
+            subtitle = if (settings.allowDemo) {
+                "On: with no ELM, Dash runs simulated values (DEMO badge). Turn off to force disconnected / -- on Dash and the floating bubble."
+            } else {
+                "Off: no fake numbers. Connect an ELM327 for live data; bubble shows OFF / -- when the adapter drops."
+            },
+            checked = settings.allowDemo,
+            onCheckedChange = onToggleAllowDemo,
+        )
+
         SectionLabel("Alerts")
         ToggleRow(
             title = "Voice alerts",
-            subtitle = "Beep + speak on critical (battery also warns when orange/weak).",
+            subtitle = "Beep + speak on critical (battery also warns when orange/weak). Coolant voice at/above your Coolant threshold (default 104°C).",
             checked = settings.voiceAlerts,
             onCheckedChange = onToggleVoiceAlerts,
         )
