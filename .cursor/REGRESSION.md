@@ -65,10 +65,13 @@ Universal APK (only URL):
 36. **Classic could not deep-search Coolant when `--`** — deep search enabled whenever value is blank (not only n/s).
 37. **Intake/Throttle sticky forever** — secondary TTL clear in `SnapshotFreshness` (2026-08-14 flat 60°C / 13.7% drive log).
 38. **OptB/OptC km/h + EST clipped** — dial digits under gauges; height-scaled gear stacks; `includeFontPadding=false` tight labels.
+39. **Floating bubble froze last °C after ELM drop** — only CONNECTED publishes values; ERROR/reconnect → `OFF/--` grey rim; Settings **Demo / simulated data** toggle.
+40. **Coolant bands (FB2)** — green ≤95, yellow ≤100, orange ≤103, red+voice ≥104; long-press Coolant → Threshold editor (or Settings reset to defaults).
 
 ### Must stay covered in code (additions)
 | Coolant/MAF always-poll + TTL | `SpeedFreshnessAndPollPlannerTest` |
 | Intake/Throttle secondary TTL | `SpeedFreshnessAndPollPlannerTest` |
+| Bubble offline blanks + coolant bands | `FloatingDashMetricsTest` |
 | Deep search Mode 01 before bus skip | `DeepSearchKnowledgeBaseTest` |
 | Theme status chips / Opt layouts | Paparazzi `ThemeDashboardSnapshotTest` |
 | Opt tileOverrides + n/s | `DashThemeTest` |
