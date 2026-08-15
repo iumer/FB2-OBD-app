@@ -29,6 +29,9 @@ class ScreensSnapshotTest {
                     onToggleEstimatedGear = {},
                     onToggleVoiceAlerts = {},
                     onCheckSoundAlert = {},
+                    appVersionLabel = "v0.1.21 (21)",
+                    updateStatusText = "",
+                    updateActionLabel = "CHECK",
                     nav = com.fb2.obd.ui.SettingsNav(),
                     onBack = {},
                 )
