@@ -41,6 +41,7 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -50,6 +51,7 @@ import androidx.core.content.FileProvider
 import com.fb2.obd.ui.theme.Accent
 import com.fb2.obd.ui.theme.Background
 import com.fb2.obd.ui.theme.TextPrimary
+import com.fb2.obd.data.AppUpdateManager
 import com.fb2.obd.data.DemoObdSource
 import com.fb2.obd.data.Elm327BluetoothSource
 import com.fb2.obd.data.LogExportHelper
@@ -79,6 +81,7 @@ import com.fb2.obd.ui.theme.FB2Theme
 import com.fb2.obd.ui.theme.ThemePalette
 import java.io.File
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 private enum class Screen {
     DASHBOARD, SETTINGS, DIAG_HUB, FAULTS, DEBUG_LOG, VALUE_LOG,
@@ -132,6 +135,28 @@ class MainActivity : ComponentActivity() {
                 // Only push accel into Compose ~2 Hz — SENSOR_DELAY_UI was recomposing
                 // the whole Dash ~16 Hz even when G-force page is not visible.
                 val lastAccelUiMs = remember { java.util.concurrent.atomic.AtomicLong(0L) }
+
+                val updateScope = rememberCoroutineScope()
+                val appUpdateManager = remember { AppUpdateManager(applicationContext) }
+                val appUpdateUi by appUpdateManager.state.collectAsState()
+                val updateBusy = appUpdateUi is AppUpdateManager.UiState.Checking ||
+                    appUpdateUi is AppUpdateManager.UiState.Downloading
+                val updateStatusText = when (val s = appUpdateUi) {
+                    is AppUpdateManager.UiState.Idle -> ""
+                    is AppUpdateManager.UiState.Checking -> "Checking for update…"
+                    is AppUpdateManager.UiState.UpToDate -> s.message
+                    is AppUpdateManager.UiState.Available -> s.message
+                    is AppUpdateManager.UiState.Downloading -> "Downloading… ${s.percent}%"
+                    is AppUpdateManager.UiState.ReadyToInstall -> "Ready to install v${s.remoteName}"
+                    is AppUpdateManager.UiState.Error -> s.message
+                }
+                val updateActionLabel = when (appUpdateUi) {
+                    is AppUpdateManager.UiState.Available -> "DOWNLOAD"
+                    is AppUpdateManager.UiState.ReadyToInstall -> "INSTALL"
+                    is AppUpdateManager.UiState.Checking,
+                    is AppUpdateManager.UiState.Downloading -> "…"
+                    else -> "CHECK"
+                }
 
                 var tick by remember { mutableIntStateOf(0) }
                 LaunchedEffect(screen) {
@@ -363,6 +388,27 @@ class MainActivity : ComponentActivity() {
                             },
                             openAiApiKey = viewModel.openAiApiKey(),
                             onOpenAiApiKeyChange = viewModel::setOpenAiApiKey,
+                            appVersionLabel = appUpdateManager.localLabel,
+                            updateStatusText = updateStatusText,
+                            updateActionLabel = updateActionLabel,
+                            updateBusy = updateBusy,
+                            onAppUpdateAction = {
+                                when (val s = appUpdateUi) {
+                                    is AppUpdateManager.UiState.Available -> {
+                                        updateScope.launch { appUpdateManager.downloadUpdate() }
+                                    }
+                                    is AppUpdateManager.UiState.ReadyToInstall -> {
+                                        if (!appUpdateManager.installApk(this@MainActivity, s.apk)) {
+                                            toast("Allow installs from FB2 Diag, then tap INSTALL again")
+                                        }
+                                    }
+                                    is AppUpdateManager.UiState.Checking,
+                                    is AppUpdateManager.UiState.Downloading -> Unit
+                                    else -> {
+                                        updateScope.launch { appUpdateManager.checkForUpdate() }
+                                    }
+                                }
+                            },
                             nav = settingsNav,
                             onBack = { screen = Screen.DASHBOARD },
                             modifier = Modifier.fillMaxSize(),

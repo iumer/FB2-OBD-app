@@ -110,6 +110,11 @@ fun SettingsScreen(
     onUploadLogs: () -> Unit = {},
     openAiApiKey: String = "",
     onOpenAiApiKeyChange: (String) -> Unit = {},
+    appVersionLabel: String = "",
+    updateStatusText: String = "",
+    updateActionLabel: String = "CHECK",
+    updateBusy: Boolean = false,
+    onAppUpdateAction: () -> Unit = {},
     nav: SettingsNav,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
@@ -135,6 +140,24 @@ fun SettingsScreen(
             color = palette.textMuted,
             fontSize = 12.sp,
             modifier = Modifier.padding(bottom = 8.dp),
+        )
+
+        SectionLabel("App update")
+        Text(
+            text = if (appVersionLabel.isNotBlank()) {
+                "Installed: $appVersionLabel. Checks the always-latest sideload on GitHub and installs when newer."
+            } else {
+                "Checks the always-latest sideload on GitHub and installs when newer."
+            },
+            color = TextMuted,
+            fontSize = 12.sp,
+            modifier = Modifier.padding(bottom = 8.dp),
+        )
+        ActionRow(
+            title = if (updateStatusText.isNotBlank()) updateStatusText else "Check for update",
+            subtitle = "Needs internet. Allow “install unknown apps” for FB2 Diag when prompted.",
+            actionLabel = updateActionLabel,
+            onClick = { if (!updateBusy) onAppUpdateAction() },
         )
 
         SectionLabel("Vehicle profile")
