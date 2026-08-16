@@ -13,6 +13,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -38,12 +39,14 @@ fun ConnectDialog(
     onPickDevice: (BtDeviceUi) -> Unit,
     onPickDemo: () -> Unit,
     onDismiss: () -> Unit,
+    showDemo: Boolean = true,
 ) {
     Dialog(onDismissRequest = onDismiss) {
         ConnectSheetContent(
             devices = devices,
             onPickDevice = onPickDevice,
             onPickDemo = onPickDemo,
+            showDemo = showDemo,
         )
     }
 }
@@ -54,11 +57,12 @@ fun ConnectSheetContent(
     onPickDevice: (BtDeviceUi) -> Unit,
     onPickDemo: () -> Unit,
     modifier: Modifier = Modifier,
+    showDemo: Boolean = true,
 ) {
     Column(
         modifier = modifier
             .clip(RoundedCornerShape(18.dp))
-            .background(Background)
+            .background(MaterialTheme.colorScheme.background)
             .padding(20.dp)
             .width(420.dp),
     ) {
@@ -97,22 +101,24 @@ fun ConnectSheetContent(
             }
         }
 
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 16.dp)
-                .clip(RoundedCornerShape(12.dp))
-                .background(Surface)
-                .clickable { onPickDemo() }
-                .padding(14.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Dot(TextMuted)
-            Text(
-                text = "  Use demo (simulated) instead",
-                color = TextMuted,
-                fontSize = 14.sp,
-            )
+        if (showDemo) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 16.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(MaterialTheme.colorScheme.surface)
+                    .clickable { onPickDemo() }
+                    .padding(14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Dot(TextMuted)
+                Text(
+                    text = "  Use demo (simulated) instead",
+                    color = TextMuted,
+                    fontSize = 14.sp,
+                )
+            }
         }
     }
 }
@@ -123,7 +129,7 @@ private fun DeviceRow(device: BtDeviceUi, onClick: () -> Unit) {
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
-            .background(Surface)
+            .background(MaterialTheme.colorScheme.surface)
             .clickable { onClick() }
             .padding(14.dp),
         verticalAlignment = Alignment.CenterVertically,

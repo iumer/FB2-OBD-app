@@ -56,64 +56,110 @@ object ColdStartIdleCatalog {
         ),
     )
 
-    val sections: List<Section> = listOf(
-        Section(
-            title = "Cold start / idle quality",
-            hint = "Capture while cold (coolant < ~50°C) at idle in Park/Neutral, AC off, then again after warm-up.",
-            pids = listOfNotNull(
-                StandardPidCatalog.byId("010C"), // RPM
-                StandardPidCatalog.byId("0105"), // Coolant
-                StandardPidCatalog.byId("0167"), // Coolant2
-                StandardPidCatalog.byId("010F"), // IAT
-                StandardPidCatalog.byId("0146"), // Ambient
-                StandardPidCatalog.byId("011F"), // Run time
-                StandardPidCatalog.byId("0104"), // Load
-                StandardPidCatalog.byId("0111"), // Throttle
-                StandardPidCatalog.byId("010B"), // MAP
-                StandardPidCatalog.byId("0110"), // MAF
-                StandardPidCatalog.byId("010E"), // Timing
-                StandardPidCatalog.byId("0142"), // Voltage
-            ) + idleControlCandidates.filter { !it.label.contains("misfire", true) },
-        ),
-        Section(
-            title = "Fuel trims & O2 (idle)",
-            hint = "At warm idle, STFT should hover near 0 (±5%). Large positive = lean (vacuum leak / low fuel). Large negative = rich.",
-            pids = listOfNotNull(
-                StandardPidCatalog.byId("0106"),
-                StandardPidCatalog.byId("0107"),
-                StandardPidCatalog.byId("0108"),
-                StandardPidCatalog.byId("0109"),
-                StandardPidCatalog.byId("0114"),
-                StandardPidCatalog.byId("0115"),
-                StandardPidCatalog.byId("0124"),
-                StandardPidCatalog.byId("0134"),
-                StandardPidCatalog.byId("0144"),
-            ),
-        ),
-        Section(
-            title = "Fuel delivery / pump pressure",
-            hint = "FB2 is port-injected; SAE fuel-rail PIDs are often n/s. We probe SAE + Honda candidates — send debug log if any answer.",
-            pids = listOfNotNull(
-                StandardPidCatalog.byId("0103"),
-                StandardPidCatalog.byId("010A"),
-                StandardPidCatalog.byId("0122"),
-                StandardPidCatalog.byId("0123"),
-                StandardPidCatalog.byId("0159"),
-                StandardPidCatalog.byId("015E"),
-            ) + fuelPressureCandidates +
-                HondaPidCatalog.engine.pids.filter { it.label.contains("Injector", true) },
-        ),
-        Section(
-            title = "Misfires (per cylinder)",
-            hint = "Rising counts on one cylinder → plug/coil/injector/compression. Even counts on all → fuel quality, vacuum leak, or timing. Mode 22 often n/s on clones.",
-            pids = HondaPidCatalog.engine.pids.filter { it.label.contains("Misfire", true) } +
-                idleControlCandidates.filter { it.label.contains("misfire", true) } +
-                HondaPidCatalog.engine.pids.filter { it.label.contains("Knock", true) },
-        ),
-    )
+    /** FB2 sections (SAE + Honda Mode 22 candidates). */
+    val sections: List<Section> = sectionsFor(VehicleProfile.FB2)
 
-    val allPids: List<PidDefinition> =
-        sections.flatMap { it.pids }.distinctBy { it.id }
+    fun sectionsFor(profile: VehicleProfile): List<Section> {
+        val saeIdleQuality = listOfNotNull(
+            StandardPidCatalog.byId("010C"),
+            StandardPidCatalog.byId("0105"),
+            StandardPidCatalog.byId("0167"),
+            StandardPidCatalog.byId("010F"),
+            StandardPidCatalog.byId("0146"),
+            StandardPidCatalog.byId("011F"),
+            StandardPidCatalog.byId("0104"),
+            StandardPidCatalog.byId("0111"),
+            StandardPidCatalog.byId("010B"),
+            StandardPidCatalog.byId("0110"),
+            StandardPidCatalog.byId("010E"),
+            StandardPidCatalog.byId("0142"),
+            StandardPidCatalog.byId("015C"), // oil temp (SAE)
+        )
+        val saeTrims = listOfNotNull(
+            StandardPidCatalog.byId("0106"),
+            StandardPidCatalog.byId("0107"),
+            StandardPidCatalog.byId("0108"),
+            StandardPidCatalog.byId("0109"),
+            StandardPidCatalog.byId("0114"),
+            StandardPidCatalog.byId("0115"),
+            StandardPidCatalog.byId("0124"),
+            StandardPidCatalog.byId("0134"),
+            StandardPidCatalog.byId("0144"),
+        )
+        val saeFuel = listOfNotNull(
+            StandardPidCatalog.byId("0103"),
+            StandardPidCatalog.byId("010A"),
+            StandardPidCatalog.byId("0122"),
+            StandardPidCatalog.byId("0123"),
+            StandardPidCatalog.byId("0159"),
+            StandardPidCatalog.byId("015E"),
+            StandardPidCatalog.byId("015D"),
+            StandardPidCatalog.byId("012F"),
+        )
+        return when (profile) {
+            VehicleProfile.GENERIC_OBD2 -> listOf(
+                Section(
+                    title = "Cold start / idle quality",
+                    hint = "Capture while cold (coolant < ~50°C) at idle in Park/Neutral, AC off, then again after warm-up. SAE Mode 01 only.",
+                    pids = saeIdleQuality,
+                ),
+                Section(
+                    title = "Fuel trims & O2 (idle)",
+                    hint = "At warm idle, STFT should hover near 0 (±5%). Large positive = lean; large negative = rich.",
+                    pids = saeTrims,
+                ),
+                Section(
+                    title = "Fuel delivery (SAE)",
+                    hint = "Standard fuel-pressure / rate PIDs. Many cars omit some — that shows as n/s, not a broken adapter.",
+                    pids = saeFuel,
+                ),
+                Section(
+                    title = "Emissions / monitors (SAE)",
+                    hint = "Useful extras often present on modern OBD-II cars.",
+                    pids = listOfNotNull(
+                        StandardPidCatalog.byId("0101"),
+                        StandardPidCatalog.byId("011C"),
+                        StandardPidCatalog.byId("0121"),
+                        StandardPidCatalog.byId("0130"),
+                        StandardPidCatalog.byId("0131"),
+                        StandardPidCatalog.byId("0133"),
+                        StandardPidCatalog.byId("0141"),
+                        StandardPidCatalog.byId("0151"),
+                    ),
+                ),
+            )
+            VehicleProfile.FB2 -> listOf(
+                Section(
+                    title = "Cold start / idle quality",
+                    hint = "Capture while cold (coolant < ~50°C) at idle in Park/Neutral, AC off, then again after warm-up.",
+                    pids = saeIdleQuality + idleControlCandidates.filter { !it.label.contains("misfire", true) },
+                ),
+                Section(
+                    title = "Fuel trims & O2 (idle)",
+                    hint = "At warm idle, STFT should hover near 0 (±5%). Large positive = lean (vacuum leak / low fuel). Large negative = rich.",
+                    pids = saeTrims,
+                ),
+                Section(
+                    title = "Fuel delivery / pump pressure",
+                    hint = "FB2 is port-injected; SAE fuel-rail PIDs are often n/s. We probe SAE + Honda candidates — send debug log if any answer.",
+                    pids = saeFuel + fuelPressureCandidates +
+                        HondaPidCatalog.engine.pids.filter { it.label.contains("Injector", true) },
+                ),
+                Section(
+                    title = "Misfires (per cylinder)",
+                    hint = "Rising counts on one cylinder → plug/coil/injector/compression. Even counts on all → fuel quality, vacuum leak, or timing. Mode 22 often n/s on clones.",
+                    pids = HondaPidCatalog.engine.pids.filter { it.label.contains("Misfire", true) } +
+                        idleControlCandidates.filter { it.label.contains("misfire", true) } +
+                        HondaPidCatalog.engine.pids.filter { it.label.contains("Knock", true) },
+                ),
+            )
+        }
+    }
+
+    fun allPidsFor(profile: VehicleProfile): List<PidDefinition> =
+        sectionsFor(profile).flatMap { it.pids }.distinctBy { it.id }
+
+    val allPids: List<PidDefinition> = allPidsFor(VehicleProfile.FB2)
 
     /**
      * Rule-of-thumb tips from probed samples. Conservative — never claims a part

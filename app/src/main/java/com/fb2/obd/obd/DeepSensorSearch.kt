@@ -8,26 +8,35 @@ import kotlinx.coroutines.delay
  * Runs [DeepSearchKnowledgeBase] strategies against a live [ObdSource].
  *
  * Smart flow (learned from FB2 + cheap ELM clones + Torque):
- * 1. Soft-restore the adapter first (don't start mid-UNABLE storm).
- * 2. Prefer adapter-local recipes (ATRV) — they work even when the ECU link is down.
- * 3. Ping the bus; if ECU is unreachable, skip protocol/header thrashing (ATSP6/ATSH)
- *    that only makes the Dash laggier.
- * 4. Always restore broadcast Mode 01 so polling can resume.
+ * 1. Pause continuous Mode 01 polling so ATSH/ATSP thrash cannot interleave
+ *    with the Dash (that produced laggy / wrong values during deep search).
+ * 2. Soft-restore the adapter first (don't start mid-UNABLE storm).
+ * 3. Prefer adapter-local recipes (ATRV) — they work even when the ECU link is down.
+ * 4. Always try simple broadcast Mode 01 forces next (e.g. Coolant 0105) — these
+ *    are safe even when a strict bus ping is flaky after ATSP0 SEARCHING.
+ * 5. Ping the bus; if healthy, walk the remaining header / Mode 22 list.
+ * 6. Always restore broadcast Mode 01 and resume polling (clears Dash hang).
  */
 object DeepSensorSearch {
 
     private val BAD = listOf("NO DATA", "UNABLE", "ERROR", "?", "STOPPED", "BUS INIT")
 
-    private val FULL_RESTORE = listOf("ATD", "ATE0", "ATL0", "ATS0", "ATSP0", "ATSH7DF", "ATAR")
+    private val FULL_RESTORE = listOf("ATD", "ATE0", "ATL0", "ATS0", "ATSH7DF", "ATAR")
+    /** Last resort when gentle restore leaves the bus dead — includes ATSP0. */
+    private val HARD_RESTORE = listOf("ATD", "ATE0", "ATL0", "ATS0", "ATSP0", "ATSH7DF", "ATAR")
+
+    /** Soft-restore after this many consecutive UNABLE/timeout misses (keep walking the list). */
+    private const val RESTORE_EVERY_UNABLE = 2
 
     suspend fun run(
         source: ObdSource,
         label: String,
         pid: PidDefinition? = null,
         requestHint: String? = null,
+        profile: VehicleProfile = VehicleProfile.FB2,
         onProgress: (index: Int, total: Int, title: String) -> Unit = { _, _, _ -> },
     ): DeepSearchReport {
-        val all = DeepSearchKnowledgeBase.strategiesFor(pid, label, requestHint)
+        val all = VehicleProfileConfig.deepSearchStrategies(profile, pid, label, requestHint)
         val notes = mutableListOf(DeepSearchKnowledgeBase.explainLikelyCause(label, pid))
         if (all.isEmpty()) {
             return DeepSearchReport(
@@ -39,14 +48,19 @@ object DeepSensorSearch {
         }
 
         ObdLogger.logDebug(ObdLogger.Dir.INFO, "DEEP SEARCH begin [$label] ${all.size} strategies")
-        onProgress(0, all.size, "Restoring adapter…")
-        restore(source)
+        source.pausePolling()
+        onProgress(0, all.size, "Pausing live Dash poll…")
+        delay(80L)
 
         val adapterLocal = all.filter { it.isAdapterLocal }
-        val needsBus = all.filter { !it.isAdapterLocal }
+        val simpleForce = all.filter { !it.isAdapterLocal && it.isSimpleForce }
+        val advanced = all.filter { !it.isAdapterLocal && !it.isSimpleForce }
         var attempts = 0
 
         try {
+            onProgress(0, all.size, "Restoring adapter…")
+            restore(source)
+
             // --- Phase A: adapter-local (ATRV etc.) with retries ---
             for ((i, strategy) in adapterLocal.withIndex()) {
                 attempts++
@@ -56,7 +70,6 @@ object DeepSensorSearch {
                 if (hit != null) {
                     return success(label, pid, requestHint, attempts, hit, notes)
                 }
-                // One soft restore + immediate retry for ATRV — clones often need a clean buffer.
                 if (strategy.request.equals("ATRV", true) && i == 0) {
                     restore(source)
                     attempts++
@@ -67,38 +80,49 @@ object DeepSensorSearch {
                 }
             }
 
-            // --- Phase B: is the ECU link alive? ---
-            onProgress(attempts, all.size, "Checking ECU link…")
-            val busOk = busHealthy(source)
-            if (!busOk) {
-                notes += "ECU link is down (UNABLE / timeout). Skipped protocol/header switches that would make the app lag. Adapter-local reads already tried."
-                // Still try a couple of simple broadcast Mode 01 forces after one more restore.
+            // --- Phase B: simple Mode 01 forces BEFORE bus verdict ---
+            // Coolant 0105 etc. must not be skipped just because ATSP0 SEARCHING
+            // made a quick 010C ping look dead while ELM still shows LINKED.
+            if (simpleForce.isNotEmpty()) {
+                onProgress(attempts.coerceAtLeast(0), all.size, "Trying broadcast Mode 01…")
                 restore(source)
-                val simple = needsBus.filter { it.isSimpleForce }.take(3)
-                for (strategy in simple) {
+                for (strategy in simpleForce) {
                     attempts++
                     onProgress(attempts, all.size, strategy.title)
-                    delay(30L)
+                    delay(if (source.isLive) 40L else 120L)
                     tryStrategy(source, strategy)?.let { hit ->
                         return success(label, pid, requestHint, attempts, hit, notes)
                     }
                 }
-                return DeepSearchReport(
-                    targetLabel = label,
-                    targetId = pid?.id ?: requestHint ?: label,
-                    attempts = attempts,
-                    hit = null,
-                    notes = notes + "Still unable to find this sensor while the ECU link is down. Reconnect the ELM (or wait for LIVE) and run deep analysis again — ATRV/0142 usually work once the bus recovers.",
-                )
             }
 
-            // --- Phase C: full strategy list (headers / protocols) while bus is healthy ---
-            var unableStreak = 0
-            for (strategy in needsBus) {
-                if (unableStreak >= 3) {
-                    notes += "Aborted early — adapter kept returning UNABLE TO CONNECT after restores."
-                    break
+            // --- Phase C: bus health for advanced header / Mode 22 ---
+            onProgress(attempts.coerceAtLeast(0), all.size, "Checking ECU link…")
+            val busOk = busHealthy(source)
+            if (!busOk) {
+                notes += "ECU link check was shaky after restore (UNABLE / timeout). " +
+                    "Already tried ${simpleForce.size} broadcast Mode 01 strategies. " +
+                    "Retrying once with protocol search (ATSP0) before skipping advanced."
+                restore(source, hard = true)
+                val busOkHard = busHealthy(source)
+                if (!busOkHard) {
+                    notes += "Still shaky after ATSP0. " +
+                        "Skipping ${advanced.size} header/Mode 22 strategies that need a solid ECM link."
+                    return DeepSearchReport(
+                        targetLabel = label,
+                        targetId = pid?.id ?: requestHint ?: label,
+                        attempts = attempts,
+                        hit = null,
+                        notes = notes + "Still unable to find this sensor. " +
+                            "Tried $attempts / ${all.size} strategies" +
+                            if (advanced.isNotEmpty()) " (skipped ${advanced.size} advanced)." else ".",
+                    )
                 }
+            }
+
+            // --- Phase D: walk advanced list while bus healthy ---
+            var unableStreak = 0
+            for (strategy in advanced) {
                 attempts++
                 onProgress(attempts, all.size, strategy.title)
                 delay(if (source.isLive) 25L else 150L)
@@ -108,27 +132,36 @@ object DeepSensorSearch {
                     return success(label, pid, requestHint, attempts, hit, notes)
                 }
 
-                // Peek bus health; soft-restore every other miss so we don't leave a weird ATSH.
                 val ping = source.command("010C")?.uppercase().orEmpty()
                 if (BAD.any { ping.contains(it) } || ping.isBlank()) {
                     unableStreak++
-                    if (unableStreak % 2 == 0) restore(source)
+                    if (unableStreak % RESTORE_EVERY_UNABLE == 0) {
+                        onProgress(attempts, all.size, "Soft-restore after UNABLE…")
+                        restore(source)
+                    }
                 } else {
                     unableStreak = 0
                 }
             }
+            if (unableStreak > 0) {
+                notes += "Finished all ${advanced.size} advanced strategies; last $unableStreak miss(es) looked like UNABLE/timeout."
+            }
         } finally {
-            restore(source)
-            ObdLogger.logDebug(ObdLogger.Dir.INFO, "DEEP SEARCH restore done [$label]")
+            // Always restore + resume so Dash never stays frozen after deep search.
+            runCatching { restore(source) }
+            source.resumePolling()
+            ObdLogger.logDebug(ObdLogger.Dir.INFO, "DEEP SEARCH restore + poll resume done [$label]")
         }
 
-        ObdLogger.logDebug(ObdLogger.Dir.INFO, "DEEP SEARCH miss [$label] after $attempts tries")
+        ObdLogger.logDebug(ObdLogger.Dir.INFO, "DEEP SEARCH miss [$label] after $attempts / ${all.size} tries")
         return DeepSearchReport(
             targetLabel = label,
             targetId = pid?.id ?: requestHint ?: label,
             attempts = attempts,
             hit = null,
-            notes = notes + "Still unable to find this sensor. Likely unsupported on this ECU, wrong Honda ID, or the adapter cannot reach that module. Capture a debug log and try again when LIVE is stable.",
+            notes = notes + "Still unable to find this sensor after trying $attempts / ${all.size} strategies. " +
+                "Likely unsupported on this ECU, wrong Honda Mode 22 ID, or the adapter cannot reach that module. " +
+                "Capture a debug log and try again when LIVE is stable.",
         )
     }
 
@@ -153,32 +186,48 @@ object DeepSensorSearch {
         )
     }
 
-    private suspend fun restore(source: ObdSource) {
-        FULL_RESTORE.forEach { cmd ->
+    private suspend fun restore(source: ObdSource, hard: Boolean = false) {
+        val seq = if (hard) HARD_RESTORE else FULL_RESTORE
+        seq.forEach { cmd ->
             runCatching { source.command(cmd) }
-            delay(20L)
+            delay(30L)
         }
+        // Brief settle; hard path needs longer for ATSP0 SEARCHING…
+        delay(if (hard) 120L else 40L)
     }
 
     private suspend fun busHealthy(source: ObdSource): Boolean {
-        val ping = source.command("010C")?.uppercase().orEmpty()
-        if (ping.isBlank() || BAD.any { ping.contains(it) }) return false
-        // Need a real RPM frame, not just echo.
-        return ping.contains("41") || ping.any { it.isDigit() }
+        // ATSP0 often prints SEARCHING… — give the clone several chances.
+        repeat(5) { attempt ->
+            val ping = source.command("010C")?.uppercase().orEmpty()
+            if (ping.isNotBlank() && BAD.none { ping.contains(it) } &&
+                (ping.contains("41") || ping.contains("0C"))
+            ) {
+                return true
+            }
+            // Also accept a coolant ping — proves Mode 01 is alive.
+            val cool = source.command("0105")?.uppercase().orEmpty()
+            if (cool.isNotBlank() && BAD.none { cool.contains(it) } &&
+                (cool.contains("41") || cool.contains("05"))
+            ) {
+                return true
+            }
+            if (attempt < 4) delay(280L)
+        }
+        return false
     }
 
     private suspend fun tryStrategy(source: ObdSource, strategy: DeepSearchStrategy): DeepSearchHit? {
         try {
             strategy.setup.forEach { cmd ->
                 source.command(cmd)
-                delay(20L)
+                delay(25L)
             }
-            delay(25L)
+            delay(30L)
             val raw = source.command(strategy.request) ?: return null
             val up = raw.uppercase()
             if (BAD.any { up.contains(it) }) return null
 
-            // ATRV returns "12.6V" — not a Mode 01/22 hex frame.
             if (strategy.request.equals("ATRV", ignoreCase = true)) {
                 val v = ObdResponseParser.parseAtVoltage(raw) ?: return null
                 return DeepSearchHit(strategy, v, raw)

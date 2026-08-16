@@ -32,6 +32,7 @@ import com.fb2.obd.car.CarDashState
 import com.fb2.obd.car.FloatingDashLayout
 import com.fb2.obd.car.FloatingDashMetrics
 import com.fb2.obd.car.VehicleLiveStore
+import com.fb2.obd.data.ConnectionState
 import kotlin.math.min
 import com.fb2.obd.data.ObdLogger
 import kotlinx.coroutines.CoroutineScope
@@ -465,20 +466,31 @@ class FloatingDashOverlayService : Service() {
         }
         val page = FloatingDashMetrics.page(metrics, pageIndex)
         val primary = FloatingDashMetrics.collapsedMetric(metrics, pinnedLabel)
+        val linkActive = latest.showingLiveValues
         // Collapsed rim follows the pinned metric. Expanded rim = worst of all.
-        val rimHealth = if (expanded) {
+        // Offline → muted grey so a green ring cannot imply "coolant OK" while disconnected.
+        val rimHealth = if (!linkActive) {
+            null
+        } else if (expanded) {
             FloatingDashMetrics.worstHealth(metrics.mapNotNull { it.health })
         } else {
             primary.health
                 ?: FloatingDashMetrics.worstHealth(metrics.mapNotNull { it.health })
         }
-        val rim = healthColor(rimHealth)
+        val rim = if (linkActive) healthColor(rimHealth) else COLOR_OFFLINE
 
         center.layoutParams = FrameLayout.LayoutParams(centerSize, centerSize).apply {
             gravity = Gravity.CENTER
         }
         center.text = if (expanded) {
             "FB2\n${pageIndex + 1}/${FloatingDashMetrics.pageCount(metrics)}"
+        } else if (!linkActive) {
+            val tag = when (latest.connection) {
+                ConnectionState.CONNECTING -> "RETRY"
+                ConnectionState.ERROR -> "OFF"
+                else -> "OFF"
+            }
+            "$tag\n--"
         } else {
             val label = when {
                 primary.label.contains("Coolant", ignoreCase = true) -> "COOL"
@@ -704,6 +716,7 @@ class FloatingDashOverlayService : Service() {
         const val ACTION_READY = "com.fb2.obd.action.FLOATING_DASH_READY"
 
         private val COLOR_ACCENT = Color.parseColor("#00E5FF")
+        private val COLOR_OFFLINE = Color.parseColor("#667788")
         private val COLOR_GOOD = Color.parseColor("#29D07B")
         private val COLOR_WARN = Color.parseColor("#FFB300")
         private val COLOR_HOT = Color.parseColor("#FF8A3D")

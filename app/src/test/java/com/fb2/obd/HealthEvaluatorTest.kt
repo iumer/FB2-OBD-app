@@ -13,10 +13,11 @@ class HealthEvaluatorTest {
         assertEquals(Health.COLD, HealthEvaluator.coolant(55.0).health)
         assertEquals(Health.GOOD, HealthEvaluator.coolant(85.0).health)
         assertEquals("NORMAL", HealthEvaluator.coolant(85.0).label)
-        assertEquals(Health.WARN, HealthEvaluator.coolant(95.0).health)
-        assertEquals(Health.ELEVATED, HealthEvaluator.coolant(100.0).health)
-        assertEquals(Health.CRITICAL, HealthEvaluator.coolant(105.0).health)
-        assertEquals("OVERHEAT", HealthEvaluator.coolant(105.0).label)
+        assertEquals(Health.GOOD, HealthEvaluator.coolant(95.0).health)
+        assertEquals(Health.WARN, HealthEvaluator.coolant(98.0).health)
+        assertEquals(Health.ELEVATED, HealthEvaluator.coolant(102.0).health)
+        assertEquals(Health.CRITICAL, HealthEvaluator.coolant(104.0).health)
+        assertEquals("OVERHEAT", HealthEvaluator.coolant(104.0).label)
         assertEquals(Health.UNKNOWN, HealthEvaluator.coolant(null).health)
     }
 

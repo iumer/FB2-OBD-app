@@ -25,6 +25,12 @@ non-obvious cloud specifics.
 - Lint: `./gradlew lintDebug`
 - Build APK: `./gradlew assembleDebug` → `app/build/outputs/apk/debug/app-debug.apk`
   (also copy to `dist/FB2-Diag-debug.apk` for sideload).
+- **Always-latest sideload URL (do not invent branch-specific raw links for the user):**
+  https://raw.githubusercontent.com/iumer/FB2-OBD-app/latest/dist/FB2-Diag-debug.apk  
+  **Only one APK** — publish `dist/FB2-Diag-debug.apk` alone to branch `latest`
+  via `scripts/publish-latest-apk.sh`. Never create a second sideload APK/link.
+  Tell the user that same URL — never a `cursor/...` branch raw link unless they
+  ask for a specific PR build.
 
 ### Running / demoing the UI
 
@@ -57,11 +63,26 @@ non-obvious cloud specifics.
   (parser, gear estimator, health thresholds, PID catalogs, trip computer) so
   it stays JVM-unit-testable without Android. Prefer adding logic there and
   keeping `ui`/`data` thin.
+- **Vehicle profiles** (`VehicleProfile` / Settings → Vehicle profile):
+  - **FB2** — Honda Civic FB2 (Mode 22 packs, Trans, Honda modules, FB2 thresholds).
+  - **Generic OBD2** — SAE Mode 01 catalog only; no Trans page; no Honda DIAG;
+    deep search skips Mode 22/Honda strategies; estimated gear off by default;
+    Mode 0A permanent DTCs on Faults. Use Generic as the safe fallback for any
+    OBD-II car (Mira / Corolla / Civic X / etc.).
+- **Dash Theme** (Settings → Theme dropdown): Classic / OptA / OptB / OptC.
+  Classic keeps Idle/Perf swipe tabs. Opt themes are immersive clusters (themed
+  chrome + colours; ☰ menu for Settings/DIAG/MIN/LOG). Selecting a theme
+  recolours the **entire app** (Faults / AI / DIAG / Settings) via
+  `ThemePalette` → `FB2Theme` / Material3 colour scheme.
 - Honda enhanced packs in `HondaPidCatalog` use Mode 22 placeholders
   (`2211xx`…`2219xx`). Real FB2 / market-specific ECUs often need different IDs
   **and** CAN headers (`ATSH`). Until recently the app never sent headers — that
   is an app/protocol gap, not proof the ELM adapter is broken. **Triple-tap** any
   `n/s` tile to run **Deep research** (`DeepSearchKnowledgeBase` + `DeepSensorSearch`).
+  Deep research **pauses live Mode 01 polling** while it runs (so ATSH thrash cannot
+  interleave and lag the Dash), walks the full strategy list when the ECU link is
+  up, and reports how many header strategies were **skipped** if the link is down
+  — it does not silently fail after the first try while showing “1/10”.
 - Coolant2 (`0167`), Ambient (`0146`), and LTFT (`0107`) frequently return
   `n/s` on this Civic because the ECM support bitmask omits them — usually an
   ECU limitation. Deep search still forces the PID and tries ECM headers.
@@ -88,8 +109,11 @@ non-obvious cloud specifics.
   **DTCs** (from readiness / Mode 01 PID 01, refreshed ~12s), and **Health**
   (`HealthScore.vehiclePct`). Load & Throttle are display-only (always green).
 - Colour bands / voice thresholds live in `HealthThresholds` (long-press editor).
-  Coolant **voice** alerts only above `coolantVoiceAbove` (default 110°C), even
-  though the red tile starts earlier (`> coolantElevatedMax`, default 103°C).
+  Coolant **voice** alerts at/above `coolantVoiceAbove` (FB2 default **104°C**).
+  Colour bands (FB2): green ≤95, yellow ≤100, orange ≤103, red ≥104.
+  Battery **voice** only at/below `battVoiceCriticalBelow` (default **11.8V**);
+  tile colours still use ELD-aware charging bands. Voltage is ATRV (OBD-plug rail),
+  median-filtered — cheap clones can under-read vs a post multimeter.
 - **Diagnostic brain (OEM-style):** `DiagnosticBrain` EMA-smooths noisy sensors
   for health/voice decisions while the UI still shows raw values. Zone colours
   use `AlertPolicy.latchHealth` hysteresis so bands do not flicker. Voice is
@@ -128,11 +152,24 @@ non-obvious cloud specifics.
   values. API key in Settings → AI analysis (`platform.openai.com` — Plus ≠ API).
   No conversational chat in-app.
 - **ELM idle drop:** cheap clones often hang mid-poll. The app uses short PID
-  timeouts (~650 ms poll / ~450 ms probe), skips repeatedly-failing PIDs, keeps
-  last-good Dash values, and retries RFCOMM forever with backoff (UI shows
-  `RETRY`). A blank reconnect frame must not wipe the Dash or fake `Engine Stop`.
+  timeouts (~650 ms poll / ~450 ms probe), skips repeatedly-failing **secondary**
+  PIDs, keeps last-good Dash values briefly, and retries RFCOMM forever with
+  backoff (UI shows `RETRY`). **RPM + Speed are never fail-streak-skipped**
+  (`PidPollPlanner`); secondary PIDs rotate (~4/cycle) so cycles stay short.
+  Speed older than ~2.5s without a fresh decode is cleared (`SnapshotFreshness`)
+  so the Dash does not freeze on a false km/h while RPM still updates. A blank
+  reconnect frame must not wipe the Dash or fake `Engine Stop`.
   **Battery** prefers `ATRV` (adapter rail voltage, Torque-style) every cycle even
   during `UNABLE` — do not gate ATRV on ECU bus health.
+  **Freshness LEDs:** each Dash tile / hero RPM+Speed shows a green heartbeat that
+  blinks when that field was successfully decoded (`VehicleSnapshot.freshAtMs`).
+  Dim while recent, dark when stale — same idea as Torque Pro’s green blink.
+  Safety fields (RPM/Speed/Coolant/Battery/MAF/MAP) clear to `n/s` after TTL;
+  estimated gear only when both RPM and Speed are fresh.
+  **Long-haul LOG:** session CSV is checkpointed to disk ~every 60s (and on STOP)
+  so a crash does not lose the whole drive. Snapshot rows throttled to ~1 Hz.
+  Bus-lost soft-recover caps at 3 then RFCOMM reconnect; ATRV-only is not a
+  healthy Mode 01 cycle. Dash-extra refresh does not softRecover every 5s.
 - **Screen off / background:** real ELM sessions start
   `ObdMonitorForegroundService` (`connectedDevice` FGS + sticky notification +
   `PARTIAL_WAKE_LOCK`). Demo mode must not start it. Voice alerts play a short
@@ -165,8 +202,8 @@ non-obvious cloud specifics.
   runs deep search on n/s tiles; long-press edits health thresholds.
 - **Sensor picker search:** Type ≥2 chars in the dialog search box to filter
   by label / request / category (skip category drill-down).
-- **HU sideload APK:** Use `scripts/package-hu-apk.sh` (or `dist/FB2-Diag-debug.apk`
-  / `dist/FB2-Diag-hu.apk`). Must be **v1+v2** signed — plain AGP debug/release
+- **HU sideload APK:** Use `scripts/package-hu-apk.sh` → single file
+  `dist/FB2-Diag-debug.apk`. Must be **v1+v2** signed — plain AGP debug/release
   is often **v2-only**, which makes some car package installers hang on
   “Installing…”. Prefer the ~7MB release-classpath APK over the bloated debug
   APK. If install sticks: uninstall old `FB2 Diag`, reboot HU, copy APK via USB

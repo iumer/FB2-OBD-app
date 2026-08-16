@@ -35,8 +35,7 @@ zip -d "$UNSIGNED" 'META-INF/*.SF' 'META-INF/*.RSA' 'META-INF/*.DSA' 'META-INF/M
 "$APKSIGNER" verify --min-sdk-version 21 "$SIGNED" >/dev/null
 mkdir -p "$ROOT/dist"
 cp -f "$SIGNED" "$ROOT/dist/FB2-Diag-debug.apk"
-cp -f "$SIGNED" "$ROOT/dist/FB2-Diag-hu.apk"
-rm -f "$UNSIGNED" "$ALIGNED" "$SIGNED"
+rm -f "$UNSIGNED" "$ALIGNED" "$SIGNED" "$ROOT/dist/FB2-Diag-hu.apk"
 
 echo "OK: dist/FB2-Diag-debug.apk ($(du -h "$ROOT/dist/FB2-Diag-debug.apk" | awk '{print $1}'))"
 "$APKSIGNER" verify --verbose --min-sdk-version 21 "$ROOT/dist/FB2-Diag-debug.apk" | head -8

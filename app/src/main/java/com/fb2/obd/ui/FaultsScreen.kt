@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -41,12 +42,12 @@ fun FaultsScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(Background)
+            .background(MaterialTheme.colorScheme.background)
             .padding(16.dp),
     ) {
         ScreenHeader(title = "Fault codes", onBack = onBack) {
             Row {
-                ActionButton(if (state.loading) "Reading\u2026" else "Read", Accent, onRead)
+                ActionButton(if (state.loading) "Reading\u2026" else "Read", MaterialTheme.colorScheme.primary, onRead)
                 ActionButton("Clear", CritRed, onClear)
             }
         }
@@ -57,7 +58,7 @@ fun FaultsScreen(
 
         if (!state.hasRead && state.message == null) {
             Text(
-                text = "Tap Read to scan the ECU for stored (Mode 03) and pending (Mode 07) trouble codes.",
+                text = "Tap Read to scan the ECU for stored (Mode 03), pending (Mode 07), and permanent (Mode 0A) trouble codes.",
                 color = TextMuted,
                 fontSize = 13.sp,
             )
@@ -76,7 +77,11 @@ fun FaultsScreen(
                 SectionTitle("Pending (${state.pending.size})", WarnAmber)
                 state.pending.forEach { DtcRow(it, WarnAmber) }
             }
-            if (state.hasRead && state.stored.isEmpty() && state.pending.isEmpty()) {
+            if (state.permanent.isNotEmpty()) {
+                SectionTitle("Permanent (${state.permanent.size})", TextMuted)
+                state.permanent.forEach { DtcRow(it, TextMuted) }
+            }
+            if (state.hasRead && state.stored.isEmpty() && state.pending.isEmpty() && state.permanent.isEmpty()) {
                 Text(text = "\u2713 No codes.", color = GoodGreen, fontSize = 16.sp, fontWeight = FontWeight.Bold)
             }
         }
@@ -101,7 +106,7 @@ private fun DtcRow(dtc: Dtc, color: androidx.compose.ui.graphics.Color) {
             .fillMaxWidth()
             .padding(bottom = 8.dp)
             .clip(RoundedCornerShape(12.dp))
-            .background(Surface)
+            .background(MaterialTheme.colorScheme.surface)
             .padding(14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -126,7 +131,7 @@ private fun ActionButton(text: String, color: androidx.compose.ui.graphics.Color
             .padding(start = 8.dp)
             .clip(RoundedCornerShape(8.dp))
             .clickable { onClick() }
-            .background(Surface)
+            .background(MaterialTheme.colorScheme.surface)
             .padding(horizontal = 14.dp, vertical = 8.dp),
     )
 }

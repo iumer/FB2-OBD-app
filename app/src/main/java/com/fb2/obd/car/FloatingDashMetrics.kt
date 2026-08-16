@@ -1,5 +1,6 @@
 package com.fb2.obd.car
 
+import com.fb2.obd.data.ConnectionState
 import com.fb2.obd.obd.Health
 
 /**
@@ -19,6 +20,15 @@ object FloatingDashMetrics {
     )
 
     fun from(state: CarDashState): List<Metric> {
+        // Offline / reconnecting: single OFF tile so the bubble cannot freeze on last-good.
+        if (!state.showingLiveValues) {
+            val tag = when (state.connection) {
+                ConnectionState.CONNECTING -> "RETRY"
+                ConnectionState.ERROR -> "OFF"
+                else -> "OFF"
+            }
+            return listOf(Metric(tag, "--", "", null, state.statusLine))
+        }
         // Coolant first — collapsed bubble + page 0 lead with temp while driving.
         // RPM stays early so high/redline colour is one swipe away on the ring.
         val preferredOrder = listOf(

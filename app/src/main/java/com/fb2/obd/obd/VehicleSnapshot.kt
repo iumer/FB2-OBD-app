@@ -30,14 +30,23 @@ data class VehicleSnapshot(
     val gearRatioActual: Double? = null,
     /** PID numbers the ECU reported as NOT supported (for "n/s" tiles). */
     val unsupportedPids: Set<Int> = emptySet(),
+    /**
+     * Wall-clock ms of the last successful decode per Dash field key
+     * ([SnapshotFreshness] keys). Drives Torque-style green heartbeat LEDs.
+     */
+    val freshAtMs: Map<String, Long> = emptyMap(),
 ) {
     companion object {
         val EMPTY = VehicleSnapshot()
     }
 }
 
-/** True when a frame has no usable live sensors (typical blank reconnect frame). */
+/** True when a frame has no usable drive sensors (typical blank reconnect frame).
+ *  ATRV/battery alone does NOT count — soft-recover often keeps volts while
+ *  Mode 01 is dead; treating that as "content" wiped last-good heroes mid-drive.
+ */
 fun VehicleSnapshot.isEffectivelyBlank(): Boolean =
-    rpm == null && speedKmh == null && coolantC == null && batteryVolts == null &&
-        mafGps == null && mapKpa == null && throttlePct == null && stftPct == null
+    rpm == null && speedKmh == null && coolantC == null && mafGps == null &&
+        mapKpa == null && throttlePct == null && stftPct == null &&
+        intakeC == null && engineLoadPct == null
 

@@ -48,9 +48,13 @@ data class CarDashState(
             connection == ConnectionState.CONNECTED && sourceIsLive -> "LIVE · $sourceName"
             connection == ConnectionState.CONNECTED && !sourceIsLive -> "DEMO"
             connection == ConnectionState.CONNECTING -> "Connecting…"
-            connection == ConnectionState.ERROR -> "Connection error"
+            connection == ConnectionState.ERROR -> "Disconnected"
             else -> "Not connected"
         }
+
+    /** True when Dash numbers are from an active feed (live ELM or Demo). */
+    val showingLiveValues: Boolean
+        get() = connection == ConnectionState.CONNECTED
 }
 
 /**

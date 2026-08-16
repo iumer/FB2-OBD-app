@@ -1,7 +1,6 @@
 package com.fb2.obd.ui
 
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -10,10 +9,11 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -23,13 +23,13 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.foundation.Canvas
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.fb2.obd.obd.GearSource
 import com.fb2.obd.obd.Health
+import com.fb2.obd.obd.SnapshotFreshness
 import com.fb2.obd.ui.theme.Accent
 import com.fb2.obd.ui.theme.ColdBlue
 import com.fb2.obd.ui.theme.CritRed
@@ -51,6 +51,37 @@ fun Health.color(): Color = when (this) {
 }
 
 /**
+ * Torque-style green freshness LED.
+ *
+ * Intentionally **static** (no per-tile timers / Animatable). Low-RAM car HUs
+ * stuttered because ~15 tiles each ran a 200 ms clock + pulse while Demo/ELM
+ * already recomposes the Dash. Brightness still tracks [lastOkMs] on parent recomposes.
+ */
+@Composable
+fun FreshnessHeartbeat(
+    lastOkMs: Long?,
+    modifier: Modifier = Modifier,
+    size: Dp = 8.dp,
+    nowMs: Long = System.currentTimeMillis(),
+) {
+    val age = lastOkMs?.let { nowMs - it }
+    val active = age != null && age < SnapshotFreshness.LED_ACTIVE_MS
+    val alpha = when {
+        lastOkMs == null -> 0.12f
+        !active -> 0.14f
+        age != null && age < 700L -> 1f
+        else -> 0.72f
+    }
+
+    Box(
+        modifier = modifier
+            .size(size)
+            .clip(CircleShape)
+            .background(GoodGreen.copy(alpha = alpha)),
+    )
+}
+
+/**
  * A large circular sweep gauge (used for RPM and Speed) with the value in the
  * centre. Sweeps 270 degrees like a real instrument cluster.
  */
@@ -65,11 +96,7 @@ fun CircularGauge(
     arcColor: Color = Accent,
 ) {
     val fraction = ((value ?: 0.0) / maxValue).coerceIn(0.0, 1.0).toFloat()
-    val animated by animateFloatAsState(
-        targetValue = fraction,
-        animationSpec = tween(durationMillis = 220),
-        label = "gauge",
-    )
+    // Snap — animated sweeps fight scroll jank on low-RAM HUs.
     val sweepTotal = 270f
     val startAngle = 135f
 
@@ -91,7 +118,7 @@ fun CircularGauge(
                     listOf(arcColor, arcColor, WarnAmber, CritRed),
                 ),
                 startAngle = startAngle,
-                sweepAngle = sweepTotal * animated,
+                sweepAngle = sweepTotal * fraction,
                 useCenter = false,
                 topLeft = Offset.Zero,
                 size = arcSize,
@@ -136,7 +163,7 @@ fun StatTile(
     Column(
         modifier = modifier
             .clip(RoundedCornerShape(14.dp))
-            .background(Surface)
+            .background(MaterialTheme.colorScheme.surface)
             .padding(horizontal = 14.dp, vertical = 10.dp),
         verticalArrangement = Arrangement.Center,
     ) {
@@ -187,7 +214,7 @@ fun GearIndicator(
     Column(
         modifier = modifier
             .clip(RoundedCornerShape(16.dp))
-            .background(Surface)
+            .background(MaterialTheme.colorScheme.surface)
             .padding(horizontal = 22.dp, vertical = 12.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
@@ -195,7 +222,7 @@ fun GearIndicator(
         Text(
             // Null means "unknown / below the speed floor", NOT Neutral.
             text = gear?.toString() ?: "\u2013",
-            color = Accent,
+            color = MaterialTheme.colorScheme.primary,
             fontSize = 44.sp,
             fontWeight = FontWeight.Bold,
         )

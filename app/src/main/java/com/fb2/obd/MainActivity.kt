@@ -29,6 +29,7 @@ import androidx.activity.viewModels
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -40,6 +41,7 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -49,6 +51,7 @@ import androidx.core.content.FileProvider
 import com.fb2.obd.ui.theme.Accent
 import com.fb2.obd.ui.theme.Background
 import com.fb2.obd.ui.theme.TextPrimary
+import com.fb2.obd.data.AppUpdateManager
 import com.fb2.obd.data.DemoObdSource
 import com.fb2.obd.data.Elm327BluetoothSource
 import com.fb2.obd.data.LogExportHelper
@@ -75,8 +78,10 @@ import com.fb2.obd.ui.SettingsScreen
 import com.fb2.obd.ui.ValueLogScreen
 import com.fb2.obd.ui.VehicleInfoScreen
 import com.fb2.obd.ui.theme.FB2Theme
+import com.fb2.obd.ui.theme.ThemePalette
 import java.io.File
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 private enum class Screen {
     DASHBOARD, SETTINGS, DIAG_HUB, FAULTS, DEBUG_LOG, VALUE_LOG,
@@ -92,9 +97,9 @@ class MainActivity : ComponentActivity() {
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
 
         setContent {
-            FB2Theme {
+            val settings by viewModel.settings.collectAsState()
+            FB2Theme(palette = ThemePalette.of(settings.dashTheme)) {
                 val state by viewModel.uiState.collectAsState()
-                val settings by viewModel.settings.collectAsState()
                 val faults by viewModel.faults.collectAsState()
                 val performance by viewModel.performance.collectAsState()
                 val trip by viewModel.trip.collectAsState()
@@ -127,6 +132,31 @@ class MainActivity : ComponentActivity() {
                 var ax by remember { mutableFloatStateOf(0f) }
                 var ay by remember { mutableFloatStateOf(0f) }
                 var az by remember { mutableFloatStateOf(9.81f) }
+                // Only push accel into Compose ~2 Hz — SENSOR_DELAY_UI was recomposing
+                // the whole Dash ~16 Hz even when G-force page is not visible.
+                val lastAccelUiMs = remember { java.util.concurrent.atomic.AtomicLong(0L) }
+
+                val updateScope = rememberCoroutineScope()
+                val appUpdateManager = remember { AppUpdateManager(applicationContext) }
+                val appUpdateUi by appUpdateManager.state.collectAsState()
+                val updateBusy = appUpdateUi is AppUpdateManager.UiState.Checking ||
+                    appUpdateUi is AppUpdateManager.UiState.Downloading
+                val updateStatusText = when (val s = appUpdateUi) {
+                    is AppUpdateManager.UiState.Idle -> ""
+                    is AppUpdateManager.UiState.Checking -> "Checking for update…"
+                    is AppUpdateManager.UiState.UpToDate -> s.message
+                    is AppUpdateManager.UiState.Available -> s.message
+                    is AppUpdateManager.UiState.Downloading -> "Downloading… ${s.percent}%"
+                    is AppUpdateManager.UiState.ReadyToInstall -> "Ready to install v${s.remoteName}"
+                    is AppUpdateManager.UiState.Error -> s.message
+                }
+                val updateActionLabel = when (appUpdateUi) {
+                    is AppUpdateManager.UiState.Available -> "DOWNLOAD"
+                    is AppUpdateManager.UiState.ReadyToInstall -> "INSTALL"
+                    is AppUpdateManager.UiState.Checking,
+                    is AppUpdateManager.UiState.Downloading -> "…"
+                    else -> "CHECK"
+                }
 
                 var tick by remember { mutableIntStateOf(0) }
                 LaunchedEffect(screen) {
@@ -141,16 +171,23 @@ class MainActivity : ComponentActivity() {
                     val sensor = sm.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
                     val listener = object : SensorEventListener {
                         override fun onSensorChanged(event: SensorEvent) {
-                            ax = event.values[0]
-                            ay = event.values[1]
-                            az = event.values[2]
-                            viewModel.updatePhoneSensors(ax, ay, az)
+                            val x = event.values[0]
+                            val y = event.values[1]
+                            val z = event.values[2]
+                            viewModel.updatePhoneSensors(x, y, z)
+                            val now = android.os.SystemClock.elapsedRealtime()
+                            val prev = lastAccelUiMs.get()
+                            if (now - prev >= 500L && lastAccelUiMs.compareAndSet(prev, now)) {
+                                ax = x
+                                ay = y
+                                az = z
+                            }
                         }
 
                         override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) = Unit
                     }
                     if (sensor != null) {
-                        sm.registerListener(listener, sensor, SensorManager.SENSOR_DELAY_UI)
+                        sm.registerListener(listener, sensor, SensorManager.SENSOR_DELAY_NORMAL)
                     }
                     onDispose { sm.unregisterListener(listener) }
                 }
@@ -241,7 +278,11 @@ class MainActivity : ComponentActivity() {
                         state = state,
                         modifier = Modifier.fillMaxSize(),
                         showEstimatedGear = settings.showEstimatedGear,
+                        dashTheme = settings.dashTheme,
                         loggingActive = settings.valueLogging,
+                        networkOnline = uploadStatus.online,
+                        pageTitles = viewModel.dashPageTitles,
+                        profileBadge = settings.vehicleProfile.badge,
                         onConnectClick = {
                             val needed = requiredBtPermissions().filter {
                                 ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
@@ -328,7 +369,10 @@ class MainActivity : ComponentActivity() {
                     Screen.SETTINGS -> {
                         SettingsScreen(
                             settings = settings,
+                            onVehicleProfileChange = viewModel::setVehicleProfile,
+                            onDashThemeChange = viewModel::setDashTheme,
                             onToggleEstimatedGear = viewModel::setShowEstimatedGear,
+                            onToggleAllowDemo = viewModel::setAllowDemo,
                             onToggleVoiceAlerts = viewModel::setVoiceAlerts,
                             onToggleDuckMedia = viewModel::setDuckMediaDuringAlerts,
                             onCheckSoundAlert = {
@@ -344,6 +388,27 @@ class MainActivity : ComponentActivity() {
                             },
                             openAiApiKey = viewModel.openAiApiKey(),
                             onOpenAiApiKeyChange = viewModel::setOpenAiApiKey,
+                            appVersionLabel = appUpdateManager.localLabel,
+                            updateStatusText = updateStatusText,
+                            updateActionLabel = updateActionLabel,
+                            updateBusy = updateBusy,
+                            onAppUpdateAction = {
+                                when (val s = appUpdateUi) {
+                                    is AppUpdateManager.UiState.Available -> {
+                                        updateScope.launch { appUpdateManager.downloadUpdate() }
+                                    }
+                                    is AppUpdateManager.UiState.ReadyToInstall -> {
+                                        if (!appUpdateManager.installApk(this@MainActivity, s.apk)) {
+                                            toast("Allow installs from FB2 Diag, then tap INSTALL again")
+                                        }
+                                    }
+                                    is AppUpdateManager.UiState.Checking,
+                                    is AppUpdateManager.UiState.Downloading -> Unit
+                                    else -> {
+                                        updateScope.launch { appUpdateManager.checkForUpdate() }
+                                    }
+                                }
+                            },
                             nav = settingsNav,
                             onBack = { screen = Screen.DASHBOARD },
                             modifier = Modifier.fillMaxSize(),
@@ -355,6 +420,8 @@ class MainActivity : ComponentActivity() {
                         nav = diagnosticsNav,
                         onBack = { screen = Screen.DASHBOARD },
                         modifier = Modifier.fillMaxSize(),
+                        showHondaModules = viewModel.showHondaModules,
+                        blurb = com.fb2.obd.obd.VehicleProfileConfig.diagHubBlurb(settings.vehicleProfile),
                     )
 
                     Screen.AI_ANALYZE -> {
@@ -491,8 +558,16 @@ class MainActivity : ComponentActivity() {
                     ConnectDialog(
                         devices = devices,
                         onPickDevice = { connectTo(it); showConnect = false },
-                        onPickDemo = { viewModel.useSource(DemoObdSource()); showConnect = false },
+                        onPickDemo = {
+                            if (settings.allowDemo && !state.sourceIsLive) {
+                                viewModel.useSource(DemoObdSource())
+                                showConnect = false
+                            } else {
+                                toast("Turn on Demo in Settings first (or disconnect live ELM)")
+                            }
+                        },
                         onDismiss = { showConnect = false },
+                        showDemo = settings.allowDemo && !state.sourceIsLive,
                     )
                 }
 
@@ -520,7 +595,7 @@ class MainActivity : ComponentActivity() {
                                     finishAndRemoveTask()
                                 },
                             ) {
-                                Text("Exit & disconnect", color = Accent, fontWeight = FontWeight.Bold)
+                                Text("Exit & disconnect", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
                             }
                         },
                         dismissButton = {
@@ -528,7 +603,7 @@ class MainActivity : ComponentActivity() {
                                 Text("Stay", color = TextPrimary)
                             }
                         },
-                        containerColor = Background,
+                        containerColor = MaterialTheme.colorScheme.background,
                     )
                 }
 
