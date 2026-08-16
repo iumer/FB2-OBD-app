@@ -156,6 +156,7 @@ class Elm327BluetoothSource(
                 var lastMode01OkMs = System.currentTimeMillis()
                 var lastOkPid: String? = null
                 var consecutiveUnableCycles = 0
+                var lastEmitted: VehicleSnapshot? = null
                 while (isActive) {
                     // Deep search / exclusive probes own the RFCOMM socket — do not
                     // interleave Mode 01 polls (that caused laggy/wrong Dash values).
@@ -271,12 +272,10 @@ class Elm327BluetoothSource(
                             }
                             if (pid == ObdPid.ENGINE_RPM) rpmUpdated = true
                         } else {
-                            // Frame arrived but didn't decode — still counts as link alive.
+                            // Frame arrived but didn't decode (SEARCHING… / garbage).
+                            // Do NOT count as mode01Ok — that false "healthy" reset left
+                            // heroes stale and blanked via freshness without reconnecting.
                             responded++
-                            mode01Ok = true
-                            lastMode01OkMs = System.currentTimeMillis()
-                            lastOkPid = pid.request
-                            // Heroes keep retrying next cycle; cap streak so planner never skips them.
                             failStreak[pid] = if (PidPollPlanner.isAlways(pid)) {
                                 (streak + 1).coerceAtMost(1)
                             } else {
@@ -305,6 +304,9 @@ class Elm327BluetoothSource(
                     if (busLost) {
                         consecutiveUnableCycles++
                         softRecoverCount++
+                        // Soft recover can take seconds — emit a heartbeat first so the
+                        // 8–12s UI stale-watch does not blank bubble/Dash mid-recover.
+                        lastEmitted?.let { trySend(it) }
                         softRecover(conn, gentle = true)
                         deadCycles++
                         logger.logEvent(
@@ -441,6 +443,7 @@ class Elm327BluetoothSource(
                         snapshot.speedKmh != null
                     if (hasAny || deadCycles == 0) {
                         trySend(snapshot)
+                        lastEmitted = snapshot
                     }
                 }
             } catch (e: Exception) {
@@ -738,8 +741,10 @@ class Elm327BluetoothSource(
     private suspend fun softRecover(conn: Elm327Connection, gentle: Boolean = true) {
         val seq = if (gentle) GENTLE_RECOVER_SEQUENCE else HARD_RECOVER_SEQUENCE
         for (cmd in seq) {
-            runCatching { conn.exec(cmd, Elm327Connection.INIT_TIMEOUT_MS) }
-            delay(40L)
+            // Short AT timeout — INIT_TIMEOUT (1.8s)×6 could exceed the UI stale
+            // watcher and look like a disconnect even when RFCOMM is still up.
+            runCatching { conn.exec(cmd, Elm327Connection.RECOVER_TIMEOUT_MS) }
+            delay(25L)
         }
     }
 

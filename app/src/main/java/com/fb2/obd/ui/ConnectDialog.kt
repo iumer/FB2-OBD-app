@@ -39,12 +39,14 @@ fun ConnectDialog(
     onPickDevice: (BtDeviceUi) -> Unit,
     onPickDemo: () -> Unit,
     onDismiss: () -> Unit,
+    showDemo: Boolean = true,
 ) {
     Dialog(onDismissRequest = onDismiss) {
         ConnectSheetContent(
             devices = devices,
             onPickDevice = onPickDevice,
             onPickDemo = onPickDemo,
+            showDemo = showDemo,
         )
     }
 }
@@ -55,6 +57,7 @@ fun ConnectSheetContent(
     onPickDevice: (BtDeviceUi) -> Unit,
     onPickDemo: () -> Unit,
     modifier: Modifier = Modifier,
+    showDemo: Boolean = true,
 ) {
     Column(
         modifier = modifier
@@ -98,22 +101,24 @@ fun ConnectSheetContent(
             }
         }
 
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 16.dp)
-                .clip(RoundedCornerShape(12.dp))
-                .background(MaterialTheme.colorScheme.surface)
-                .clickable { onPickDemo() }
-                .padding(14.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Dot(TextMuted)
-            Text(
-                text = "  Use demo (simulated) instead",
-                color = TextMuted,
-                fontSize = 14.sp,
-            )
+        if (showDemo) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 16.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(MaterialTheme.colorScheme.surface)
+                    .clickable { onPickDemo() }
+                    .padding(14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Dot(TextMuted)
+                Text(
+                    text = "  Use demo (simulated) instead",
+                    color = TextMuted,
+                    fontSize = 14.sp,
+                )
+            }
         }
     }
 }

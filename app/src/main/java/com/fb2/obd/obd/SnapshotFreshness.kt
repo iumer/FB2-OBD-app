@@ -67,8 +67,6 @@ class SnapshotFreshness(
         rpmUpdatedThisCycle: Boolean,
     ): VehicleSnapshot {
         var out = snapshot
-        val busAlive = rpmUpdatedThisCycle || snapshot.rpm != null ||
-            snapshot.batteryVolts != null || snapshot.mafGps != null
 
         fun isStale(key: String, ttl: Long = staleAfterMs): Boolean {
             val okAt = lastOkMs[key] ?: return false
@@ -79,8 +77,9 @@ class SnapshotFreshness(
             lastOkMs.remove(key)
         }
 
-        // Speed: clear when stale and bus otherwise alive (matches 65-vs-98 freeze).
-        if (isStale(KEY_SPEED) && busAlive) {
+        // Speed: clear when stale even if the rest of the bus looks dead —
+        // otherwise a lone frozen km/h can linger after a full Mode 01 drop.
+        if (isStale(KEY_SPEED)) {
             clearKey(KEY_SPEED)
             out = out.copy(
                 speedKmh = null,

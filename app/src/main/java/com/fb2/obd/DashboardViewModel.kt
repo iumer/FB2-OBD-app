@@ -1087,9 +1087,12 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
         stopElmMonitor()
         eventTracker.onConnection(ConnectionState.DISCONNECTED, false, "")
         eventTracker.reset()
+        _deepFoundValues.value = emptyMap()
+        _deepFoundAtMs.value = emptyMap()
         _uiState.update {
             it.copy(
                 snapshot = VehicleSnapshot.EMPTY,
+                decisionSnapshot = VehicleSnapshot.EMPTY,
                 connection = ConnectionState.DISCONNECTED,
                 sourceName = "",
                 sourceIsLive = false,
@@ -1234,6 +1237,8 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
                 ObdLogger.logEvent("ELM", "Connection error: $msg")
                 eventTracker.onConnection(ConnectionState.ERROR, false, source.name)
                 // ERROR = link dead. Clear sticky values so Dash/bubble cannot show a frozen °C.
+                _deepFoundValues.value = emptyMap()
+                _deepFoundAtMs.value = emptyMap()
                 _uiState.update { st ->
                     st.copy(
                         snapshot = VehicleSnapshot.EMPTY,
@@ -1259,7 +1264,7 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
                     delay(2_000L)
                     val silentFor = System.currentTimeMillis() - lastLiveSnapshotMs
                     val ui = _uiState.value
-                    if (ui.connection == ConnectionState.CONNECTED && silentFor > 8_000L) {
+                    if (ui.connection == ConnectionState.CONNECTED && silentFor > 12_000L) {
                         ObdLogger.logDebug(
                             ObdLogger.Dir.INFO,
                             "No ELM frames for ${silentFor}ms — marking reconnecting",
@@ -1717,12 +1722,19 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
         val deep = _deepFoundValues.value
         if (deep.isEmpty()) return snap
         val hitTimes = _deepFoundAtMs.value
+        val now = System.currentTimeMillis()
         var out = snap
+        val expired = mutableSetOf<String>()
         fun tryApply(label: String, id: String, missing: Boolean) {
             if (!missing) return
             val text = deep[label] ?: deep[id] ?: return
             val raw = text.substringBefore(" ").toDoubleOrNull() ?: return
             val hitAt = hitTimes[label] ?: hitTimes[id] ?: return
+            if (now - hitAt > DEEP_FOUND_MAX_AGE_MS) {
+                expired += label
+                expired += id
+                return
+            }
             out = applyDeepSearchHit(out, label, id, raw, hitAt)
         }
         tryApply("Coolant 1", "0105", out.coolantC == null)
@@ -1735,12 +1747,22 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
         tryApply("Intake", "010F", out.intakeC == null)
         tryApply("MAP", "010B", out.mapKpa == null)
         tryApply("Timing", "010E", out.timingAdvance == null)
+        if (expired.isNotEmpty()) {
+            _deepFoundValues.update { cur -> cur.filterKeys { it !in expired } }
+            _deepFoundAtMs.update { cur -> cur.filterKeys { it !in expired } }
+        }
         return out
     }
 
     companion object {
         /** How often the live LOG buffer is flushed to the session CSV on disk. */
         private const val CHECKPOINT_INTERVAL_MS = 60_000L
+
+        /**
+         * Deep-search overlays must not freeze a recovered °C for the whole trip
+         * when that PID never returns from Mode 01.
+         */
+        private const val DEEP_FOUND_MAX_AGE_MS = 30_000L
 
         /**
          * Map a deep-search hit into live snapshot fields + freshness timestamps

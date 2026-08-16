@@ -41,8 +41,12 @@ data class VehicleSnapshot(
     }
 }
 
-/** True when a frame has no usable live sensors (typical blank reconnect frame). */
+/** True when a frame has no usable drive sensors (typical blank reconnect frame).
+ *  ATRV/battery alone does NOT count — soft-recover often keeps volts while
+ *  Mode 01 is dead; treating that as "content" wiped last-good heroes mid-drive.
+ */
 fun VehicleSnapshot.isEffectivelyBlank(): Boolean =
-    rpm == null && speedKmh == null && coolantC == null && batteryVolts == null &&
-        mafGps == null && mapKpa == null && throttlePct == null && stftPct == null
+    rpm == null && speedKmh == null && coolantC == null && mafGps == null &&
+        mapKpa == null && throttlePct == null && stftPct == null &&
+        intakeC == null && engineLoadPct == null
 
