@@ -194,6 +194,15 @@ class SpeedFreshnessAndPollPlannerTest {
     }
 
     @Test
+    fun freshness_staleSpeedClearsEvenWhenBusLooksDead() {
+        val fresh = SnapshotFreshness(staleAfterMs = 2_500L)
+        fresh.markOk(SnapshotFreshness.KEY_SPEED, 0L)
+        val sticky = VehicleSnapshot(speedKmh = 65.0)
+        val cleared = fresh.sanitize(sticky, nowMs = 2_501L, rpmUpdatedThisCycle = false)
+        assertNull("stale speed must clear without busAlive gate", cleared.speedKmh)
+    }
+
+    @Test
     fun freshness_remakePresentAfterPause() {
         val fresh = SnapshotFreshness(staleAfterMs = 2_500L)
         fresh.markOk(SnapshotFreshness.KEY_COOLANT, 0L)

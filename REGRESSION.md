@@ -60,6 +60,7 @@ Keep these fixed. If a change might touch one of these areas, re-verify it.
 | I25 | Floating bubble ring too small / overflow on HU | Fixed | `FloatingDashLayout`: 92/100/max400dp; shrinks on short-edge HUs |
 | I26 | Log Share shows “No apps…” / opens Bluetooth search on HU | Fixed | Always save to Downloads/FB2-Diag; ignore BT as share target |
 | I48 | Want in-app Update button (check / download / install or “up to date”) | Fixed | Settings → App update; `version.json` on `latest`; FileProvider install |
+| I49 | Soft-recover / ATRV-only frames wipe Dash mid-drive; UI RETRY blanks bubble | Fixed | ATRV-only = blank sticky; recover heartbeat + 450ms AT timeout; stale UI 12s; deep-found TTL/clear; deep search gentle restore |
 
 When the user reports a **new** bug, add a new `Ixx` row here (Status: Open → Fixed)
 and add a matching automated or manual check in sections 2–3.

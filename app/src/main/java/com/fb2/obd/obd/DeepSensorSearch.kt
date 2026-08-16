@@ -21,7 +21,9 @@ object DeepSensorSearch {
 
     private val BAD = listOf("NO DATA", "UNABLE", "ERROR", "?", "STOPPED", "BUS INIT")
 
-    private val FULL_RESTORE = listOf("ATD", "ATE0", "ATL0", "ATS0", "ATSP0", "ATSH7DF", "ATAR")
+    private val FULL_RESTORE = listOf("ATD", "ATE0", "ATL0", "ATS0", "ATSH7DF", "ATAR")
+    /** Last resort when gentle restore leaves the bus dead — includes ATSP0. */
+    private val HARD_RESTORE = listOf("ATD", "ATE0", "ATL0", "ATS0", "ATSP0", "ATSH7DF", "ATAR")
 
     /** Soft-restore after this many consecutive UNABLE/timeout misses (keep walking the list). */
     private const val RESTORE_EVERY_UNABLE = 2
@@ -100,16 +102,22 @@ object DeepSensorSearch {
             if (!busOk) {
                 notes += "ECU link check was shaky after restore (UNABLE / timeout). " +
                     "Already tried ${simpleForce.size} broadcast Mode 01 strategies. " +
-                    "Skipping ${advanced.size} header/Mode 22 strategies that need a solid ECM link."
-                return DeepSearchReport(
-                    targetLabel = label,
-                    targetId = pid?.id ?: requestHint ?: label,
-                    attempts = attempts,
-                    hit = null,
-                    notes = notes + "Still unable to find this sensor. " +
-                        "Tried $attempts / ${all.size} strategies" +
-                        if (advanced.isNotEmpty()) " (skipped ${advanced.size} advanced)." else ".",
-                )
+                    "Retrying once with protocol search (ATSP0) before skipping advanced."
+                restore(source, hard = true)
+                val busOkHard = busHealthy(source)
+                if (!busOkHard) {
+                    notes += "Still shaky after ATSP0. " +
+                        "Skipping ${advanced.size} header/Mode 22 strategies that need a solid ECM link."
+                    return DeepSearchReport(
+                        targetLabel = label,
+                        targetId = pid?.id ?: requestHint ?: label,
+                        attempts = attempts,
+                        hit = null,
+                        notes = notes + "Still unable to find this sensor. " +
+                            "Tried $attempts / ${all.size} strategies" +
+                            if (advanced.isNotEmpty()) " (skipped ${advanced.size} advanced)." else ".",
+                    )
+                }
             }
 
             // --- Phase D: walk advanced list while bus healthy ---
@@ -178,13 +186,14 @@ object DeepSensorSearch {
         )
     }
 
-    private suspend fun restore(source: ObdSource) {
-        FULL_RESTORE.forEach { cmd ->
+    private suspend fun restore(source: ObdSource, hard: Boolean = false) {
+        val seq = if (hard) HARD_RESTORE else FULL_RESTORE
+        seq.forEach { cmd ->
             runCatching { source.command(cmd) }
             delay(30L)
         }
-        // Give ATSP0 SEARCHING… time before the next PID.
-        delay(120L)
+        // Brief settle; hard path needs longer for ATSP0 SEARCHING…
+        delay(if (hard) 120L else 40L)
     }
 
     private suspend fun busHealthy(source: ObdSource): Boolean {

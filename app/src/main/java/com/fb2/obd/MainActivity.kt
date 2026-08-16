@@ -559,11 +559,15 @@ class MainActivity : ComponentActivity() {
                         devices = devices,
                         onPickDevice = { connectTo(it); showConnect = false },
                         onPickDemo = {
-                            viewModel.setAllowDemo(true)
-                            viewModel.useSource(DemoObdSource())
-                            showConnect = false
+                            if (settings.allowDemo && !state.sourceIsLive) {
+                                viewModel.useSource(DemoObdSource())
+                                showConnect = false
+                            } else {
+                                toast("Turn on Demo in Settings first (or disconnect live ELM)")
+                            }
                         },
                         onDismiss = { showConnect = false },
+                        showDemo = settings.allowDemo && !state.sourceIsLive,
                     )
                 }
 
