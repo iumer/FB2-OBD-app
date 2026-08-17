@@ -133,12 +133,13 @@ fun SensorPickerContent(
     val liveCount = readings.values.count { it.isReadable }
 
     val filtered = remember(catalog, readings, query, filter) {
+        val currentFilter = filter
         catalog.filter { pid ->
             if (!SensorPickerReadings.matchesQuery(pid, query)) return@filter false
-            when (filter) {
+            when (currentFilter) {
                 PickerFilter.All -> true
                 PickerFilter.Readable -> readings[pid.id]?.isReadable == true
-                is PickerFilter.Category -> pid.category == filter.cat
+                is PickerFilter.Category -> pid.category == currentFilter.cat
             }
         }
     }
