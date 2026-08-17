@@ -18,6 +18,7 @@ import com.fb2.obd.data.DemoObdSource
 import com.fb2.obd.data.HealthThresholdStore
 import com.fb2.obd.data.MaintenanceEntry
 import com.fb2.obd.data.MaintenanceStore
+import com.fb2.obd.data.FloatingDashPrefs
 import com.fb2.obd.data.LastElmStore
 import com.fb2.obd.data.Elm327BluetoothSource
 import com.fb2.obd.data.LogExportHelper
@@ -631,9 +632,9 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
     fun publishCarDash() {
         val ui = _uiState.value
         val decision = ui.decisionSnapshot.takeUnless { it.isEffectivelyBlank() } ?: ui.snapshot
-        // Only CONNECTED (live ELM or Demo) may show numbers. ERROR / DISCONNECTED /
-        // reconnecting blank the bubble so a stale 88°C cannot look "live" over CarPlay.
-        val linkActive = ui.connection == ConnectionState.CONNECTED
+        // CONNECTED or in-flight RETRY with sticky snapshot — never blank mid soft-recover.
+        val linkActive = ui.connection == ConnectionState.CONNECTED ||
+            (ui.connection == ConnectionState.CONNECTING && !ui.snapshot.isEffectivelyBlank())
         val snap = if (linkActive) ui.snapshot else VehicleSnapshot.EMPTY
         val healthSnap = if (linkActive) decision else VehicleSnapshot.EMPTY
         VehicleLiveStore.publish(
@@ -649,12 +650,29 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
                 sourceName = ui.sourceName,
                 logging = _settings.value.valueLogging,
                 showEstimatedGear = _settings.value.showEstimatedGear,
+                reconnecting = ui.reconnecting,
                 dtcCount = if (linkActive) ui.dtcCount else null,
                 healthScore = if (linkActive) _health.value else null,
                 healthSnapshot = healthSnap,
                 latch = diagnosticBrain::latch,
             ),
         )
+        maybeRestoreFloatingBubble()
+    }
+
+    private var floatingBubbleRestoreDone = false
+
+    /** After ELM reconnect, bring back MIN bubble if the user had it enabled. */
+    private fun maybeRestoreFloatingBubble() {
+        if (floatingBubbleRestoreDone) return
+        val ui = _uiState.value
+        if (ui.connection != ConnectionState.CONNECTED || !ui.sourceIsLive) return
+        val app = getApplication<Application>()
+        if (!FloatingDashPrefs.isEnabled(app)) return
+        if (!com.fb2.obd.service.FloatingDashOverlayService.isOverlayAllowed(app)) return
+        floatingBubbleRestoreDone = true
+        com.fb2.obd.service.FloatingDashOverlayService.startOverlay(app)
+        ObdLogger.logDebug(ObdLogger.Dir.INFO, "Restored floating Dash bubble after reconnect")
     }
 
     /** Zone hysteresis shared by phone Dash + Android Auto tiles. */
@@ -1207,6 +1225,7 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
             stopElmMonitor()
         }
         eventTracker.reset()
+        floatingBubbleRestoreDone = false
         diagnosticBrain.reset()
         voiceAlerter.resetHoldTimers()
         _faults.update { FaultsState() }
@@ -1315,9 +1334,7 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
                 if (source.isLive) {
                     ensureElmMonitor(ObdMonitorForegroundService.STATUS_LIVE)
                 }
-                if (heavyDue) {
-                    publishCarDash()
-                }
+                publishCarDash()
                 // Sample main Dash only into the session CSV.
                 if (ObdLogger.valueLoggingEnabled) {
                     logDashValues(snapshot)
@@ -1388,7 +1405,7 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
                                 connection = ConnectionState.CONNECTING,
                             )
                         }
-                        // Bubble blanks via publishCarDash (not CONNECTED); phone keeps last-good + RETRY.
+                        // Bubble + AA keep last-good during RETRY (same as phone Dash).
                         ensureElmMonitor(ObdMonitorForegroundService.STATUS_RETRY)
                         publishCarDash()
                     }
