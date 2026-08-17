@@ -825,6 +825,17 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
                 } else {
                     st.selectedLogFileName?.contains("demo", ignoreCase = true) == true
                 }
+                val profile = vehicleProfile
+                if (profile.isGeneric &&
+                    currentSource != null &&
+                    _vehicleInfo.value.vin.isNullOrBlank() &&
+                    _vehicleInfo.value.ecuName.isNullOrBlank()
+                ) {
+                    runCatching { currentSource!!.readVehicleInfo() }.getOrNull()?.let {
+                        _vehicleInfo.value = it
+                    }
+                }
+                val info = _vehicleInfo.value
                 val payload = AiAnalysisPayloadBuilder.buildUserMessage(
                     sourceLabel = sourceLabel,
                     windowMinutes = minutes,
@@ -833,11 +844,10 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
                     dtcText = dtcText,
                     log = truncated,
                     isDemo = isDemo,
-                    vehicleLabel = when (vehicleProfile) {
-                        VehicleProfile.FB2 -> "Honda Civic FB2"
-                        VehicleProfile.GENERIC_OBD2 -> "generic OBD-II vehicle"
-                    },
-                    includeHondaEldHint = vehicleProfile.isFb2,
+                    profile = profile,
+                    vin = info.vin,
+                    ecuName = info.ecuName,
+                    calibrationIds = info.calibrationIds,
                 )
                 val result = openAiClient.complete(payload.systemPrompt, payload.userMessage)
                 val parsed = AiAnalysisPayloadBuilder.parseModelResponse(result.text)
@@ -890,6 +900,7 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
                     },
                     snapshotRows = payload.sampleCount,
                     uniqueTimestamps = payload.uniqueTimestampCount,
+                    vehicleLabel = payload.vehicleLabel,
                 )
                 val screenText = buildString {
                     append(parsed.screenBrief.trim())

@@ -61,6 +61,7 @@ fun AiAnalyzeScreen(
     modifier: Modifier = Modifier,
     /** True when the connected source is Demo (not live ELM). */
     liveSourceIsDemo: Boolean = false,
+    vehicleProfile: com.fb2.obd.obd.VehicleProfile = com.fb2.obd.obd.VehicleProfile.FB2,
 ) {
     val context = LocalContext.current
     LaunchedEffect(Unit) { onRefreshLogs() }
@@ -74,7 +75,11 @@ fun AiAnalyzeScreen(
     ) {
         ScreenHeader(title = "Analyze via AI", onBack = onBack)
         Text(
-            text = "One-shot OpenAI report for your FB2 Civic. Read-only — no chat thread. Report is saved as .txt and uploads with GitHub log sync.",
+            text = if (vehicleProfile.isGeneric) {
+                "One-shot OpenAI report from SAE OBD-II data (Generic profile). The model is told this is not a Honda Civic FB2 — unidentified car unless VIN/ECU name is available. Read-only; report saves as .txt."
+            } else {
+                "One-shot OpenAI report for your FB2 Civic. Read-only — no chat thread. Report is saved as .txt and uploads with GitHub log sync."
+            },
             color = TextMuted,
             fontSize = 12.sp,
             modifier = Modifier.padding(bottom = 12.dp),
