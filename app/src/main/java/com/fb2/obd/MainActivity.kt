@@ -117,6 +117,7 @@ class MainActivity : ComponentActivity() {
                 val dashExtraPidIds by viewModel.dashExtraPidIds.collectAsState()
                 val dashExtraValues by viewModel.dashExtraValues.collectAsState()
                 val dashTileOverrides by viewModel.dashTileOverrides.collectAsState()
+                val pickerScan by viewModel.pickerScan.collectAsState()
                 val savedLogs by viewModel.savedLogs.collectAsState()
                 val uploadStatus by viewModel.uploadStatus.collectAsState()
                 val deepSearch by viewModel.deepSearch.collectAsState()
@@ -321,6 +322,10 @@ class MainActivity : ComponentActivity() {
                         extraPidIds = dashExtraPidIds,
                         extraValues = dashExtraValues,
                         tileOverrides = dashTileOverrides,
+                        pickerProbe = pickerScan.results,
+                        pickerScanning = pickerScan.running,
+                        onPickerOpen = viewModel::startSensorPickerScan,
+                        onPickerClose = viewModel::stopSensorPickerScan,
                         onSetExtraPid = viewModel::setDashExtraPid,
                         onSetTileOverride = viewModel::setDashTileOverride,
                         onClearTileOverride = viewModel::clearDashTileOverride,
