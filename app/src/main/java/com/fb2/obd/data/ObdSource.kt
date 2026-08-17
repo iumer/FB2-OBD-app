@@ -1,0 +1,46 @@
+package com.fb2.obd.data
+
+import com.fb2.obd.obd.Dtc
+import com.fb2.obd.obd.FreezeFrame
+import com.fb2.obd.obd.Mode06Result
+import com.fb2.obd.obd.ModuleScanResult
+import com.fb2.obd.obd.O2TestResult
+import com.fb2.obd.obd.PidDefinition
+import com.fb2.obd.obd.PidProbeResult
+import com.fb2.obd.obd.ReadinessStatus
+import com.fb2.obd.obd.VehicleInfo
+import com.fb2.obd.obd.VehicleSnapshot
+import kotlinx.coroutines.flow.Flow
+
+/** Connection state surfaced to the UI. */
+enum class ConnectionState { DISCONNECTED, CONNECTING, CONNECTED, ERROR }
+
+/**
+ * A source of live vehicle data. Implementations may be a simulated demo feed or
+ * a real ELM327 Bluetooth adapter.
+ */
+interface ObdSource {
+    val name: String
+    val isLive: Boolean
+    fun snapshots(): Flow<VehicleSnapshot>
+
+    suspend fun readStoredDtcs(): List<Dtc> = emptyList()
+    suspend fun readPendingDtcs(): List<Dtc> = emptyList()
+    suspend fun clearDtcs(): Boolean = false
+    suspend fun command(raw: String): String? = null
+
+    suspend fun readVehicleInfo(): VehicleInfo = VehicleInfo()
+    suspend fun readReadiness(): ReadinessStatus = ReadinessStatus()
+    suspend fun readFreezeFrame(): FreezeFrame = FreezeFrame()
+    suspend fun readMode05(): List<O2TestResult> = emptyList()
+    suspend fun readMode06(): List<Mode06Result> = emptyList()
+
+    /** Probe a list of PIDs; returns support + sample value when possible. */
+    suspend fun probePids(pids: List<PidDefinition>): List<PidProbeResult> = emptyList()
+
+    /** Probe all Honda enhanced packs and return per-module results. */
+    suspend fun probeHondaModules(): List<ModuleScanResult> = emptyList()
+
+    /** Read + decode one catalog PID. */
+    suspend fun readPid(pid: PidDefinition): Double? = null
+}
