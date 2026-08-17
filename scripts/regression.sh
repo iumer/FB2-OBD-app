@@ -26,7 +26,8 @@ echo "Running unit + Paparazzi theme/profile/logger/gesture suite…"
   --tests 'com.fb2.obd.DashTileOverrideStoreTest' \
   --tests 'com.fb2.obd.DashExtraPidStoreTest' \
   --tests 'com.fb2.obd.SensorPickerReadingsTest' \
-  --tests 'com.fb2.obd.SensorPickerSnapshotTest'
+  --tests 'com.fb2.obd.SensorPickerSnapshotTest' \
+  --tests 'com.fb2.obd.ChromeCollapseTest'
 
 echo ""
 echo "=== FULL unit suite (catch stray breakages) ==="

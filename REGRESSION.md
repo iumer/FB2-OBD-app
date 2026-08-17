@@ -64,6 +64,7 @@ Keep these fixed. If a change might touch one of these areas, re-verify it.
 | I50 | Analyze via AI on Generic OBD2 still wrote Honda Civic FB2 | Fixed | Profile-aware system/user prompt + VIN if Mode 09 available; otherwise “generic SAE data from a car” |
 | I51 | Extra Dash sensors added via **+** vanished after closing the app | Fixed | Persist `filesDir/dash_extra_pids.json`; reload on start (Honda extras stay on disk when switching Generic) |
 | I52 | Sensor picker was a tiny dialog — hard to read, no live values | Fixed | Full-screen Torque-style Select sensor: category list, green = ECU answered with Latest value, dark = No data received |
+| I53 | Classic Dash RPM/Speed bar and Select sensor search chrome stayed pinned while scrolling | Fixed | Classic TopBar+hero collapse on scroll; picker title/search/chips scroll with the list |
 
 When the user reports a **new** bug, add a new `Ixx` row here (Status: Open → Fixed)
 and add a matching automated or manual check in sections 2–3.
@@ -113,6 +114,7 @@ then update the `latest` branch APK (same path) so the bookmarkable download lin
 | `AppUpdateCheckerTest` | version.json parse + local/remote versionCode compare |
 | `DashExtraPidStoreTest` | **+** extras survive process death (`dash_extra_pids.json`) |
 | `SensorPickerReadingsTest` | Green/live vs waiting vs ECU-unsupported; SAE support bitmask parse |
+| `ChromeCollapseTest` | Classic Dash chrome hides on scroll-up and returns at list top |
 
 ---
 

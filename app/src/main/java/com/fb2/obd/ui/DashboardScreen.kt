@@ -34,6 +34,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -43,7 +44,17 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -206,6 +217,35 @@ fun DashboardScreen(
     var editMetric by remember { mutableStateOf<EditableMetric?>(null) }
     val palette = remember(dashTheme) { ThemePalette.of(dashTheme) }
     val immersive = dashTheme != DashTheme.CLASSIC
+    val chromeHeaderPx = remember { mutableIntStateOf(0) }
+    val chromeCollapsedPx = remember { mutableFloatStateOf(0f) }
+    val chromeConnection = remember {
+        object : NestedScrollConnection {
+            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                val step = ChromeCollapse.onPreScroll(
+                    available.y,
+                    chromeCollapsedPx.floatValue,
+                    chromeHeaderPx.intValue.toFloat(),
+                )
+                chromeCollapsedPx.floatValue = step.collapsedPx
+                return Offset(0f, step.consumedY)
+            }
+            override fun onPostScroll(
+                consumed: Offset,
+                available: Offset,
+                source: NestedScrollSource,
+            ): Offset {
+                val step = ChromeCollapse.onPostScroll(
+                    available.y,
+                    chromeCollapsedPx.floatValue,
+                    chromeHeaderPx.intValue.toFloat(),
+                )
+                chromeCollapsedPx.floatValue = step.collapsedPx
+                return Offset(0f, step.consumedY)
+            }
+        }
+    }
+    val density = LocalDensity.current
 
     LaunchedEffect(pagerState.currentPage, titles, immersive) {
         if (immersive) return@LaunchedEffect
@@ -229,7 +269,8 @@ fun DashboardScreen(
         modifier = modifier
             .fillMaxSize()
             .background(palette.background)
-            .padding(horizontal = 10.dp, vertical = 6.dp),
+            .padding(horizontal = 10.dp, vertical = 6.dp)
+            .then(if (immersive) Modifier else Modifier.nestedScroll(chromeConnection)),
     ) {
         if (immersive) {
             val link = DashLinkStatus(
@@ -307,29 +348,52 @@ fun DashboardScreen(
                 }
             }
         } else {
-            TopBar(
-                state = state,
-                loggingActive = loggingActive,
-                networkOnline = networkOnline,
-                profileBadge = profileBadge,
-                onConnectClick = onConnectClick,
-                onSettingsClick = onSettingsClick,
-                onDiagnosticsClick = onDiagnosticsClick,
-                onToggleLogging = onToggleLogging,
-                onMinimizeClick = onMinimizeClick,
-            )
+            val headerMeasured = chromeHeaderPx.intValue > 0
+            val visibleChromePx = (chromeHeaderPx.intValue - chromeCollapsedPx.floatValue).coerceAtLeast(0f)
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clipToBounds()
+                    .then(
+                        if (headerMeasured) {
+                            Modifier.height(with(density) { visibleChromePx.toDp() })
+                        } else {
+                            Modifier
+                        },
+                    ),
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .wrapContentHeight(unbounded = true)
+                        .onSizeChanged { if (it.height > 0) chromeHeaderPx.intValue = it.height }
+                        .offset { IntOffset(0, -chromeCollapsedPx.floatValue.toInt()) },
+                ) {
+                    TopBar(
+                        state = state,
+                        loggingActive = loggingActive,
+                        networkOnline = networkOnline,
+                        profileBadge = profileBadge,
+                        onConnectClick = onConnectClick,
+                        onSettingsClick = onSettingsClick,
+                        onDiagnosticsClick = onDiagnosticsClick,
+                        onToggleLogging = onToggleLogging,
+                        onMinimizeClick = onMinimizeClick,
+                    )
 
-            CompactHeroStrip(
-                rpm = s.rpm,
-                speedKmh = s.speedKmh,
-                gear = s.gear,
-                gearSource = gearSrc,
-                gearConfidencePct = s.gearConfidencePct,
-                thresholds = healthThresholds,
-                rpmFreshAtMs = s.freshAtMs[SnapshotFreshness.KEY_RPM],
-                speedFreshAtMs = s.freshAtMs[SnapshotFreshness.KEY_SPEED],
-                onEditRpm = { editMetric = EditableMetric.RPM },
-            )
+                    CompactHeroStrip(
+                        rpm = s.rpm,
+                        speedKmh = s.speedKmh,
+                        gear = s.gear,
+                        gearSource = gearSrc,
+                        gearConfidencePct = s.gearConfidencePct,
+                        thresholds = healthThresholds,
+                        rpmFreshAtMs = s.freshAtMs[SnapshotFreshness.KEY_RPM],
+                        speedFreshAtMs = s.freshAtMs[SnapshotFreshness.KEY_SPEED],
+                        onEditRpm = { editMetric = EditableMetric.RPM },
+                    )
+                }
+            }
 
             PageTabs(
                 titles = titles,
