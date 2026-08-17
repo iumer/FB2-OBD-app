@@ -188,7 +188,12 @@ object CarDashBuilder {
             }
             val unsupported = pid != null && pid.number in snapshot.unsupportedPids
             val recovered = deepFoundValues[triple.first]
-            val showNs = unsupported && recovered == null
+            val rawValue = when {
+                recovered != null -> recovered.substringBefore(" ")
+                else -> triple.second
+            }
+            val hasLive = rawValue != "--" && rawValue != "n/s" && rawValue.isNotBlank()
+            val showNs = unsupported && recovered == null && !hasLive
             val value = when {
                 recovered != null -> recovered.substringBefore(" ")
                 showNs -> "n/s"

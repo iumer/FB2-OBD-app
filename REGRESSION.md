@@ -80,6 +80,7 @@ Keep these fixed. If a change might touch one of these areas, re-verify it.
 | I66 | Swiping Fuel/Trip/Trans auto-probe starved ELM and blanked Dash | Fixed | Tab `LaunchedEffect` no-op; Probe/Refresh buttons only |
 | I67 | Dual FGS notifications felt noisy | Fixed | Shared group `fb2_diag_session`; bubble channel IMPORTANCE_MIN |
 | I68 | Sensor picker “N readable” confused vs main Dash heroes | Fixed | Subtitle clarifies catalog scan vs heroes-always-live |
+| I69 | 0.1.27 only battery/ATRV live — heroes n/s everywhere (FB2 + Generic) | Fixed | `shouldRecoverAfterResume` only after `FULL_PAUSE`; field `mergeLastGood`; batch Mode 01 picker scan; Demo reconnect guard |
 
 When the user reports a **new** bug, add a new `Ixx` row here (Status: Open → Fixed)
 and add a matching automated or manual check in sections 2–3.
@@ -126,7 +127,7 @@ then update the `latest` branch APK (same path) so the bookmarkable download lin
 | `SessionLogStoreTest` | Saved session naming |
 | `CarDashBuilderTest` | Android Auto dash model |
 | `FloatingDashMetricsTest` | Radial order, RPM redline, RETRY sticky values, OFF on ERROR, n/s grey health |
-| `FloatingDashLayoutTest` | Expanded ring fits short-edge HU (340dp cap, 72dp margin) |
+| `ElmPollHoldRecoverTest` | HEROES_ONLY→NONE must not arm recover; `mergeLastGood` keeps heroes on partial frames |
 | `DashboardSnapshotTest` / `ScreensSnapshotTest` / `ConnectSheetSnapshotTest` | Paparazzi UI snapshots |
 | `AppUpdateCheckerTest` | version.json parse + local/remote versionCode compare |
 | `DashExtraPidStoreTest` | **+** extras survive process death (`dash_extra_pids.json`) |

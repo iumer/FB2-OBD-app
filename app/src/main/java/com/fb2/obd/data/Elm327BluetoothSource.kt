@@ -92,7 +92,10 @@ class Elm327BluetoothSource(
 
     override fun setPollHold(hold: PollHold) {
         val prev = pollHold.getAndSet(hold)
-        if (prev != PollHold.NONE && hold == PollHold.NONE) {
+        // Only a real full pause (picker/deep-search end / legacy pausePolling) needs
+        // post-hold soft recover. HEROES_ONLY → NONE runs every ~12s for readiness
+        // and every DIAG probe — recovering there thrashed Mode 01 and left ATRV-only.
+        if (shouldRecoverAfterResume(prev, hold)) {
             recoverAfterResume = true
         }
         logger.logDebug(ObdLogger.Dir.INFO, "ELM poll hold $prev → $hold")
@@ -348,7 +351,7 @@ class Elm327BluetoothSource(
 
                     // Sensor picker / Dash + extras: one extra PID per cycle so Dash heroes
                     // never pause. Mutex still serialises with command() callers.
-                    if (holdNow == PollHold.NONE && !busLost && exclusiveCount.get() == 0) {
+                    if (holdNow != PollHold.FULL_PAUSE && !busLost && exclusiveCount.get() == 0) {
                         nextBackgroundPid()?.let { extra ->
                             val result = probeOneBackground(conn, extra)
                             probeResults.tryEmit(result)
@@ -907,5 +910,9 @@ class Elm327BluetoothSource(
         private const val MAX_DEAD_CYCLES_WHEN_ATRV_OK = 8
         /** UNABLE replies in one cycle before aborting remaining PIDs. */
         private const val UNABLE_BEFORE_BUS_LOST = 3
+
+        /** Post-hold soft recover only after a full Mode 01 pause — not heroes-only borrow. */
+        internal fun shouldRecoverAfterResume(prev: PollHold, hold: PollHold): Boolean =
+            prev == PollHold.FULL_PAUSE && hold == PollHold.NONE
     }
 }
