@@ -115,6 +115,9 @@ class SpeedFreshnessAndPollPlannerTest {
             rpmUpdatedThisCycle = false,
             holdValues = true,
         )
+        // Rec 2: Faults Read stole the mutex for Mode 03/07/0A (~seconds) and
+        // SnapshotFreshness TTL blanked RPM/Speed/Coolant. Exclusive + holdValues
+        // keeps last-good on screen; HEROES_ONLY between commands refreshes them.
         assertEquals(72.0, held.speedKmh!!, 0.01)
         assertEquals(1800.0, held.rpm!!, 0.01)
         assertEquals(88.0, held.coolantC!!, 0.01)

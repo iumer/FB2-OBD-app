@@ -1407,7 +1407,7 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
                     continue
                 }
                 runCatching {
-                    val readiness = source.readReadiness()
+                    val readiness = source.withDashKeptAlive { source.readReadiness() }
                     _uiState.update { it.copy(dtcCount = readiness.dtcCount) }
                     eventTracker.onDtcCount(readiness.dtcCount)
                     _health.update {
@@ -1476,9 +1476,13 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
         val source = currentSource ?: return
         viewModelScope.launch {
             _faults.update { it.copy(loading = true, message = null) }
-            val stored = source.readStoredDtcs()
-            val pending = source.readPendingDtcs()
-            val permanent = source.readPermanentDtcs()
+            val (stored, pending, permanent) = source.withDashKeptAlive {
+                Triple(
+                    source.readStoredDtcs(),
+                    source.readPendingDtcs(),
+                    source.readPermanentDtcs(),
+                )
+            }
             _faults.update {
                 it.copy(
                     loading = false,
@@ -1506,10 +1510,15 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
         val source = currentSource ?: return
         viewModelScope.launch {
             _faults.update { it.copy(loading = true, message = null) }
-            val ok = source.clearDtcs()
-            val stored = source.readStoredDtcs()
-            val pending = source.readPendingDtcs()
-            val permanent = source.readPermanentDtcs()
+            val (ok, stored, pending, permanent) = source.withDashKeptAlive {
+                val cleared = source.clearDtcs()
+                DtcSweep(
+                    cleared,
+                    source.readStoredDtcs(),
+                    source.readPendingDtcs(),
+                    source.readPermanentDtcs(),
+                )
+            }
             _faults.update {
                 it.copy(
                     loading = false,
@@ -1579,7 +1588,7 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             _custom.update { it.copy(probing = true) }
             val selected = pidCatalog.filter { it.id in _custom.value.selectedIds }
-            val probed = source.probePids(selected)
+            val probed = source.withDashKeptAlive { source.probePids(selected) }
             val results = LiveSnapshotOverlay.apply(probed, _uiState.value.snapshot)
             ObdLogger.logProbe("Custom sensors", results)
             val live = results.associate { r ->
@@ -1594,7 +1603,9 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             val defs = StandardPidCatalog.fuelPageDefaults() +
                 VehicleProfileConfig.fuelExtraPids(vehicleProfile)
-            val probed = source.probePids(defs.distinctBy { it.id })
+            val probed = source.withDashKeptAlive {
+                source.probePids(defs.distinctBy { it.id })
+            }
             val results = LiveSnapshotOverlay.apply(probed, _uiState.value.snapshot)
             ObdLogger.logProbe("Fuel system", results)
             _fuelValues.value = results.associate { r ->
@@ -1633,14 +1644,14 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
             }
 
             // Probe Mode 01 first (fast). Skip Mode 22 if the bus is already unhealthy.
-            val probed01 = source.probePids(mode01)
+            val probed01 = source.withDashKeptAlive { source.probePids(mode01) }
             val unable = probed01.count { r ->
                 r.raw?.uppercase()?.contains("UNABLE") == true ||
                     r.raw?.contains("SKIPPED", true) == true
             }
             val busOk = unable < 2
             val probed22 = if (busOk) {
-                source.probePids(mode22)
+                source.withDashKeptAlive { source.probePids(mode22) }
             } else {
                 ObdLogger.logDebug(
                     ObdLogger.Dir.INFO,
@@ -1683,7 +1694,9 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
         }
         val source = currentSource ?: return
         viewModelScope.launch {
-            val results = source.probePids(HondaPidCatalog.transmission.pids)
+            val results = source.withDashKeptAlive {
+                source.probePids(HondaPidCatalog.transmission.pids)
+            }
             ObdLogger.logProbe("Transmission", results)
             lastTcmSupportedCount = results.count { it.supported }
             _transValues.value = results.associate { r ->
@@ -1707,7 +1720,7 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
         val source = currentSource ?: return
         viewModelScope.launch {
             _vehicleInfoLoading.value = true
-            val info = source.readVehicleInfo()
+            val info = source.withDashKeptAlive { source.readVehicleInfo() }
             _vehicleInfo.value = info
             ObdLogger.logProbeNote(
                 "Vehicle info",
@@ -1722,10 +1735,14 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
         val source = currentSource ?: return
         viewModelScope.launch {
             _deepDiag.update { it.copy(loading = true) }
-            val readiness = source.readReadiness()
-            val freeze = source.readFreezeFrame()
-            val o2 = source.readMode05()
-            val mode06 = source.readMode06()
+            val (readiness, freeze, o2, mode06) = source.withDashKeptAlive {
+                DeepSweep(
+                    source.readReadiness(),
+                    source.readFreezeFrame(),
+                    source.readMode05(),
+                    source.readMode06(),
+                )
+            }
             ObdLogger.logProbeNote(
                 "Deep diagnostics",
                 "MIL=${readiness.milOn} dtcCount=${readiness.dtcCount} " +
@@ -1752,7 +1769,7 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
         val source = currentSource ?: return
         viewModelScope.launch {
             _hondaScanning.value = true
-            val modules = source.probeHondaModules()
+            val modules = source.withDashKeptAlive { source.probeHondaModules() }
             _hondaScan.value = modules
             ObdLogger.logProbeNote(
                 "Honda modules",
@@ -1945,3 +1962,17 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 }
+
+private data class DtcSweep(
+    val ok: Boolean,
+    val stored: List<Dtc>,
+    val pending: List<Dtc>,
+    val permanent: List<Dtc>,
+)
+
+private data class DeepSweep(
+    val readiness: ReadinessStatus,
+    val freeze: FreezeFrame,
+    val o2: List<O2TestResult>,
+    val mode06: List<Mode06Result>,
+)

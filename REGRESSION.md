@@ -69,6 +69,7 @@ Keep these fixed. If a change might touch one of these areas, re-verify it.
 | I55 | Deep search still pauses live fetching | Fixed | Same as I40: heroes keep polling between exclusive ATSH strategies |
 | I56 | Nakamichi / phone kills app mid-drive so LOG cannot be trusted vs Torque | Fixed | Process-scoped ViewModel (`Fb2App`); FGS `stopWithTask=false` + sticky reconnect; battery unrestricted prompt |
 | I57 | Green freshness dots static / missing on some themes | Fixed | Shared blink on Classic + OptA/B/C; dim when that field is not freshly fetched |
+| I58 | DIAG Faults Read blanks Dash heroes (`--`) while CONNECTED | Fixed | Mode 03/07/0A/09/probes use `withLinkExclusive` + `withDashKeptAlive` (heroes keep polling between commands; TTL `holdValues` mid-cycle) |
 
 When the user reports a **new** bug, add a new `Ixx` row here (Status: Open → Fixed)
 and add a matching automated or manual check in sections 2–3.
@@ -121,6 +122,7 @@ then update the `latest` branch APK (same path) so the bookmarkable download lin
 | `ChromeCollapseTest` | Classic Dash chrome hides on scroll-up and returns at list top |
 | `FreshnessLedTest` | Shared blink: bright on fetch, dim when stale |
 | `KeepAlivePolicyTest` / `LastElmStoreTest` | Reconnect after HU process death unless user disconnected |
+| `DashBusKeepAliveTest` | Faults/VIN/probes set heroes-only hold then restore; nested hold stays |
 | `SpeedFreshnessAndPollPlannerTest` | Heroes-only hold; `holdValues` does not TTL-blank Dash during exclusive ATSH |
 
 ---
