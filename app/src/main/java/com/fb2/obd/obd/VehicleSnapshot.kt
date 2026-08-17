@@ -50,3 +50,31 @@ fun VehicleSnapshot.isEffectivelyBlank(): Boolean =
         mapKpa == null && throttlePct == null && stftPct == null &&
         intakeC == null && engineLoadPct == null
 
+/**
+ * Per-field last-good merge for partial ELM frames (e.g. ATRV-only or one secondary
+ * decoded while heroes are still in [prev]). Never overwrites a live hero with null.
+ */
+fun VehicleSnapshot.mergeLastGood(incoming: VehicleSnapshot): VehicleSnapshot =
+    copy(
+        rpm = incoming.rpm ?: rpm,
+        speedKmh = incoming.speedKmh ?: speedKmh,
+        coolantC = incoming.coolantC ?: coolantC,
+        coolant2C = incoming.coolant2C ?: coolant2C,
+        intakeC = incoming.intakeC ?: intakeC,
+        ambientC = incoming.ambientC ?: ambientC,
+        engineLoadPct = incoming.engineLoadPct ?: engineLoadPct,
+        throttlePct = incoming.throttlePct ?: throttlePct,
+        timingAdvance = incoming.timingAdvance ?: timingAdvance,
+        mafGps = incoming.mafGps ?: mafGps,
+        mapKpa = incoming.mapKpa ?: mapKpa,
+        stftPct = incoming.stftPct ?: stftPct,
+        ltftPct = incoming.ltftPct ?: ltftPct,
+        batteryVolts = incoming.batteryVolts ?: batteryVolts,
+        fuelSystemStatus = incoming.fuelSystemStatus ?: fuelSystemStatus,
+        gear = incoming.gear ?: gear,
+        gearSource = if (incoming.gearSource != GearSource.NONE) incoming.gearSource else gearSource,
+        gearConfidencePct = incoming.gearConfidencePct ?: gearConfidencePct,
+        gearRatioActual = incoming.gearRatioActual ?: gearRatioActual,
+        unsupportedPids = if (incoming.unsupportedPids.isNotEmpty()) incoming.unsupportedPids else unsupportedPids,
+        freshAtMs = incoming.freshAtMs + freshAtMs.filterKeys { it !in incoming.freshAtMs },
+    )

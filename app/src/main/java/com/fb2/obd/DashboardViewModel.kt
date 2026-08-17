@@ -60,6 +60,7 @@ import com.fb2.obd.obd.PidDefinition
 import com.fb2.obd.obd.SnapshotFreshness
 import com.fb2.obd.obd.VehicleSnapshot
 import com.fb2.obd.obd.isEffectivelyBlank
+import com.fb2.obd.obd.mergeLastGood
 import com.fb2.obd.obd.PidProbeResult
 import com.fb2.obd.obd.SensorPickerReadings
 import com.fb2.obd.obd.ReadinessStatus
@@ -484,10 +485,24 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
                 val toProbe = catalog.filter { pid -> pid.id !in known }.sortedBy { pid ->
                     if (pid.request.startsWith("01")) 0 else 1
                 }
-                source.enqueueBackgroundProbes(toProbe)
+                // Fast Mode 01 catalog pass (batch) — background queue alone is ~1 PID/cycle.
+                val mode01 = toProbe.filter { it.request.startsWith("01", ignoreCase = true) }
+                val advanced = toProbe.filter { !it.request.startsWith("01", ignoreCase = true) }
+                mode01.chunked(6).forEach { batch ->
+                    if (!isActive) return@forEach
+                    val results = source.withDashKeptAlive {
+                        source.probePids(batch, recoverFirst = false)
+                    }
+                    _pickerScan.update { st ->
+                        st.copy(results = st.results + results.associateBy { it.pid.id })
+                    }
+                }
+                if (advanced.isNotEmpty()) {
+                    source.enqueueBackgroundProbes(advanced)
+                }
                 val pending = toProbe.map { it.id }.toMutableSet()
                 var ticks = 0
-                while (isActive && pending.isNotEmpty() && ticks < 300) {
+                while (isActive && pending.isNotEmpty() && ticks < 600) {
                     delay(200L)
                     ticks++
                     pending.removeAll(_pickerScan.value.results.keys)
@@ -1251,14 +1266,8 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
             .onEach { incoming ->
                 lastLiveSnapshotMs = System.currentTimeMillis()
                 val prev = _uiState.value.snapshot
-                // Never wipe a live Dash with a blank reconnect frame.
-                val base = if (incoming.isEffectivelyBlank() && !prev.isEffectivelyBlank()) {
-                    prev
-                } else {
-                    incoming
-                }
-                // Keep deep-search recoveries until a live poll fills that field again.
-                val snapshot = overlayDeepFoundOntoSnapshot(base)
+                // Never wipe heroes on partial frames (ATRV-only, one secondary, etc.).
+                val snapshot = overlayDeepFoundOntoSnapshot(prev.mergeLastGood(incoming))
                 clearDeepFoundWhenLive(incoming)
                 val now = System.currentTimeMillis()
                 if (ObdLogger.valueLoggingEnabled && now - lastSnapshotLogMs >= 1_000L) {
@@ -1467,6 +1476,12 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
         val conn = _uiState.value.connection
         if (live && conn != ConnectionState.DISCONNECTED && conn != ConnectionState.ERROR) {
             ensureElmMonitor(ObdMonitorForegroundService.STATUS_LIVE)
+            return
+        }
+        // Do not stomp an active Demo session with a flaky ELM reconnect.
+        if (_settings.value.allowDemo && !_uiState.value.sourceIsLive &&
+            conn == ConnectionState.CONNECTED
+        ) {
             return
         }
         val saved = lastElmStore.load()
