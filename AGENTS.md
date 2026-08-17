@@ -197,11 +197,14 @@ non-obvious cloud specifics.
   Bubble position is clamped to the current display (landscape app → portrait
   Home must not push it off-screen).
 - **Dash tile remap:** Double-tap any main-Dash tile to open the same sensor
-  picker as `+`. Remaps persist in `dash_tile_overrides.json`. Remapped tiles
-  show a `2× change` hint; picker can **Restore default**. Triple-tap still
-  runs deep search on n/s tiles; long-press edits health thresholds.
-- **Sensor picker search:** Type ≥2 chars in the dialog search box to filter
-  by label / request / category (skip category drill-down).
+  picker as `+`. Remaps persist in `dash_tile_overrides.json`. Extra `+`
+  tiles persist in `dash_extra_pids.json`. Remapped tiles show a `2× change`
+  hint; picker can **Restore default**. Triple-tap still runs deep search on
+  n/s tiles; long-press edits health thresholds.
+- **Sensor picker:** Full-screen **Select sensor** (Torque-style). Categories
+  with sticky headers; search filters immediately. Green row + `Latest value`
+  means the ECU/ELM answered; dark + `No data received` means it did not.
+  Opening the picker pauses Mode 01 polling while it scans, then resumes.
 - **HU sideload APK:** Use `scripts/package-hu-apk.sh` → single file
   `dist/FB2-Diag-debug.apk`. Must be **v1+v2** signed — plain AGP debug/release
   is often **v2-only**, which makes some car package installers hang on
