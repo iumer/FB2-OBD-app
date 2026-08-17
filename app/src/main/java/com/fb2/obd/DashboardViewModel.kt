@@ -9,6 +9,7 @@ import com.fb2.obd.data.AiAnalysisErrors
 import com.fb2.obd.data.AiAnalysisStore
 import com.fb2.obd.data.AiReportStore
 import com.fb2.obd.data.ConnectionState
+import com.fb2.obd.data.DashExtraPidStore
 import com.fb2.obd.data.DashTileOverrideStore
 import com.fb2.obd.data.DemoFlavour
 import com.fb2.obd.data.DemoObdSource
@@ -47,12 +48,14 @@ import com.fb2.obd.obd.MetricStatus
 import com.fb2.obd.obd.Mode06Result
 import com.fb2.obd.obd.ModuleScanResult
 import com.fb2.obd.obd.O2TestResult
+import com.fb2.obd.obd.ObdResponseParser
 import com.fb2.obd.obd.PidCategory
 import com.fb2.obd.obd.PidDefinition
 import com.fb2.obd.obd.SnapshotFreshness
 import com.fb2.obd.obd.VehicleSnapshot
 import com.fb2.obd.obd.isEffectivelyBlank
 import com.fb2.obd.obd.PidProbeResult
+import com.fb2.obd.obd.SensorPickerReadings
 import com.fb2.obd.obd.ReadinessStatus
 import com.fb2.obd.obd.StandardPidCatalog
 import com.fb2.obd.obd.TripComputer
@@ -182,6 +185,12 @@ data class DeepSearchUiState(
     val report: DeepSearchReport? = null,
 )
 
+/** Live ECU probe results while the full-screen sensor picker is open. */
+data class SensorPickerScanState(
+    val running: Boolean = false,
+    val results: Map<String, PidProbeResult> = emptyMap(),
+)
+
 /**
  * Collects snapshots from the active [ObdSource] and exposes them as UI state.
  */
@@ -257,7 +266,9 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
     private val _maintenance = MutableStateFlow(MaintenanceStore.defaultTemplate())
     val maintenance: StateFlow<List<MaintenanceEntry>> = _maintenance.asStateFlow()
 
-    private val _dashExtraPidIds = MutableStateFlow<List<String>>(emptyList())
+    private val extraPidStore = DashExtraPidStore(File(filesDir, "dash_extra_pids.json"))
+    private val customPidStore = DashExtraPidStore(File(filesDir, "custom_sensor_pids.json"))
+    private val _dashExtraPidIds = MutableStateFlow(extraPidStore.load())
     val dashExtraPidIds: StateFlow<List<String>> = _dashExtraPidIds.asStateFlow()
 
     private val _dashExtraValues = MutableStateFlow<Map<String, String>>(emptyMap())
@@ -297,6 +308,10 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
     val deepFoundValues: StateFlow<Map<String, String>> = _deepFoundValues.asStateFlow()
     /** Wall-clock ms when each deepFound entry was first recovered (honest LEDs). */
     private val _deepFoundAtMs = MutableStateFlow<Map<String, Long>>(emptyMap())
+
+    private val _pickerScan = MutableStateFlow(SensorPickerScanState())
+    val pickerScan: StateFlow<SensorPickerScanState> = _pickerScan.asStateFlow()
+    private var pickerScanJob: Job? = null
 
     val pidCatalog: List<PidDefinition>
         get() = VehicleProfileConfig.pidCatalog(vehicleProfile)
@@ -381,6 +396,7 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
             next[slot] = pid.id
             next.filter { it.isNotBlank() }
         }
+        extraPidStore.save(_dashExtraPidIds.value)
         // One-shot probe so tiles outside the main poll set still show a value.
         probeAndCachePid(pid)
     }
@@ -388,6 +404,7 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
     fun clearDashExtraPid(pidId: String) {
         _dashExtraPidIds.update { it.filter { id -> id != pidId } }
         _dashExtraValues.update { it - pidId }
+        extraPidStore.save(_dashExtraPidIds.value)
         publishCarDash()
     }
 
@@ -426,6 +443,89 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
             _dashExtraValues.update { it + (pid.id to text) }
             publishCarDash()
         }
+    }
+
+    fun startSensorPickerScan() {
+        if (pickerScanJob?.isActive == true) return
+        val source = currentSource
+        val catalog = pidCatalog
+        val snap = _uiState.value.snapshot
+        val seeded = LinkedHashMap<String, PidProbeResult>()
+        catalog.forEach { pid ->
+            val n = pid.mode01Number
+            if (n != null && n in snap.unsupportedPids) {
+                seeded[pid.id] = PidProbeResult(pid, supported = false, sample = null, raw = "UNSUPPORTED")
+            }
+        }
+        _pickerScan.value = SensorPickerScanState(running = source != null, results = HashMap(seeded))
+        if (source == null) return
+        pickerScanJob = viewModelScope.launch {
+            source.pausePolling()
+            try {
+                val supportScan = probeSaeSupportBitmask(source)
+                if (supportScan != null) {
+                    val (support, coveredBases) = supportScan
+                    catalog.forEach { pid ->
+                        val n = pid.mode01Number ?: return@forEach
+                        if (SensorPickerReadings.pidInCoveredSupportBlock(n, coveredBases) &&
+                            n !in support &&
+                            pid.id !in _pickerScan.value.results
+                        ) {
+                            seeded[pid.id] = PidProbeResult(
+                                pid,
+                                supported = false,
+                                sample = null,
+                                raw = "UNSUPPORTED",
+                            )
+                        }
+                    }
+                    _pickerScan.update { it.copy(results = HashMap(seeded)) }
+                }
+                val knownLive = catalog.filter { pid ->
+                    LiveSnapshotOverlay.liveSample(pid, snap) != null ||
+                        (pid.request.equals("0103", true) && !snap.fuelSystemStatus.isNullOrBlank())
+                }.map { it.id }.toSet()
+                val toProbe = catalog.filter { pid ->
+                    pid.id !in seeded && pid.id !in knownLive
+                }.sortedBy { pid ->
+                    if (pid.request.startsWith("01")) 0 else 1
+                }
+                for (batch in toProbe.chunked(6)) {
+                    if (!isActive) break
+                    val probed = source.probePids(batch, recoverFirst = false)
+                    _pickerScan.update { st ->
+                        st.copy(results = st.results + probed.associateBy { it.pid.id })
+                    }
+                }
+            } finally {
+                source.resumePolling()
+                _pickerScan.update { it.copy(running = false) }
+            }
+        }
+    }
+
+    fun stopSensorPickerScan() {
+        pickerScanJob?.cancel()
+        pickerScanJob = null
+        currentSource?.resumePolling()
+        _pickerScan.update { it.copy(running = false) }
+    }
+
+    private suspend fun probeSaeSupportBitmask(source: ObdSource): Pair<Set<Int>, Set<Int>>? {
+        val supported = HashSet<Int>()
+        val coveredBases = HashSet<Int>()
+        for (base in SensorPickerReadings.SAE_SUPPORT_BASES) {
+            val req = "01%02X".format(base)
+            val raw = source.command(req) ?: continue
+            val parsed = SensorPickerReadings.parseSaeSupport(base, raw)
+            // A decoded 4-byte bitmask (even all-zero) covers that 32-PID block.
+            val bytes = ObdResponseParser.rawDataBytes(req, 4, raw)
+            if (bytes != null) {
+                coveredBases += base
+                supported += parsed
+            }
+        }
+        return if (coveredBases.isNotEmpty()) supported to coveredBases else null
     }
 
     private val accelTimer = AccelerationTimer()
@@ -528,13 +628,9 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
                 showEstimatedGear = gearDefault,
             )
         }
-        // Drop Honda-only extras / overlays that are invisible in Generic.
+        // Honda-only extras stay on disk so switching back to FB2 restores them.
+        // Generic Dash already hides ids that are not in the SAE catalog.
         if (profile.isGeneric) {
-            _dashExtraPidIds.update { ids ->
-                ids.filter { id ->
-                    pidCatalog.any { it.id.equals(id, true) }
-                }
-            }
             _transValues.value = emptyMap()
             _hondaScan.value = emptyList()
             _deepFoundValues.value = _deepFoundValues.value.filterKeys { key ->

@@ -62,6 +62,8 @@ Keep these fixed. If a change might touch one of these areas, re-verify it.
 | I48 | Want in-app Update button (check / download / install or “up to date”) | Fixed | Settings → App update; `version.json` on `latest`; FileProvider install |
 | I49 | Soft-recover / ATRV-only frames wipe Dash mid-drive; UI RETRY blanks bubble | Fixed | ATRV-only = blank sticky; recover heartbeat + 450ms AT timeout; stale UI 12s; deep-found TTL/clear; deep search gentle restore |
 | I50 | Analyze via AI on Generic OBD2 still wrote Honda Civic FB2 | Fixed | Profile-aware system/user prompt + VIN if Mode 09 available; otherwise “generic SAE data from a car” |
+| I51 | Extra Dash sensors added via **+** vanished after closing the app | Fixed | Persist `filesDir/dash_extra_pids.json`; reload on start (Honda extras stay on disk when switching Generic) |
+| I52 | Sensor picker was a tiny dialog — hard to read, no live values | Fixed | Full-screen Torque-style Select sensor: category list, green = ECU answered with Latest value, dark = No data received |
 
 When the user reports a **new** bug, add a new `Ixx` row here (Status: Open → Fixed)
 and add a matching automated or manual check in sections 2–3.
@@ -109,6 +111,8 @@ then update the `latest` branch APK (same path) so the bookmarkable download lin
 | `CarDashBuilderTest` | Android Auto dash model |
 | `DashboardSnapshotTest` / `ScreensSnapshotTest` / `ConnectSheetSnapshotTest` | Paparazzi UI snapshots |
 | `AppUpdateCheckerTest` | version.json parse + local/remote versionCode compare |
+| `DashExtraPidStoreTest` | **+** extras survive process death (`dash_extra_pids.json`) |
+| `SensorPickerReadingsTest` | Green/live vs waiting vs ECU-unsupported; SAE support bitmask parse |
 
 ---
 
