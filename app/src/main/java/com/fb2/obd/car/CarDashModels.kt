@@ -35,26 +35,51 @@ data class CarDashState(
     val sourceIsLive: Boolean = false,
     val sourceName: String = "",
     val logging: Boolean = false,
+    /** UI stale-watch / soft-recover — bubble keeps last-good but shows RETRY. */
+    val reconnecting: Boolean = false,
 ) {
     val connectLabel: String
         get() = when {
-            connection == ConnectionState.CONNECTED && sourceIsLive -> "CONNECTED"
+            reconnecting || (connection == ConnectionState.CONNECTING && sourceIsLive) -> "RETRY…"
             connection == ConnectionState.CONNECTING -> "…"
+            connection == ConnectionState.CONNECTED && sourceIsLive -> "CONNECTED"
             else -> "CONNECT"
         }
 
     val statusLine: String
         get() = when {
-            connection == ConnectionState.CONNECTED && sourceIsLive -> "LIVE · $sourceName"
+            reconnecting -> "RETRY · $sourceName"
+            connection == ConnectionState.CONNECTED && sourceIsLive ->
+                if (logging) "LIVE · $sourceName · LOG" else "LIVE · $sourceName"
             connection == ConnectionState.CONNECTED && !sourceIsLive -> "DEMO"
+            connection == ConnectionState.CONNECTING && sourceIsLive -> "RETRY · $sourceName"
             connection == ConnectionState.CONNECTING -> "Connecting…"
             connection == ConnectionState.ERROR -> "Disconnected"
             else -> "Not connected"
         }
 
-    /** True when Dash numbers are from an active feed (live ELM or Demo). */
+    /** Collapsed bubble link chip: LIVE / RETRY / DEMO / OFF. */
+    val bubbleLinkTag: String
+        get() = when {
+            reconnecting || (connection == ConnectionState.CONNECTING && sourceIsLive) -> "RETRY"
+            connection == ConnectionState.CONNECTED && sourceIsLive ->
+                if (logging) "LOG" else "LIVE"
+            connection == ConnectionState.CONNECTED && !sourceIsLive -> "DEMO"
+            connection == ConnectionState.CONNECTING -> "…"
+            else -> "OFF"
+        }
+
+    /**
+     * True when overlay / AA may show numeric tiles (not forced `--`).
+     * CONNECTING keeps sticky last-good during soft-recover so the bubble
+     * matches the phone Dash RETRY chip instead of blanking.
+     */
     val showingLiveValues: Boolean
-        get() = connection == ConnectionState.CONNECTED
+        get() = when (connection) {
+            ConnectionState.CONNECTED -> true
+            ConnectionState.CONNECTING -> rpm != "--" || tiles.any { it.value != "--" && it.value != "n/s" }
+            else -> false
+        }
 }
 
 /**
@@ -74,6 +99,7 @@ object CarDashBuilder {
         sourceName: String,
         logging: Boolean,
         showEstimatedGear: Boolean,
+        reconnecting: Boolean = false,
         dtcCount: Int? = null,
         healthScore: com.fb2.obd.obd.HealthScore? = null,
         /** Smoothed snapshot used only for zone decisions (UI still shows [snapshot]). */
@@ -211,6 +237,7 @@ object CarDashBuilder {
             sourceIsLive = sourceIsLive,
             sourceName = sourceName,
             logging = logging,
+            reconnecting = reconnecting,
         )
     }
 
