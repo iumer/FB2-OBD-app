@@ -109,6 +109,62 @@ class FloatingDashMetricsTest {
     }
 
     @Test
+    fun retryConnecting_keepsLastGoodMetricsAndRetryTag() {
+        val state = CarDashBuilder.build(
+            snapshot = VehicleSnapshot(
+                rpm = 850.0,
+                speedKmh = 0.0,
+                coolantC = 91.0,
+                batteryVolts = 14.0,
+            ),
+            thresholds = HealthThresholds.DEFAULT,
+            extraPidIds = emptyList(),
+            extraValues = emptyMap(),
+            deepFoundValues = emptyMap(),
+            catalog = StandardPidCatalog.all,
+            connection = ConnectionState.CONNECTING,
+            sourceIsLive = true,
+            sourceName = "ELM327",
+            logging = false,
+            showEstimatedGear = true,
+            reconnecting = true,
+        )
+        assertEquals(true, state.showingLiveValues)
+        assertEquals("RETRY", state.bubbleLinkTag)
+        assertEquals("RETRY · ELM327", state.statusLine)
+        val metrics = FloatingDashMetrics.from(state)
+        assertTrue(metrics.any { it.label == "Coolant 1" && it.value == "91" })
+        assertTrue(metrics.any { it.label == "RPM" && it.value == "850" })
+        assertEquals("91", FloatingDashMetrics.collapsedMetric(metrics, "Coolant 1").value)
+    }
+
+    @Test
+    fun nsTiles_useGreyHealthOnBubble() {
+        val state = CarDashBuilder.build(
+            snapshot = VehicleSnapshot(
+                rpm = 900.0,
+                coolantC = null,
+                unsupportedPids = setOf(com.fb2.obd.obd.ObdPid.COOLANT_TEMP.number),
+            ),
+            thresholds = HealthThresholds.DEFAULT,
+            extraPidIds = emptyList(),
+            extraValues = emptyMap(),
+            deepFoundValues = emptyMap(),
+            catalog = StandardPidCatalog.all,
+            connection = ConnectionState.CONNECTED,
+            sourceIsLive = true,
+            sourceName = "ELM",
+            logging = false,
+            showEstimatedGear = true,
+        )
+        val coolant = state.tiles.first { it.label == "Coolant 1" }
+        assertEquals("n/s", coolant.value)
+        assertEquals(null, coolant.health)
+        val metric = FloatingDashMetrics.from(state).first { it.label == "Coolant 1" }
+        assertEquals(null, metric.health)
+    }
+
+    @Test
     fun offlineError_bubbleShowsOffDashNotStaleCoolant() {
         // Sticky last-good must not survive on the CarPlay bubble after ELM ERROR.
         val state = CarDashBuilder.build(
