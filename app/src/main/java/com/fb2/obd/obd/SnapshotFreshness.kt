@@ -65,7 +65,13 @@ class SnapshotFreshness(
         snapshot: VehicleSnapshot,
         nowMs: Long,
         rpmUpdatedThisCycle: Boolean,
+        holdValues: Boolean = false,
     ): VehicleSnapshot {
+        if (holdValues) {
+            // Deep search / exclusive ATSH: keep last-good numbers on screen.
+            // Do not remake timestamps — freshness LEDs go dim until heroes resume.
+            return snapshot.copy(freshAtMs = snapshotMap())
+        }
         var out = snapshot
 
         fun isStale(key: String, ttl: Long = staleAfterMs): Boolean {

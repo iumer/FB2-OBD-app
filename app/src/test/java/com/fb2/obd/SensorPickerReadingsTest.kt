@@ -32,6 +32,47 @@ class SensorPickerReadingsTest {
     }
 
     @Test
+    fun atrvBattery_isLiveEvenWhen0142Unsupported() {
+        val battery = StandardPidCatalog.all.first { it.request.equals("0142", true) }
+        val snap = VehicleSnapshot(
+            batteryVolts = 14.12,
+            unsupportedPids = setOf(0x42, 0x46, 0x07, 0x67),
+        )
+        val reading = SensorPickerReadings.resolve(battery, snap, emptyMap())
+        assertEquals(SensorReadKind.LIVE, reading.kind)
+        assertTrue(reading.latest!!.contains("14.12"))
+    }
+
+    @Test
+    fun july24Fb2DashPids_stayLiveFromSnapshot() {
+        val snap = VehicleSnapshot(
+            rpm = 848.0,
+            speedKmh = 7.0,
+            coolantC = 72.0,
+            intakeC = 36.0,
+            engineLoadPct = 43.1,
+            throttlePct = 14.9,
+            stftPct = -3.9,
+            mafGps = 3.86,
+            mapKpa = 46.0,
+            timingAdvance = 6.5,
+            fuelSystemStatus = "CLOSED LOOP",
+            unsupportedPids = setOf(0x67, 0x46, 0x07),
+        )
+        val mustLive = listOf("010C", "010D", "0105", "010F", "0104", "0111", "0106", "0110", "010B", "010E", "0103")
+        mustLive.forEach { req ->
+            val pid = StandardPidCatalog.all.first { it.request.equals(req, true) }
+            val reading = SensorPickerReadings.resolve(pid, snap, emptyMap())
+            assertEquals("$req should be readable like the 2026-07-24 FB2 log", SensorReadKind.LIVE, reading.kind)
+        }
+        val ns = listOf("0167", "0146", "0107")
+        ns.forEach { req ->
+            val pid = StandardPidCatalog.all.first { it.request.equals(req, true) }
+            assertEquals(SensorReadKind.NONE, SensorPickerReadings.resolve(pid, snap, emptyMap()).kind)
+        }
+    }
+
+    @Test
     fun ecuUnsupported_isNoDataWithoutProbe() {
         val snap = VehicleSnapshot(unsupportedPids = setOf(0x46, 0x07, 0x67))
         val reading = SensorPickerReadings.resolve(ambient, snap, emptyMap())

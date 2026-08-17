@@ -79,10 +79,9 @@ non-obvious cloud specifics.
   **and** CAN headers (`ATSH`). Until recently the app never sent headers — that
   is an app/protocol gap, not proof the ELM adapter is broken. **Triple-tap** any
   `n/s` tile to run **Deep research** (`DeepSearchKnowledgeBase` + `DeepSensorSearch`).
-  Deep research **pauses live Mode 01 polling** while it runs (so ATSH thrash cannot
-  interleave and lag the Dash), walks the full strategy list when the ECU link is
-  up, and reports how many header strategies were **skipped** if the link is down
-  — it does not silently fail after the first try while showing “1/10”.
+- Deep research **keeps Dash heroes polling** (RPM/Speed/Coolant/MAF/ATRV) while each ATSH strategy runs exclusively; it does not freeze/blank the Dash. Header strategies are **skipped** (with a count) if the ECU link is down — it does not silently fail after the first try while showing “1/10”.
+- **Select sensor** does not pause Mode 01. Extra catalog PIDs are queued one-per-cycle on the live poll loop. Live Dash/ATRV values beat the ECU support bitmask (Battery via ATRV stays green even when `0142` is omitted).
+- **Keep-alive:** `Fb2App` holds the dashboard ViewModel so Nakamichi/phone killing the activity does not stop ELM + LOG. `ObdMonitorForegroundService` is `stopWithTask=false` + START_STICKY and reconnects the last adapter after process death unless the driver tapped Disconnect. Settings → Unrestricted battery (also prompted on live connect).
 - Coolant2 (`0167`), Ambient (`0146`), and LTFT (`0107`) frequently return
   `n/s` on this Civic because the ECM support bitmask omits them — usually an
   ECU limitation. Deep search still forces the PID and tries ECM headers.
@@ -161,9 +160,9 @@ non-obvious cloud specifics.
   reconnect frame must not wipe the Dash or fake `Engine Stop`.
   **Battery** prefers `ATRV` (adapter rail voltage, Torque-style) every cycle even
   during `UNABLE` — do not gate ATRV on ECU bus health.
-  **Freshness LEDs:** each Dash tile / hero RPM+Speed shows a green heartbeat that
-  blinks when that field was successfully decoded (`VehicleSnapshot.freshAtMs`).
-  Dim while recent, dark when stale — same idea as Torque Pro’s green blink.
+  **Freshness LEDs:** each Dash tile / hero RPM+Speed (all themes) shows a green
+  heartbeat that **blinks** from one shared clock when that field was just
+  decoded (`VehicleSnapshot.freshAtMs`). Dim/dark when stale — Torque-style.
   Safety fields (RPM/Speed/Coolant/Battery/MAF/MAP) clear to `n/s` after TTL;
   estimated gear only when both RPM and Speed are fresh.
   **Long-haul LOG:** session CSV is checkpointed to disk ~every 60s (and on STOP)
@@ -171,8 +170,10 @@ non-obvious cloud specifics.
   Bus-lost soft-recover caps at 3 then RFCOMM reconnect; ATRV-only is not a
   healthy Mode 01 cycle. Dash-extra refresh does not softRecover every 5s.
 - **Screen off / background:** real ELM sessions start
-  `ObdMonitorForegroundService` (`connectedDevice` FGS + sticky notification +
-  `PARTIAL_WAKE_LOCK`). Demo mode must not start it. Voice alerts play a short
+  `ObdMonitorForegroundService` (`connectedDevice` FGS + wake lock +
+  `stopWithTask=false`). The dashboard ViewModel is process-scoped (`Fb2App`) so
+  killing the activity does not drop the ELM socket / LOG. Demo mode must not
+  start the FGS. Voice alerts play a short
   beep + TTS. **Default is CarPlay/Z-Link safe:** no audio-focus duck (many HUs
   duck Z-Link and never restore volume). Settings → **CarPlay / Android Auto
   connected** (Yes = no duck / Z-Link safe; No = briefly duck media). Stored flag
@@ -204,8 +205,10 @@ non-obvious cloud specifics.
 - **Sensor picker:** Full-screen **Select sensor** (Torque-style). Category
   sections scroll with the list (no sticky chrome). Search filters immediately.
   Green row + `Latest value` means the ECU/ELM answered; dark + `No data received`
-  means it did not. Opening the picker pauses Mode 01 polling while it scans, then
-  resumes. Classic Dash TopBar + RPM/Speed hero also scroll away with the tiles.
+  means it did not. Opening the picker does **not** pause Mode 01 — extra PIDs
+  queue one-per-cycle. DIAG Faults Read / VIN / page probes keep heroes alive
+  (`withDashKeptAlive`) so TTL cannot blank RPM/Speed/Coolant. Classic Dash
+  TopBar + RPM/Speed hero also scroll away with the tiles.
 - **HU sideload APK:** Use `scripts/package-hu-apk.sh` → single file
   `dist/FB2-Diag-debug.apk`. Must be **v1+v2** signed — plain AGP debug/release
   is often **v2-only**, which makes some car package installers hang on

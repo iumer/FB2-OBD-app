@@ -17,6 +17,7 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.os.PowerManager
 import android.net.Uri
 import android.provider.Settings
 import android.view.WindowManager
@@ -25,7 +26,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.activity.viewModels
+import androidx.lifecycle.ViewModelProvider
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.rememberScrollState
@@ -53,6 +54,7 @@ import com.fb2.obd.ui.theme.Background
 import com.fb2.obd.ui.theme.TextPrimary
 import com.fb2.obd.data.AppUpdateManager
 import com.fb2.obd.data.DemoObdSource
+import com.fb2.obd.data.ConnectionState
 import com.fb2.obd.data.Elm327BluetoothSource
 import com.fb2.obd.data.LogExportHelper
 import com.fb2.obd.data.ObdLogger
@@ -90,7 +92,10 @@ private enum class Screen {
 
 class MainActivity : ComponentActivity() {
 
-    private val viewModel: DashboardViewModel by viewModels()
+    private val viewModel: DashboardViewModel by lazy {
+        ViewModelProvider(application as Fb2App)[DashboardViewModel::class.java]
+    }
+    private var batteryPrompted = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -164,6 +169,11 @@ class MainActivity : ComponentActivity() {
                     while (screen == Screen.DEBUG_LOG || screen == Screen.VALUE_LOG) {
                         delay(1000L)
                         tick++
+                    }
+                }
+                LaunchedEffect(state.connection, state.sourceIsLive) {
+                    if (state.sourceIsLive && state.connection == ConnectionState.CONNECTED) {
+                        maybeRequestUnrestrictedBattery()
                     }
                 }
 
@@ -383,6 +393,9 @@ class MainActivity : ComponentActivity() {
                             onCheckSoundAlert = {
                                 viewModel.testSoundAlert()
                                 toast("Playing test alarm — CarPlay volume should stay up afterward")
+                            },
+                            onKeepAliveBattery = {
+                                maybeRequestUnrestrictedBattery(force = true)
                             },
                             uploadStatus = uploadStatus,
                             githubToken = viewModel.githubUploadToken(),
@@ -837,6 +850,21 @@ class MainActivity : ComponentActivity() {
             ?.map { BtDeviceUi(runCatching { it.name }.getOrNull().orEmpty(), it.address) }
             ?.sortedBy { it.name }
             ?: emptyList()
+    }
+
+    @SuppressLint("BatteryLife")
+    private fun maybeRequestUnrestrictedBattery(force: Boolean = false) {
+        if (batteryPrompted && !force) return
+        val pm = getSystemService(PowerManager::class.java) ?: return
+        if (pm.isIgnoringBatteryOptimizations(packageName)) return
+        batteryPrompted = true
+        runCatching {
+            startActivity(
+                Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                    data = Uri.parse("package:$packageName")
+                },
+            )
+        }
     }
 
     @SuppressLint("MissingPermission")

@@ -50,11 +50,9 @@ object SensorPickerReadings {
         probeById: Map<String, PidProbeResult>,
         extraValues: Map<String, String> = emptyMap(),
     ): SensorPickerReading {
-        val mode01 = pid.mode01Number
-        if (mode01 != null && mode01 in snapshot.unsupportedPids) {
-            return SensorPickerReading(SensorReadKind.NONE)
-        }
-
+        // Live Dash / ATRV wins over the ECU support bitmask. FB2 omits 0142
+        // (battery) from Mode 01 PID 00 yet ATRV still returns volts — picker
+        // used to paint that as "No data received".
         liveText(pid, snapshot)?.let { text ->
             return SensorPickerReading(SensorReadKind.LIVE, text)
         }
@@ -64,6 +62,11 @@ object SensorPickerReadings {
             if (cleaned.isNotEmpty() && !isNoDataText(cleaned)) {
                 return SensorPickerReading(SensorReadKind.LIVE, cleaned)
             }
+        }
+
+        val mode01 = pid.mode01Number
+        if (mode01 != null && mode01 in snapshot.unsupportedPids) {
+            return SensorPickerReading(SensorReadKind.NONE)
         }
 
         val probed = probeById[pid.id] ?: probeById.entries.firstOrNull { (k, _) ->

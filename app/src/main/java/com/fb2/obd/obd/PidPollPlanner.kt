@@ -49,6 +49,8 @@ object PidPollPlanner {
      * @param cycle 1-based cycle counter
      * @param recovering true after bus-lost / dead cycle
      * @param secondaryBudget max rotating (non-always) PIDs per cycle
+     * @param hold [PollHold.HEROES_ONLY] skips rotating secondaries so deep
+     *        search can borrow the link without freezing RPM/Speed/Coolant.
      */
     fun selectForCycle(
         activePids: List<ObdPid>,
@@ -56,9 +58,14 @@ object PidPollPlanner {
         cycle: Int,
         recovering: Boolean,
         secondaryBudget: Int = 4,
+        hold: PollHold = PollHold.NONE,
     ): List<ObdPid> {
+        if (hold == PollHold.FULL_PAUSE) return emptyList()
         val always = activePids.filter { it.number in ALWAYS_NUMBERS }
         val secondaryPool = activePids.filter { it.number !in ALWAYS_NUMBERS }
+        if (hold == PollHold.HEROES_ONLY) {
+            return orderAlways(always)
+        }
 
         val eligibleSecondary = secondaryPool.filter { pid ->
             if (recovering && pid.number !in CORE_NUMBERS) return@filter false
@@ -67,8 +74,11 @@ object PidPollPlanner {
 
         val secondaries = rotate(eligibleSecondary, cycle, secondaryBudget.coerceAtLeast(0))
 
-        // Stable order: RPM, Speed, Coolant, MAF, then this cycle's secondaries.
-        val alwaysOrdered = listOfNotNull(
+        return orderAlways(always) + secondaries
+    }
+
+    private fun orderAlways(always: List<ObdPid>): List<ObdPid> {
+        return listOfNotNull(
             always.firstOrNull { it == ObdPid.ENGINE_RPM },
             always.firstOrNull { it == ObdPid.SPEED },
             always.firstOrNull { it == ObdPid.COOLANT_TEMP },
@@ -77,8 +87,6 @@ object PidPollPlanner {
             it != ObdPid.ENGINE_RPM && it != ObdPid.SPEED &&
                 it != ObdPid.COOLANT_TEMP && it != ObdPid.MAF
         }
-
-        return alwaysOrdered + secondaries
     }
 
     /**
