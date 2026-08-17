@@ -366,8 +366,13 @@ class Elm327BluetoothSource(
                     val cycleMs = System.currentTimeMillis() - cycleStartMs
                     val atrvOk = atrvThisCycle != null
                     val silenceMs = System.currentTimeMillis() - lastMode01OkMs
+                    // DIAG/deep-search can raise exclusive mid-cycle. Do not count
+                    // that as a dead Mode 01 frame (would RETRY/reconnect).
+                    val interruptedByExclusive = exclusiveCount.get() > 0
 
-                    if (busLost) {
+                    if (interruptedByExclusive && !busLost) {
+                        // Socket yielded to Faults/VIN/ATSH — not a link failure.
+                    } else if (busLost) {
                         consecutiveUnableCycles++
                         softRecoverCount++
                         // Soft recover can take seconds — emit a heartbeat first so the
@@ -503,11 +508,12 @@ class Elm327BluetoothSource(
                         snapshot.withGear(hasEcuGear),
                         sanitizeAt,
                         rpmUpdatedThisCycle = rpmUpdated,
+                        holdValues = interruptedByExclusive || holdNow == PollHold.FULL_PAUSE,
                     )
                     val hasAny = snapshot.rpm != null || snapshot.coolantC != null ||
                         snapshot.batteryVolts != null || snapshot.mafGps != null ||
                         snapshot.speedKmh != null
-                    if (hasAny || deadCycles == 0) {
+                    if (hasAny || deadCycles == 0 || interruptedByExclusive) {
                         trySend(snapshot)
                         lastEmitted = snapshot
                     }
@@ -568,34 +574,38 @@ class Elm327BluetoothSource(
 
     override suspend fun readStoredDtcs(): List<Dtc> {
         val conn = connection ?: return emptyList()
-        return runCatching { DtcDecoder.decode(conn.exec("03"), 0x43) }.getOrDefault(emptyList())
+        val raw = execExclusive(conn, "03") ?: return emptyList()
+        return DtcDecoder.decode(raw, 0x43)
     }
 
     override suspend fun readPendingDtcs(): List<Dtc> {
         val conn = connection ?: return emptyList()
-        return runCatching { DtcDecoder.decode(conn.exec("07"), 0x47) }.getOrDefault(emptyList())
+        val raw = execExclusive(conn, "07") ?: return emptyList()
+        return DtcDecoder.decode(raw, 0x47)
     }
 
     override suspend fun readPermanentDtcs(): List<Dtc> {
         val conn = connection ?: return emptyList()
-        return runCatching { DtcDecoder.decode(conn.exec("0A"), 0x4A) }.getOrDefault(emptyList())
+        val raw = execExclusive(conn, "0A") ?: return emptyList()
+        return DtcDecoder.decode(raw, 0x4A)
     }
 
     override suspend fun clearDtcs(): Boolean {
         val conn = connection ?: return false
-        return runCatching { conn.exec("04").uppercase().contains("44") }.getOrDefault(false)
+        val raw = execExclusive(conn, "04") ?: return false
+        return raw.uppercase().contains("44")
     }
 
     override suspend fun command(raw: String): String? {
         val conn = connection ?: return null
-        return runCatching { conn.exec(raw.trim()) }.getOrNull()
+        return execExclusive(conn, raw.trim())
     }
 
     override suspend fun readVehicleInfo(): VehicleInfo {
         val conn = connection ?: return VehicleInfo()
-        val vinRaw = runCatching { conn.exec("0902") }.getOrNull()
-        val calRaw = runCatching { conn.exec("0904") }.getOrNull()
-        val nameRaw = runCatching { conn.exec("090A") }.getOrNull()
+        val vinRaw = execExclusive(conn, "0902")
+        val calRaw = execExclusive(conn, "0904")
+        val nameRaw = execExclusive(conn, "090A")
         return VehicleInfo(
             vin = vinRaw?.let { DiagnosticParsers.parseMode09Vin(it) },
             calibrationIds = calRaw?.let { DiagnosticParsers.parseMode09CalIds(it) } ?: emptyList(),
@@ -606,29 +616,38 @@ class Elm327BluetoothSource(
 
     override suspend fun readReadiness(): ReadinessStatus {
         val conn = connection ?: return ReadinessStatus()
-        val raw = runCatching { conn.exec("0101") }.getOrNull() ?: return ReadinessStatus()
+        val raw = execExclusive(conn, "0101") ?: return ReadinessStatus()
         return DiagnosticParsers.parseReadiness(raw)
     }
 
     override suspend fun readFreezeFrame(): FreezeFrame {
         val conn = connection ?: return FreezeFrame()
-        val raw = runCatching {
-            conn.exec("0202") + " " + conn.exec("020C") + " " + conn.exec("020D") +
-                " " + conn.exec("0205") + " " + conn.exec("0204")
-        }.getOrNull() ?: return FreezeFrame()
-        return DiagnosticParsers.parseFreezeFrame(raw)
+        val parts = listOf("0202", "020C", "020D", "0205", "0204").mapNotNull { cmd ->
+            execExclusive(conn, cmd)
+        }
+        if (parts.isEmpty()) return FreezeFrame()
+        return DiagnosticParsers.parseFreezeFrame(parts.joinToString(" "))
     }
 
     override suspend fun readMode05(): List<O2TestResult> {
         val conn = connection ?: return emptyList()
-        val raw = runCatching { conn.exec("05") }.getOrNull() ?: return emptyList()
+        val raw = execExclusive(conn, "05") ?: return emptyList()
         return DiagnosticParsers.dumpMode05(raw)
     }
 
     override suspend fun readMode06(): List<Mode06Result> {
         val conn = connection ?: return emptyList()
-        val raw = runCatching { conn.exec("06") }.getOrNull() ?: return emptyList()
+        val raw = execExclusive(conn, "06") ?: return emptyList()
         return DiagnosticParsers.dumpMode06(raw)
+    }
+
+    /** One ELM command; poll loop parks with holdValues so Dash TTL cannot blank. */
+    private suspend fun execExclusive(
+        conn: Elm327Connection,
+        command: String,
+        timeoutMs: Long = Elm327Connection.DEFAULT_TIMEOUT_MS,
+    ): String? = withLinkExclusive {
+        runCatching { conn.exec(command, timeoutMs) }.getOrNull()
     }
 
     override suspend fun probePids(
@@ -637,7 +656,7 @@ class Elm327BluetoothSource(
     ): List<PidProbeResult> {
         val conn = connection ?: return emptyList()
         if (recoverFirst) {
-            softRecover(conn)
+            withLinkExclusive { softRecover(conn) }
         }
         val out = ArrayList<PidProbeResult>(pids.size)
         var failStreak = 0
@@ -647,16 +666,12 @@ class Elm327BluetoothSource(
                 out += PidProbeResult(pid, false, null, "SKIPPED (bus unhealthy)")
                 continue
             }
-            var raw = runCatching {
-                conn.exec(pid.request, Elm327Connection.PROBE_TIMEOUT_MS)
-            }.getOrNull()
+            var raw = execExclusive(conn, pid.request, Elm327Connection.PROBE_TIMEOUT_MS)
             var up = raw?.uppercase().orEmpty()
             var bad = raw == null || BAD_TOKENS.any { up.contains(it) }
             if (bad && up.contains("NO DATA")) {
                 delay(20L)
-                raw = runCatching {
-                    conn.exec(pid.request, Elm327Connection.PROBE_TIMEOUT_MS)
-                }.getOrNull()
+                raw = execExclusive(conn, pid.request, Elm327Connection.PROBE_TIMEOUT_MS)
                 up = raw?.uppercase().orEmpty()
                 bad = raw == null || BAD_TOKENS.any { up.contains(it) }
             }
@@ -679,7 +694,7 @@ class Elm327BluetoothSource(
             }
         }
         if (failStreak >= 2) {
-            softRecover(conn)
+            withLinkExclusive { softRecover(conn) }
         }
         return out
     }

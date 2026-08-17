@@ -205,8 +205,10 @@ non-obvious cloud specifics.
 - **Sensor picker:** Full-screen **Select sensor** (Torque-style). Category
   sections scroll with the list (no sticky chrome). Search filters immediately.
   Green row + `Latest value` means the ECU/ELM answered; dark + `No data received`
-  means it did not. Opening the picker pauses Mode 01 polling while it scans, then
-  resumes. Classic Dash TopBar + RPM/Speed hero also scroll away with the tiles.
+  means it did not. Opening the picker does **not** pause Mode 01 — extra PIDs
+  queue one-per-cycle. DIAG Faults Read / VIN / page probes keep heroes alive
+  (`withDashKeptAlive`) so TTL cannot blank RPM/Speed/Coolant. Classic Dash
+  TopBar + RPM/Speed hero also scroll away with the tiles.
 - **HU sideload APK:** Use `scripts/package-hu-apk.sh` → single file
   `dist/FB2-Diag-debug.apk`. Must be **v1+v2** signed — plain AGP debug/release
   is often **v2-only**, which makes some car package installers hang on

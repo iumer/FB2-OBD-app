@@ -63,6 +63,21 @@ interface ObdSource {
     suspend fun <T> withLinkExclusive(block: suspend () -> T): T = block()
 
     /**
+     * Keep RPM/Speed/Coolant/MAF/ATRV polling while [block] steals the ELM
+     * for Mode 03/07/0A, VIN, freeze frame, or page probes. Nested calls
+     * restore the hold that was already in effect (deep search).
+     */
+    suspend fun <T> withDashKeptAlive(block: suspend () -> T): T {
+        val prev = pollHold()
+        if (prev == PollHold.NONE) setPollHold(PollHold.HEROES_ONLY)
+        return try {
+            block()
+        } finally {
+            if (prev == PollHold.NONE) setPollHold(PollHold.NONE)
+        }
+    }
+
+    /**
      * Queue catalog PIDs for the live poll loop (1 extra per cycle).
      * Does **not** pause Dash heroes — used by the sensor picker.
      */
