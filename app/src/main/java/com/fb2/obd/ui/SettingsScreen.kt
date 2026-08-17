@@ -104,6 +104,7 @@ fun SettingsScreen(
     onToggleVoiceAlerts: (Boolean) -> Unit = {},
     onToggleDuckMedia: (Boolean) -> Unit = {},
     onCheckSoundAlert: () -> Unit = {},
+    onKeepAliveBattery: () -> Unit = {},
     uploadStatus: LogUploadManager.Status = LogUploadManager.Status(),
     githubToken: String = "",
     onGithubTokenChange: (String) -> Unit = {},
@@ -212,6 +213,14 @@ fun SettingsScreen(
             },
             checked = settings.allowDemo,
             onCheckedChange = onToggleAllowDemo,
+        )
+
+        SectionLabel("Keep-alive (Torque-style)")
+        ActionRow(
+            title = "Unrestricted battery",
+            subtitle = "Nakamichi / phone OEM killers stop logging when they reclaim RAM. Allow unrestricted battery so the ELM session + LOG survive Home / screen-off. Prompt also appears on live connect.",
+            actionLabel = "ALLOW",
+            onClick = onKeepAliveBattery,
         )
 
         SectionLabel("Alerts")

@@ -22,13 +22,13 @@ Keep these fixed. If a change might touch one of these areas, re-verify it.
 | I07 | Rough Idle page stuck on “Probing…” | Fixed | Live Dash prefill; Mode 01 first; skip Mode 22 if bus unhealthy; shorter probe timeout |
 | I08 | App very laggy / slow | Fixed | Timeouts ~650/450 ms; core-PID-only while recovering; less ATSP thrash; **PID rotate** (heroes every cycle, ≤4 secondaries) |
 | I34 | Speed stuck / under-reads (e.g. 65 vs ~98 km/h) while RPM moves | Fixed | `PidPollPlanner` never fail-streak-skips RPM/Speed; `SnapshotFreshness` clears Speed after 2.5s stale; unit test recreates freeze |
-| I36 | Want Torque-style green blink when a value is freshly fetched | Fixed | `FreshnessHeartbeat` on hero + Dash tiles; `VehicleSnapshot.freshAtMs` from ELM/Demo |
+| I36 | Want Torque-style green blink when a value is freshly fetched | Fixed | Shared blink clock (`FreshnessLed` + `FreshnessBlinkHost`) on Classic + OptA/B/C; bright pulse while `freshAtMs` is live, dim when stale |
 | I37 | Long-trip: LOG only in RAM until STOP (crash loses hours) | Fixed | Checkpoint CSV to disk every ~60s from LOG start; finalize on STOP |
 | I38 | Long-trip: UNABLE soft-recover loops forever (sticky Dash) | Fixed | ATRV-only ≠ healthy cycle; hard reconnect after 3 soft recovers |
 | I39 | Long-trip: Coolant/Battery/MAF/RPM sticky last-good | Fixed | Sanitize clears safety fields after TTL; smoother clears on null; EST gear needs fresh RPM+Speed |
-| I40 | Deep search shows 1/N then fails; Dash goes laggy during search | Fixed | Pause Mode 01 poll during deep search; walk full strategy list when bus OK; honest “Skipped N” when ECU link down |
+| I40 | Deep search shows 1/N then fails; Dash goes laggy / **pauses fetching** during search | Fixed | Heroes-only poll during deep search; each ATSH strategy is `withLinkExclusive`; TTL `holdValues` so Dash does not blank |
 | I41 | Need FB2 vs Generic OBD2 profiles (no Honda junk on other cars) | Fixed | Settings → Vehicle profile; SAE-only catalog/pages/DIAG/deep search for Generic; Mode 0A permanent DTCs |
-| I42 | Dash swipe/scroll laggy in Demo (and weak car HUs) | Fixed | Static freshness LEDs; Demo 800 ms; pager beyondBounds=0; accel UI 2 Hz; throttle trip/health/AA; fewer columns/slots |
+| I42 | Dash swipe/scroll laggy in Demo (and weak car HUs) | Fixed | **One** shared LED clock (not per-tile Animatable); Demo 800 ms; pager beyondBounds=0; accel UI 2 Hz; throttle trip/health/AA; fewer columns/slots |
 | I43 | Gear confidence % clipped on phone hero | Fixed | Taller hero; badge text without Trim.Both; wider gear column |
 | I44 | Battery voice too aggressive; ELM under-reads vs multimeter | Fixed | Voice only ≤11.8V; prefer ATRV over 0142; 3-sample ATRV median |
 | I45 | FB2 coolant bands/voice retune (green≤95 … alarm≥104) | Fixed | Defaults + schema 4 migration: 95/100/103 colours, voice ≥104 |
@@ -65,6 +65,10 @@ Keep these fixed. If a change might touch one of these areas, re-verify it.
 | I51 | Extra Dash sensors added via **+** vanished after closing the app | Fixed | Persist `filesDir/dash_extra_pids.json`; reload on start (Honda extras stay on disk when switching Generic) |
 | I52 | Sensor picker was a tiny dialog — hard to read, no live values | Fixed | Full-screen Torque-style Select sensor: category list, green = ECU answered with Latest value, dark = No data received |
 | I53 | Classic Dash RPM/Speed bar and Select sensor search chrome stayed pinned while scrolling | Fixed | Classic TopBar+hero collapse on scroll; picker title/search/chips scroll with the list |
+| I54 | Opening Select sensor / search blanks Dash values (appear then vanish) | Fixed | Picker no longer pauses Mode 01; 1 extra PID per poll cycle; live snapshot beats support bitmask |
+| I55 | Deep search still pauses live fetching | Fixed | Same as I40: heroes keep polling between exclusive ATSH strategies |
+| I56 | Nakamichi / phone kills app mid-drive so LOG cannot be trusted vs Torque | Fixed | Process-scoped ViewModel (`Fb2App`); FGS `stopWithTask=false` + sticky reconnect; battery unrestricted prompt |
+| I57 | Green freshness dots static / missing on some themes | Fixed | Shared blink on Classic + OptA/B/C; dim when that field is not freshly fetched |
 
 When the user reports a **new** bug, add a new `Ixx` row here (Status: Open → Fixed)
 and add a matching automated or manual check in sections 2–3.
@@ -113,8 +117,11 @@ then update the `latest` branch APK (same path) so the bookmarkable download lin
 | `DashboardSnapshotTest` / `ScreensSnapshotTest` / `ConnectSheetSnapshotTest` | Paparazzi UI snapshots |
 | `AppUpdateCheckerTest` | version.json parse + local/remote versionCode compare |
 | `DashExtraPidStoreTest` | **+** extras survive process death (`dash_extra_pids.json`) |
-| `SensorPickerReadingsTest` | Green/live vs waiting vs ECU-unsupported; SAE support bitmask parse |
+| `SensorPickerReadingsTest` | Green/live vs waiting vs ECU-unsupported; SAE support bitmask parse; **ATRV battery live even if 0142 unsupported**; 2026-07-24 FB2 Dash PIDs stay LIVE |
 | `ChromeCollapseTest` | Classic Dash chrome hides on scroll-up and returns at list top |
+| `FreshnessLedTest` | Shared blink: bright on fetch, dim when stale |
+| `KeepAlivePolicyTest` / `LastElmStoreTest` | Reconnect after HU process death unless user disconnected |
+| `SpeedFreshnessAndPollPlannerTest` | Heroes-only hold; `holdValues` does not TTL-blank Dash during exclusive ATSH |
 
 ---
 
