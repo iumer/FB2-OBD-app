@@ -201,10 +201,11 @@ non-obvious cloud specifics.
   tiles persist in `dash_extra_pids.json`. Remapped tiles show a `2× change`
   hint; picker can **Restore default**. Triple-tap still runs deep search on
   n/s tiles; long-press edits health thresholds.
-- **Sensor picker:** Full-screen **Select sensor** (Torque-style). Categories
-  with sticky headers; search filters immediately. Green row + `Latest value`
-  means the ECU/ELM answered; dark + `No data received` means it did not.
-  Opening the picker pauses Mode 01 polling while it scans, then resumes.
+- **Sensor picker:** Full-screen **Select sensor** (Torque-style). Category
+  sections scroll with the list (no sticky chrome). Search filters immediately.
+  Green row + `Latest value` means the ECU/ELM answered; dark + `No data received`
+  means it did not. Opening the picker pauses Mode 01 polling while it scans, then
+  resumes. Classic Dash TopBar + RPM/Speed hero also scroll away with the tiles.
 - **HU sideload APK:** Use `scripts/package-hu-apk.sh` → single file
   `dist/FB2-Diag-debug.apk`. Must be **v1+v2** signed — plain AGP debug/release
   is often **v2-only**, which makes some car package installers hang on

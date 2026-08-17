@@ -13,8 +13,8 @@ android {
         minSdk = 26
         targetSdk = 34
         // Bump on each sideload APK so HU package installer treats it as an update.
-        versionCode = 24
-        versionName = "0.1.24"
+        versionCode = 25
+        versionName = "0.1.25"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

@@ -1,6 +1,5 @@
 package com.fb2.obd.ui
 
-import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -108,7 +107,6 @@ fun SensorPickerDialog(
     }
 }
 
-@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun SensorPickerContent(
     catalog: List<PidDefinition>,
@@ -169,96 +167,36 @@ fun SensorPickerContent(
     Column(
         modifier = modifier.background(PickerBg),
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(PickerHeader)
-                .padding(horizontal = 16.dp, vertical = 10.dp),
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    text = "Select sensor",
-                    color = Color.White,
-                    fontSize = 22.sp,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.weight(1f),
-                )
-                Text(
-                    text = "Close",
-                    color = PickerCyan,
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(8.dp))
-                        .clickable(onClick = onDismiss)
-                        .padding(horizontal = 10.dp, vertical = 6.dp),
+        LazyColumn(modifier = Modifier.fillMaxSize()) {
+            item(key = "picker-chrome") {
+                PickerChrome(
+                    query = query,
+                    onQueryChange = { query = it },
+                    scanning = scanning,
+                    liveCount = liveCount,
+                    filter = filter,
+                    onFilter = { filter = it },
+                    categories = categoriesPresent,
+                    onDismiss = onDismiss,
                 )
             }
-            Text(
-                text = if (scanning) {
-                    "Scanning ECU… $liveCount readable"
-                } else {
-                    "$liveCount readable · tap a green row to add"
-                },
-                color = PickerCyan,
-                fontSize = 13.sp,
-                modifier = Modifier.padding(top = 4.dp, bottom = 8.dp),
-            )
-            OutlinedTextField(
-                value = query,
-                onValueChange = { query = it },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true,
-                placeholder = {
-                    Text("Search sensors (name or PID)", color = PickerMuted, fontSize = 14.sp)
-                },
-                textStyle = TextStyle(color = Color.White, fontSize = 16.sp),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = PickerLiveBar,
-                    unfocusedBorderColor = PickerDivider,
-                    cursorColor = PickerCyan,
-                    focusedTextColor = Color.White,
-                    unfocusedTextColor = Color.White,
-                ),
-            )
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState())
-                    .padding(top = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                FilterChip("All", filter is PickerFilter.All) { filter = PickerFilter.All }
-                FilterChip("Readable", filter is PickerFilter.Readable) { filter = PickerFilter.Readable }
-                categoriesPresent.forEach { cat ->
-                    val selected = (filter as? PickerFilter.Category)?.cat == cat
-                    FilterChip(SensorPickerReadings.categoryLabel(cat), selected) {
-                        filter = PickerFilter.Category(cat)
-                    }
+            if (restoreLabel != null && onRestore != null && query.isBlank() && filter is PickerFilter.All) {
+                item(key = "restore") {
+                    RestoreRow(label = restoreLabel, onClick = onRestore)
                 }
             }
-        }
-
-        if (filtered.isEmpty()) {
-            Text(
-                text = if (query.isNotBlank()) "No sensors match \"$query\"" else "No sensors in this filter",
-                color = PickerMuted,
-                fontSize = 15.sp,
-                modifier = Modifier.padding(20.dp),
-            )
-        } else {
-            LazyColumn(modifier = Modifier.fillMaxSize()) {
-                if (restoreLabel != null && onRestore != null && query.isBlank() && filter is PickerFilter.All) {
-                    item(key = "restore") {
-                        RestoreRow(label = restoreLabel, onClick = onRestore)
-                    }
+            if (filtered.isEmpty()) {
+                item(key = "empty") {
+                    Text(
+                        text = if (query.isNotBlank()) "No sensors match \"$query\"" else "No sensors in this filter",
+                        color = PickerMuted,
+                        fontSize = 15.sp,
+                        modifier = Modifier.padding(20.dp),
+                    )
                 }
+            } else {
                 grouped.forEach { (cat, pids) ->
-                    stickyHeader(key = "cat-${cat.name}") {
+                    item(key = "cat-${cat.name}") {
                         CategoryHeader(
                             title = SensorPickerReadings.categoryLabel(cat),
                             readable = pids.count { readings[it.id]?.isReadable == true },
@@ -273,6 +211,92 @@ fun SensorPickerContent(
                             onClick = { onPick(pid) },
                         )
                     }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PickerChrome(
+    query: String,
+    onQueryChange: (String) -> Unit,
+    scanning: Boolean,
+    liveCount: Int,
+    filter: PickerFilter,
+    onFilter: (PickerFilter) -> Unit,
+    categories: List<PidCategory>,
+    onDismiss: () -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(PickerHeader)
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = "Select sensor",
+                color = Color.White,
+                fontSize = 22.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.weight(1f),
+            )
+            Text(
+                text = "Close",
+                color = PickerCyan,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(8.dp))
+                    .clickable(onClick = onDismiss)
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
+            )
+        }
+        Text(
+            text = if (scanning) {
+                "Scanning ECU… $liveCount readable"
+            } else {
+                "$liveCount readable · tap a green row to add"
+            },
+            color = PickerCyan,
+            fontSize = 13.sp,
+            modifier = Modifier.padding(top = 4.dp, bottom = 8.dp),
+        )
+        OutlinedTextField(
+            value = query,
+            onValueChange = onQueryChange,
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+            placeholder = {
+                Text("Search sensors (name or PID)", color = PickerMuted, fontSize = 14.sp)
+            },
+            textStyle = TextStyle(color = Color.White, fontSize = 16.sp),
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = PickerLiveBar,
+                unfocusedBorderColor = PickerDivider,
+                cursorColor = PickerCyan,
+                focusedTextColor = Color.White,
+                unfocusedTextColor = Color.White,
+            ),
+        )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState())
+                .padding(top = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            FilterChip("All", filter is PickerFilter.All) { onFilter(PickerFilter.All) }
+            FilterChip("Readable", filter is PickerFilter.Readable) { onFilter(PickerFilter.Readable) }
+            categories.forEach { cat ->
+                val selected = (filter as? PickerFilter.Category)?.cat == cat
+                FilterChip(SensorPickerReadings.categoryLabel(cat), selected) {
+                    onFilter(PickerFilter.Category(cat))
                 }
             }
         }
