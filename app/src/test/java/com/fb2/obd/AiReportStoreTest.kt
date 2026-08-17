@@ -1,6 +1,7 @@
 package com.fb2.obd
 
 import com.fb2.obd.data.AiReportStore
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
