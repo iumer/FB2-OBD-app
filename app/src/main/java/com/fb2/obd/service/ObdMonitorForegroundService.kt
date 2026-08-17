@@ -9,21 +9,27 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 import android.os.PowerManager
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.ViewModelStoreOwner
+import com.fb2.obd.DashboardViewModel
+import com.fb2.obd.Fb2App
 import com.fb2.obd.MainActivity
 import com.fb2.obd.R
 import com.fb2.obd.data.ObdLogger
 
 /**
- * Minimal foreground service that keeps the process (and CPU via a partial wake
- * lock) alive while a real ELM327 session is active, so [com.fb2.obd.data.VoiceAlerter]
- * can still speak with the screen off / app backgrounded.
+ * Foreground service that keeps the process (and CPU via a partial wake lock)
+ * alive while a real ELM327 session is active.
  *
- * Does **not** own the OBD poll loop — [com.fb2.obd.DashboardViewModel] continues
- * collecting snapshots; this service only holds the FGS notification + wake lock.
+ * Does **not** own the OBD poll loop — [DashboardViewModel] (process-scoped via
+ * [Fb2App]) collects snapshots. This service holds the FGS notification + wake
+ * lock and reconnects after OEM process death (Nakamichi RAM reclaim).
  */
 class ObdMonitorForegroundService : Service() {
 
@@ -39,7 +45,27 @@ class ObdMonitorForegroundService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val status = intent?.getStringExtra(EXTRA_STATUS) ?: STATUS_CONNECTED
         promoteToForeground(status)
+        // Sticky restart (intent == null) or explicit keep-alive after swipe-away.
+        val reconnect = intent == null || intent.getBooleanExtra(EXTRA_RECONNECT, false)
+        if (reconnect) {
+            Handler(Looper.getMainLooper()).post {
+                (application as? Fb2App)?.let { app ->
+                    ViewModelProvider(app as ViewModelStoreOwner)[DashboardViewModel::class.java]
+                        .reconnectLastElmIfIdle()
+                }
+            }
+        }
         return START_STICKY
+    }
+
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        ObdLogger.logDebug(ObdLogger.Dir.INFO, "ObdMonitor FGS onTaskRemoved — restarting keep-alive")
+        val restart = Intent(applicationContext, ObdMonitorForegroundService::class.java).apply {
+            putExtra(EXTRA_STATUS, STATUS_LIVE)
+            putExtra(EXTRA_RECONNECT, true)
+        }
+        ContextCompat.startForegroundService(applicationContext, restart)
+        super.onTaskRemoved(rootIntent)
     }
 
     override fun onDestroy() {
@@ -75,13 +101,14 @@ class ObdMonitorForegroundService : Service() {
         )
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("FB2 Diag — $status")
-            .setContentText("Monitoring ELM327 · voice alerts active")
+            .setContentText("Live ELM logging — leave this notification on")
             .setSmallIcon(R.mipmap.ic_launcher)
             .setContentIntent(pending)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .setCategory(NotificationCompat.CATEGORY_SERVICE)
-            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
             .build()
     }
 
@@ -91,9 +118,9 @@ class ObdMonitorForegroundService : Service() {
         val channel = NotificationChannel(
             CHANNEL_ID,
             "ELM monitor",
-            NotificationManager.IMPORTANCE_LOW,
+            NotificationManager.IMPORTANCE_DEFAULT,
         ).apply {
-            description = "Keeps FB2 Diag alive while the ELM327 is connected"
+            description = "Keeps FB2 Diag logging while the ELM327 is connected"
             setShowBadge(false)
         }
         mgr.createNotificationChannel(channel)
@@ -123,6 +150,7 @@ class ObdMonitorForegroundService : Service() {
         private const val NOTIFICATION_ID = 1001
 
         const val EXTRA_STATUS = "status"
+        const val EXTRA_RECONNECT = "reconnect"
 
         const val STATUS_CONNECTED = "ELM connected"
         const val STATUS_LIVE = "LIVE"

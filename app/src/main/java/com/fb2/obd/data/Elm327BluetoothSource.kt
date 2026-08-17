@@ -21,6 +21,7 @@ import com.fb2.obd.obd.ObdResponseParser
 import com.fb2.obd.obd.PidDefinition
 import com.fb2.obd.obd.PidPollPlanner
 import com.fb2.obd.obd.PidProbeResult
+import com.fb2.obd.obd.PollHold
 import com.fb2.obd.obd.ReadinessStatus
 import com.fb2.obd.obd.SnapshotFreshness
 import com.fb2.obd.obd.SupportedPids
@@ -35,9 +36,14 @@ import kotlinx.coroutines.flow.channelFlow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.retryWhen
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.launch
 import java.io.IOException
 import java.util.UUID
+import java.util.concurrent.ConcurrentLinkedQueue
+import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicReference
 
 /**
  * Real ELM327 adapter over Bluetooth Classic (SPP), built on a shared
@@ -59,12 +65,23 @@ class Elm327BluetoothSource(
     override val name: String = "ELM327 (Bluetooth)"
     override val isLive: Boolean = true
 
+    val deviceAddress: String
+        @SuppressLint("MissingPermission")
+        get() = device.address
+
+    val deviceName: String
+        @SuppressLint("MissingPermission")
+        get() = runCatching { device.name }.getOrNull().orEmpty()
+
     @Volatile
     private var connection: Elm327Connection? = null
 
-    /** When true, the Mode 01 poll loop yields so deep search owns the serial link. */
-    @Volatile
-    private var pollingPaused: Boolean = false
+    private val pollHold = AtomicReference(PollHold.NONE)
+    private val exclusiveCount = AtomicInteger(0)
+    private val probeQueue = ConcurrentLinkedQueue<PidDefinition>()
+    private val keepalivePids = AtomicReference<List<PidDefinition>>(emptyList())
+    private val probeResults = MutableSharedFlow<PidProbeResult>(extraBufferCapacity = 64)
+    private var keepaliveIndex = 0
 
     /** After deep search, force a soft recover + clear fail streaks on resume. */
     @Volatile
@@ -73,16 +90,39 @@ class Elm327BluetoothSource(
     /** Rolling ATRV samples for median filter (cheap clones spit occasional false lows). */
     private val atrvWindow = ArrayDeque<Double>(3)
 
-    override fun pausePolling() {
-        pollingPaused = true
-        logger.logDebug(ObdLogger.Dir.INFO, "ELM poll paused")
+    override fun setPollHold(hold: PollHold) {
+        val prev = pollHold.getAndSet(hold)
+        if (prev != PollHold.NONE && hold == PollHold.NONE) {
+            recoverAfterResume = true
+        }
+        logger.logDebug(ObdLogger.Dir.INFO, "ELM poll hold $prev → $hold")
     }
 
-    override fun resumePolling() {
-        pollingPaused = false
-        recoverAfterResume = true
-        logger.logDebug(ObdLogger.Dir.INFO, "ELM poll resumed (recover pending)")
+    override fun pollHold(): PollHold = pollHold.get()
+
+    override suspend fun <T> withLinkExclusive(block: suspend () -> T): T {
+        exclusiveCount.incrementAndGet()
+        return try {
+            block()
+        } finally {
+            exclusiveCount.decrementAndGet()
+        }
     }
+
+    override fun enqueueBackgroundProbes(pids: List<PidDefinition>) {
+        pids.forEach { probeQueue.offer(it) }
+    }
+
+    override fun clearBackgroundProbes() {
+        probeQueue.clear()
+    }
+
+    override fun setKeepaliveProbes(pids: List<PidDefinition>) {
+        keepalivePids.set(pids.toList())
+        keepaliveIndex = 0
+    }
+
+    override fun backgroundProbes() = probeResults.asSharedFlow()
 
     private val polled = listOf(
         ObdPid.ENGINE_RPM,
@@ -158,10 +198,19 @@ class Elm327BluetoothSource(
                 var consecutiveUnableCycles = 0
                 var lastEmitted: VehicleSnapshot? = null
                 while (isActive) {
-                    // Deep search / exclusive probes own the RFCOMM socket — do not
-                    // interleave Mode 01 polls (that caused laggy/wrong Dash values).
-                    while (pollingPaused && isActive) {
-                        delay(40L)
+                    // Exclusive ATSH (one deep-search strategy) owns the socket.
+                    // Keep last-good Dash numbers on screen — do not let TTL blank them.
+                    while ((exclusiveCount.get() > 0 || pollHold.get() == PollHold.FULL_PAUSE) && isActive) {
+                        val now = System.currentTimeMillis()
+                        snapshot = freshness.sanitize(
+                            snapshot.withGear(hasEcuGear),
+                            now,
+                            rpmUpdatedThisCycle = false,
+                            holdValues = true,
+                        )
+                        trySend(snapshot)
+                        lastEmitted = snapshot
+                        delay(80L)
                     }
                     if (!isActive) break
 
@@ -172,11 +221,8 @@ class Elm327BluetoothSource(
                         deadCycles = 0
                         softRecoverCount = 0
                         consecutiveUnableCycles = 0
-                        // Deep search paused polling — prior lastOk clocks aged out.
-                        // Remake marks for fields we still hold so sanitize does not
-                        // blank the Dash before the first post-resume poll lands.
                         freshness.remakePresent(snapshot, System.currentTimeMillis())
-                        logger.logDebug(ObdLogger.Dir.INFO, "post-deep-search soft recover + streaks cleared + freshness remade")
+                        logger.logDebug(ObdLogger.Dir.INFO, "post-hold soft recover + streaks cleared + freshness remade")
                     }
 
                     cycles++
@@ -201,15 +247,18 @@ class Elm327BluetoothSource(
                     }
 
                     val recovering = deadCycles > 0
+                    val holdNow = pollHold.get()
                     // Heroes every cycle; rotate secondaries so Speed cannot freeze behind a long PID list.
                     val cyclePids = PidPollPlanner.selectForCycle(
                         activePids = activePids,
                         failStreak = failStreak,
                         cycle = cycles,
                         recovering = recovering,
+                        hold = holdNow,
                     )
                     for (pid in cyclePids) {
                         if (busLost) break
+                        if (exclusiveCount.get() > 0) break
 
                         val streak = failStreak[pid] ?: 0
                         val raw = try {
@@ -294,6 +343,23 @@ class Elm327BluetoothSource(
                             val okAt = System.currentTimeMillis()
                             freshness.markOk(SnapshotFreshness.KEY_BATTERY, okAt)
                             markedThisCycle += SnapshotFreshness.KEY_BATTERY
+                        }
+                    }
+
+                    // Sensor picker / Dash + extras: one extra PID per cycle so Dash heroes
+                    // never pause. Mutex still serialises with command() callers.
+                    if (holdNow == PollHold.NONE && !busLost && exclusiveCount.get() == 0) {
+                        nextBackgroundPid()?.let { extra ->
+                            val result = probeOneBackground(conn, extra)
+                            probeResults.tryEmit(result)
+                            if (result.supported && result.sample != null) {
+                                snapshot = overlayCatalogPid(snapshot, extra, result.sample)
+                                polled.firstOrNull { it.request.equals(extra.request, true) }?.let { obd ->
+                                    val okAt = System.currentTimeMillis()
+                                    freshness.markPid(obd, okAt)
+                                    markedThisCycle += SnapshotFreshness.keyFor(obd)
+                                }
+                            }
                         }
                     }
 
@@ -640,6 +706,44 @@ class Elm327BluetoothSource(
 
     override suspend fun readPid(pid: PidDefinition): Double? {
         return probePids(listOf(pid)).firstOrNull()?.sample
+    }
+
+    private fun nextBackgroundPid(): PidDefinition? {
+        probeQueue.poll()?.let { return it }
+        val keep = keepalivePids.get()
+        if (keep.isEmpty()) return null
+        val i = keepaliveIndex
+        keepaliveIndex = (i + 1) % keep.size
+        return keep[i % keep.size]
+    }
+
+    private suspend fun probeOneBackground(
+        conn: Elm327Connection,
+        pid: PidDefinition,
+    ): PidProbeResult {
+        val raw = runCatching {
+            conn.exec(pid.request, Elm327Connection.PROBE_TIMEOUT_MS)
+        }.getOrNull()
+        val up = raw?.uppercase().orEmpty()
+        val bad = raw == null || BAD_TOKENS.any { up.contains(it) }
+        if (bad) return PidProbeResult(pid, false, null, raw)
+        val bytes = when {
+            pid.request.startsWith("01") && pid.request.length == 4 ->
+                ObdResponseParser.rawDataBytes(pid.request, pid.dataBytes, raw!!)
+            pid.request.startsWith("22") -> extractMode22(pid.request, raw!!)
+            else -> null
+        }
+        val value = bytes?.let { pid.decode(it) }
+        return PidProbeResult(pid, true, value, raw)
+    }
+
+    private fun overlayCatalogPid(
+        snapshot: VehicleSnapshot,
+        pid: PidDefinition,
+        sample: Double,
+    ): VehicleSnapshot {
+        val obd = polled.firstOrNull { it.request.equals(pid.request, true) } ?: return snapshot
+        return snapshot.merge(obd, sample)
     }
 
     private fun extractMode22(request: String, raw: String): IntArray? {

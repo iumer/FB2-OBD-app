@@ -27,14 +27,16 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.fb2.obd.obd.FreshnessLed
 import com.fb2.obd.obd.GearSource
 import com.fb2.obd.obd.Health
-import com.fb2.obd.obd.SnapshotFreshness
 import com.fb2.obd.ui.theme.Accent
 import com.fb2.obd.ui.theme.ColdBlue
 import com.fb2.obd.ui.theme.CritRed
 import com.fb2.obd.ui.theme.GoodGreen
 import com.fb2.obd.ui.theme.HotOrange
+import com.fb2.obd.ui.theme.LocalFreshnessBlinkOn
+import com.fb2.obd.ui.theme.LocalFreshnessNowMs
 import com.fb2.obd.ui.theme.Surface
 import com.fb2.obd.ui.theme.TextMuted
 import com.fb2.obd.ui.theme.TextPrimary
@@ -53,25 +55,19 @@ fun Health.color(): Color = when (this) {
 /**
  * Torque-style green freshness LED.
  *
- * Intentionally **static** (no per-tile timers / Animatable). Low-RAM car HUs
- * stuttered because ~15 tiles each ran a 200 ms clock + pulse while Demo/ELM
- * already recomposes the Dash. Brightness still tracks [lastOkMs] on parent recomposes.
+ * Brightness blinks from a **single** shared clock ([LocalFreshnessBlinkOn]) so
+ * ~15 tiles do not each run an Animatable (that stuttered car HUs). Bright pulse
+ * only while this field was freshly decoded; dim when stale / n/s.
  */
 @Composable
 fun FreshnessHeartbeat(
     lastOkMs: Long?,
     modifier: Modifier = Modifier,
     size: Dp = 8.dp,
-    nowMs: Long = System.currentTimeMillis(),
+    nowMs: Long = LocalFreshnessNowMs.current,
+    blinkOn: Boolean = LocalFreshnessBlinkOn.current,
 ) {
-    val age = lastOkMs?.let { nowMs - it }
-    val active = age != null && age < SnapshotFreshness.LED_ACTIVE_MS
-    val alpha = when {
-        lastOkMs == null -> 0.12f
-        !active -> 0.14f
-        age != null && age < 700L -> 1f
-        else -> 0.72f
-    }
+    val alpha = FreshnessLed.alpha(lastOkMs, nowMs, blinkOn)
 
     Box(
         modifier = modifier

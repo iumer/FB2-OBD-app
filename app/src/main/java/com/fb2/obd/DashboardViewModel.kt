@@ -1,6 +1,8 @@
 package com.fb2.obd
 
+import android.annotation.SuppressLint
 import android.app.Application
+import android.bluetooth.BluetoothAdapter
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.fb2.obd.car.CarDashBuilder
@@ -16,6 +18,8 @@ import com.fb2.obd.data.DemoObdSource
 import com.fb2.obd.data.HealthThresholdStore
 import com.fb2.obd.data.MaintenanceEntry
 import com.fb2.obd.data.MaintenanceStore
+import com.fb2.obd.data.LastElmStore
+import com.fb2.obd.data.Elm327BluetoothSource
 import com.fb2.obd.data.LogExportHelper
 import com.fb2.obd.data.LogUploadManager
 import com.fb2.obd.data.ObdLogger
@@ -43,6 +47,7 @@ import com.fb2.obd.obd.HealthScore
 import com.fb2.obd.obd.HealthScoreCalculator
 import com.fb2.obd.obd.HealthThresholds
 import com.fb2.obd.obd.HondaPidCatalog
+import com.fb2.obd.obd.KeepAlivePolicy
 import com.fb2.obd.obd.LiveSnapshotOverlay
 import com.fb2.obd.obd.MetricStatus
 import com.fb2.obd.obd.Mode06Result
@@ -267,6 +272,7 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
     val maintenance: StateFlow<List<MaintenanceEntry>> = _maintenance.asStateFlow()
 
     private val extraPidStore = DashExtraPidStore(File(filesDir, "dash_extra_pids.json"))
+    private val lastElmStore = LastElmStore(File(filesDir, "last_elm.json"))
     private val customPidStore = DashExtraPidStore(File(filesDir, "custom_sensor_pids.json"))
     private val _dashExtraPidIds = MutableStateFlow(extraPidStore.load())
     val dashExtraPidIds: StateFlow<List<String>> = _dashExtraPidIds.asStateFlow()
@@ -312,6 +318,7 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
     private val _pickerScan = MutableStateFlow(SensorPickerScanState())
     val pickerScan: StateFlow<SensorPickerScanState> = _pickerScan.asStateFlow()
     private var pickerScanJob: Job? = null
+    private var probeCollectJob: Job? = null
 
     val pidCatalog: List<PidDefinition>
         get() = VehicleProfileConfig.pidCatalog(vehicleProfile)
@@ -397,7 +404,8 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
             next.filter { it.isNotBlank() }
         }
         extraPidStore.save(_dashExtraPidIds.value)
-        // One-shot probe so tiles outside the main poll set still show a value.
+        syncKeepaliveProbes()
+        // Queue on the live poll loop — never pause Dash to probe extras.
         probeAndCachePid(pid)
     }
 
@@ -405,6 +413,7 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
         _dashExtraPidIds.update { it.filter { id -> id != pidId } }
         _dashExtraValues.update { it - pidId }
         extraPidStore.save(_dashExtraPidIds.value)
+        syncKeepaliveProbes()
         publishCarDash()
     }
 
@@ -414,6 +423,7 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
         if (key.isEmpty()) return
         _dashTileOverrides.update { it + (key to pid.id) }
         tileOverrideStore.save(_dashTileOverrides.value)
+        syncKeepaliveProbes()
         probeAndCachePid(pid)
         publishCarDash()
     }
@@ -423,6 +433,7 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
         val removedId = _dashTileOverrides.value[key]
         _dashTileOverrides.update { it - key }
         tileOverrideStore.save(_dashTileOverrides.value)
+        syncKeepaliveProbes()
         // Drop cached value only if unused by + extras / other overrides.
         if (removedId != null) {
             val stillNeeded = removedId in _dashExtraPidIds.value ||
@@ -435,14 +446,15 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private fun probeAndCachePid(pid: PidDefinition) {
-        val source = currentSource ?: return
-        viewModelScope.launch {
-            val probed = source.probePids(listOf(pid))
-            val results = LiveSnapshotOverlay.apply(probed, _uiState.value.snapshot)
-            val text = results.firstOrNull()?.let { LiveSnapshotOverlay.formatDisplay(it) } ?: "—"
-            _dashExtraValues.update { it + (pid.id to text) }
-            publishCarDash()
-        }
+        currentSource?.enqueueBackgroundProbes(listOf(pid))
+    }
+
+    private fun syncKeepaliveProbes() {
+        val ids = (
+            _dashExtraPidIds.value + _dashTileOverrides.value.values
+            ).distinct().filter { it.isNotBlank() }
+        val pids = ids.mapNotNull { id -> pidCatalog.find { it.id.equals(id, true) } }
+        currentSource?.setKeepaliveProbes(pids)
     }
 
     fun startSensorPickerScan() {
@@ -453,52 +465,34 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
         val seeded = LinkedHashMap<String, PidProbeResult>()
         catalog.forEach { pid ->
             val n = pid.mode01Number
-            if (n != null && n in snap.unsupportedPids) {
+            val live = LiveSnapshotOverlay.liveSample(pid, snap) != null ||
+                (pid.request.equals("0103", true) && !snap.fuelSystemStatus.isNullOrBlank())
+            if (!live && n != null && n in snap.unsupportedPids) {
                 seeded[pid.id] = PidProbeResult(pid, supported = false, sample = null, raw = "UNSUPPORTED")
             }
         }
         _pickerScan.value = SensorPickerScanState(running = source != null, results = HashMap(seeded))
         if (source == null) return
         pickerScanJob = viewModelScope.launch {
-            source.pausePolling()
             try {
-                val supportScan = probeSaeSupportBitmask(source)
-                if (supportScan != null) {
-                    val (support, coveredBases) = supportScan
-                    catalog.forEach { pid ->
-                        val n = pid.mode01Number ?: return@forEach
-                        if (SensorPickerReadings.pidInCoveredSupportBlock(n, coveredBases) &&
-                            n !in support &&
-                            pid.id !in _pickerScan.value.results
-                        ) {
-                            seeded[pid.id] = PidProbeResult(
-                                pid,
-                                supported = false,
-                                sample = null,
-                                raw = "UNSUPPORTED",
-                            )
-                        }
-                    }
-                    _pickerScan.update { it.copy(results = HashMap(seeded)) }
-                }
-                val knownLive = catalog.filter { pid ->
-                    LiveSnapshotOverlay.liveSample(pid, snap) != null ||
+                val known = catalog.filter { pid ->
+                    pid.id in seeded ||
+                        LiveSnapshotOverlay.liveSample(pid, snap) != null ||
                         (pid.request.equals("0103", true) && !snap.fuelSystemStatus.isNullOrBlank())
                 }.map { it.id }.toSet()
-                val toProbe = catalog.filter { pid ->
-                    pid.id !in seeded && pid.id !in knownLive
-                }.sortedBy { pid ->
+                val toProbe = catalog.filter { pid -> pid.id !in known }.sortedBy { pid ->
                     if (pid.request.startsWith("01")) 0 else 1
                 }
-                for (batch in toProbe.chunked(6)) {
-                    if (!isActive) break
-                    val probed = source.probePids(batch, recoverFirst = false)
-                    _pickerScan.update { st ->
-                        st.copy(results = st.results + probed.associateBy { it.pid.id })
-                    }
+                source.enqueueBackgroundProbes(toProbe)
+                val pending = toProbe.map { it.id }.toMutableSet()
+                var ticks = 0
+                while (isActive && pending.isNotEmpty() && ticks < 300) {
+                    delay(200L)
+                    ticks++
+                    pending.removeAll(_pickerScan.value.results.keys)
                 }
             } finally {
-                source.resumePolling()
+                source.clearBackgroundProbes()
                 _pickerScan.update { it.copy(running = false) }
             }
         }
@@ -507,25 +501,8 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
     fun stopSensorPickerScan() {
         pickerScanJob?.cancel()
         pickerScanJob = null
-        currentSource?.resumePolling()
+        currentSource?.clearBackgroundProbes()
         _pickerScan.update { it.copy(running = false) }
-    }
-
-    private suspend fun probeSaeSupportBitmask(source: ObdSource): Pair<Set<Int>, Set<Int>>? {
-        val supported = HashSet<Int>()
-        val coveredBases = HashSet<Int>()
-        for (base in SensorPickerReadings.SAE_SUPPORT_BASES) {
-            val req = "01%02X".format(base)
-            val raw = source.command(req) ?: continue
-            val parsed = SensorPickerReadings.parseSaeSupport(base, raw)
-            // A decoded 4-byte bitmask (even all-zero) covers that 32-PID block.
-            val bytes = ObdResponseParser.rawDataBytes(req, 4, raw)
-            if (bytes != null) {
-                coveredBases += base
-                supported += parsed
-            }
-        }
-        return if (coveredBases.isNotEmpty()) supported to coveredBases else null
     }
 
     private val accelTimer = AccelerationTimer()
@@ -1037,21 +1014,21 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    /** Re-probe user-added (+) sensors and remapped built-in tiles. */
+    /** Fill extra tile text from live snapshot / cache — never steal the ELM bus. */
     private suspend fun refreshDashExtrasForLog() {
-        val source = currentSource ?: return
+        val snap = _uiState.value.snapshot
         val ids = (
             _dashExtraPidIds.value + _dashTileOverrides.value.values
             ).distinct().filter { it.isNotBlank() }
         if (ids.isEmpty()) return
-        val pids = ids.mapNotNull { id -> pidCatalog.find { it.id.equals(id, true) } }
-        if (pids.isEmpty()) return
-        val results = LiveSnapshotOverlay.apply(
-            source.probePids(pids, recoverFirst = false),
-            _uiState.value.snapshot,
-        )
-        val live = results.associate { r -> r.pid.id to LiveSnapshotOverlay.formatDisplay(r) }
-        _dashExtraValues.update { it + live }
+        val live = LinkedHashMap<String, String>()
+        ids.forEach { id ->
+            val pid = pidCatalog.find { it.id.equals(id, true) } ?: return@forEach
+            val text = _dashExtraValues.value[id]
+                ?: LiveSnapshotOverlay.formatLiveOrNs(pid, snap)
+            live[id] = text
+        }
+        if (live.isNotEmpty()) _dashExtraValues.update { it + live }
         logDashValues(_uiState.value.snapshot, force = true)
     }
 
@@ -1190,7 +1167,10 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
         staleWatchJob = null
         collectJob?.cancel()
         collectJob = null
+        probeCollectJob?.cancel()
+        probeCollectJob = null
         currentSource = null
+        lastElmStore.markUserDisconnected()
         stopElmMonitor()
         eventTracker.onConnection(ConnectionState.DISCONNECTED, false, "")
         eventTracker.reset()
@@ -1216,7 +1196,12 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
         readinessJob?.cancel()
         staleWatchJob?.cancel()
         collectJob?.cancel()
+        probeCollectJob?.cancel()
         currentSource = source
+        if (source is Elm327BluetoothSource) {
+            lastElmStore.saveConnected(source.deviceAddress, source.deviceName)
+        }
+        syncKeepaliveProbes()
         // Demo / non-live: drop the connected-device FGS. Live ELM starts it on first frame.
         if (!source.isLive) {
             stopElmMonitor()
@@ -1363,6 +1348,19 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
             }
             .launchIn(viewModelScope)
 
+        probeCollectJob = source.backgroundProbes()
+            .onEach { r ->
+                val text = LiveSnapshotOverlay.formatDisplay(r)
+                if (text.isNotBlank() && !text.startsWith("n/s") && text != "—") {
+                    _dashExtraValues.update { it + (r.pid.id to text) }
+                }
+                _pickerScan.update { st ->
+                    if (!st.running && st.results.isEmpty()) st
+                    else st.copy(results = st.results + (r.pid.id to r))
+                }
+            }
+            .launchIn(viewModelScope)
+
         // If live frames stop arriving, mark reconnecting while the source retries.
         if (source.isLive) {
             lastLiveSnapshotMs = System.currentTimeMillis()
@@ -1440,6 +1438,31 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
         if (elmMonitorStatus == status) return
         ObdMonitorForegroundService.updateStatus(app, status)
         elmMonitorStatus = status
+    }
+
+    /**
+     * Sticky FGS / process death: reconnect the last ELM unless the driver
+     * tapped Disconnect / Exit.
+     */
+    @SuppressLint("MissingPermission")
+    fun reconnectLastElmIfIdle() {
+        val live = currentSource?.isLive == true
+        val conn = _uiState.value.connection
+        if (live && conn != ConnectionState.DISCONNECTED && conn != ConnectionState.ERROR) {
+            ensureElmMonitor(ObdMonitorForegroundService.STATUS_LIVE)
+            return
+        }
+        val saved = lastElmStore.load()
+        if (!KeepAlivePolicy.shouldReconnectAfterDeath(saved.address, saved.userDisconnected)) {
+            return
+        }
+        val adapter = BluetoothAdapter.getDefaultAdapter() ?: return
+        val remote = runCatching { adapter.getRemoteDevice(saved.address) }.getOrNull() ?: return
+        ObdLogger.logDebug(
+            ObdLogger.Dir.INFO,
+            "Keep-alive reconnect ${saved.name ?: ""} ${saved.address}",
+        )
+        useSource(Elm327BluetoothSource(remote))
     }
 
     private fun stopElmMonitor() {
@@ -1783,6 +1806,8 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
         staleWatchJob = null
         collectJob?.cancel()
         collectJob = null
+        probeCollectJob?.cancel()
+        probeCollectJob = null
         currentSource = null
         stopElmMonitor()
         MaintenanceStore(File(filesDir, "maintenance.json")).save(_maintenance.value)

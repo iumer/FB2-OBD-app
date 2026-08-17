@@ -8,8 +8,9 @@ import kotlinx.coroutines.delay
  * Runs [DeepSearchKnowledgeBase] strategies against a live [ObdSource].
  *
  * Smart flow (learned from FB2 + cheap ELM clones + Torque):
- * 1. Pause continuous Mode 01 polling so ATSH/ATSP thrash cannot interleave
- *    with the Dash (that produced laggy / wrong values during deep search).
+ * 1. Hold heroes-only Mode 01 (RPM/Speed/Coolant/MAF/ATRV) so the Dash does not
+ *    freeze or TTL-blank. Each ATSH strategy runs [ObdSource.withLinkExclusive]
+ *    so headers cannot interleave with a hero PID.
  * 2. Soft-restore the adapter first (don't start mid-UNABLE storm).
  * 3. Prefer adapter-local recipes (ATRV) — they work even when the ECU link is down.
  * 4. Always try simple broadcast Mode 01 forces next (e.g. Coolant 0105) — these
@@ -48,8 +49,8 @@ object DeepSensorSearch {
         }
 
         ObdLogger.logDebug(ObdLogger.Dir.INFO, "DEEP SEARCH begin [$label] ${all.size} strategies")
-        source.pausePolling()
-        onProgress(0, all.size, "Pausing live Dash poll…")
+        source.setPollHold(PollHold.HEROES_ONLY)
+        onProgress(0, all.size, "Keeping live Dash (heroes)…")
         delay(80L)
 
         val adapterLocal = all.filter { it.isAdapterLocal }
@@ -59,22 +60,22 @@ object DeepSensorSearch {
 
         try {
             onProgress(0, all.size, "Restoring adapter…")
-            restore(source)
+            source.withLinkExclusive { restore(source) }
 
             // --- Phase A: adapter-local (ATRV etc.) with retries ---
             for ((i, strategy) in adapterLocal.withIndex()) {
                 attempts++
                 onProgress(attempts, all.size, strategy.title)
                 delay(if (source.isLive) 40L else 120L)
-                val hit = tryStrategy(source, strategy)
+                val hit = source.withLinkExclusive { tryStrategy(source, strategy) }
                 if (hit != null) {
                     return success(label, pid, requestHint, attempts, hit, notes)
                 }
                 if (strategy.request.equals("ATRV", true) && i == 0) {
-                    restore(source)
+                    source.withLinkExclusive { restore(source) }
                     attempts++
                     onProgress(attempts, all.size, "Retry ${strategy.title}")
-                    tryStrategy(source, strategy)?.let { hit2 ->
+                    source.withLinkExclusive { tryStrategy(source, strategy) }?.let { hit2 ->
                         return success(label, pid, requestHint, attempts, hit2, notes)
                     }
                 }
@@ -85,12 +86,12 @@ object DeepSensorSearch {
             // made a quick 010C ping look dead while ELM still shows LINKED.
             if (simpleForce.isNotEmpty()) {
                 onProgress(attempts.coerceAtLeast(0), all.size, "Trying broadcast Mode 01…")
-                restore(source)
+                source.withLinkExclusive { restore(source) }
                 for (strategy in simpleForce) {
                     attempts++
                     onProgress(attempts, all.size, strategy.title)
                     delay(if (source.isLive) 40L else 120L)
-                    tryStrategy(source, strategy)?.let { hit ->
+                    source.withLinkExclusive { tryStrategy(source, strategy) }?.let { hit ->
                         return success(label, pid, requestHint, attempts, hit, notes)
                     }
                 }
@@ -103,7 +104,7 @@ object DeepSensorSearch {
                 notes += "ECU link check was shaky after restore (UNABLE / timeout). " +
                     "Already tried ${simpleForce.size} broadcast Mode 01 strategies. " +
                     "Retrying once with protocol search (ATSP0) before skipping advanced."
-                restore(source, hard = true)
+                source.withLinkExclusive { restore(source, hard = true) }
                 val busOkHard = busHealthy(source)
                 if (!busOkHard) {
                     notes += "Still shaky after ATSP0. " +
@@ -127,7 +128,7 @@ object DeepSensorSearch {
                 onProgress(attempts, all.size, strategy.title)
                 delay(if (source.isLive) 25L else 150L)
 
-                val hit = tryStrategy(source, strategy)
+                val hit = source.withLinkExclusive { tryStrategy(source, strategy) }
                 if (hit != null) {
                     return success(label, pid, requestHint, attempts, hit, notes)
                 }
@@ -137,7 +138,7 @@ object DeepSensorSearch {
                     unableStreak++
                     if (unableStreak % RESTORE_EVERY_UNABLE == 0) {
                         onProgress(attempts, all.size, "Soft-restore after UNABLE…")
-                        restore(source)
+                        source.withLinkExclusive { restore(source) }
                     }
                 } else {
                     unableStreak = 0
@@ -148,9 +149,9 @@ object DeepSensorSearch {
             }
         } finally {
             // Always restore + resume so Dash never stays frozen after deep search.
-            runCatching { restore(source) }
-            source.resumePolling()
-            ObdLogger.logDebug(ObdLogger.Dir.INFO, "DEEP SEARCH restore + poll resume done [$label]")
+            runCatching { source.withLinkExclusive { restore(source) } }
+            source.setPollHold(PollHold.NONE)
+            ObdLogger.logDebug(ObdLogger.Dir.INFO, "DEEP SEARCH restore + heroes-only lift done [$label]")
         }
 
         ObdLogger.logDebug(ObdLogger.Dir.INFO, "DEEP SEARCH miss [$label] after $attempts / ${all.size} tries")
