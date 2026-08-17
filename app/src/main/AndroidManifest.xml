@@ -111,10 +111,11 @@
             android:stopWithTask="false"
             android:foregroundServiceType="connectedDevice" />
 
-        <!-- Draggable floating Dash bubble (draw-over-apps). FGS so it survives MIN. -->
+        <!-- Draggable floating Dash bubble (draw-over-apps). Survives swipe-away like ELM FGS. -->
         <service
             android:name=".service.FloatingDashOverlayService"
             android:exported="false"
+            android:stopWithTask="false"
             android:foregroundServiceType="specialUse">
             <property
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"

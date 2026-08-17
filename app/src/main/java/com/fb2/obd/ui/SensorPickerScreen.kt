@@ -258,9 +258,9 @@ private fun PickerChrome(
         }
         Text(
             text = if (scanning) {
-                "Scanning ECU… $liveCount readable"
+                "Scanning ECU… $liveCount catalog PIDs answered"
             } else {
-                "$liveCount readable · tap a green row to add"
+                "$liveCount catalog PIDs answered · Dash heroes stay live · tap green to add"
             },
             color = PickerCyan,
             fontSize = 13.sp,
