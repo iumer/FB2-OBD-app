@@ -441,6 +441,7 @@ class MainActivity : ComponentActivity() {
                             onBack = { screen = Screen.DIAG_HUB },
                             modifier = Modifier.fillMaxSize(),
                             liveSourceIsDemo = !state.sourceIsLive,
+                            vehicleProfile = settings.vehicleProfile,
                         )
                     }
 

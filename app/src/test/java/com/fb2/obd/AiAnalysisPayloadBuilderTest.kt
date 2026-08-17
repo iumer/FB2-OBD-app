@@ -2,6 +2,7 @@ package com.fb2.obd
 
 import com.fb2.obd.obd.AiAnalysisPayloadBuilder
 import com.fb2.obd.obd.HealthScore
+import com.fb2.obd.obd.VehicleProfile
 import com.fb2.obd.obd.VehicleSnapshot
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -36,6 +37,19 @@ class AiAnalysisPayloadBuilderTest {
         assertTrue(p.contains("WORDING AND HONDA-SPECIFIC GUIDANCE"))
         assertTrue(p.contains("ELD") || p.contains("electrical load detection"))
         assertTrue(p.contains("selected analysis window"))
+        assertFalse(p.contains("{{VEHICLE_CONTEXT}}"))
+        assertFalse(p.contains("{{WORDING}}"))
+    }
+
+    @Test
+    fun systemPrompt_genericDoesNotClaimCivicFb2() {
+        val p = AiAnalysisPayloadBuilder.systemPrompt(VehicleProfile.GENERIC_OBD2)
+        assertTrue(p.contains("Generic OBD2") || p.contains("unidentified OBD-II"))
+        assertTrue(p.contains("Do NOT identify this vehicle as a Honda Civic"))
+        assertFalse(p.contains("Pakistani UG variant"))
+        assertFalse(p.contains("WORDING AND HONDA-SPECIFIC GUIDANCE"))
+        assertTrue(p.contains("WORDING AND GENERIC OBD GUIDANCE"))
+        assertTrue(p.contains("do not mention Honda ELD") || p.contains("Do NOT mention Honda ELD"))
     }
 
     @Test
@@ -154,7 +168,53 @@ class AiAnalysisPayloadBuilderTest {
         assertTrue(payload.userMessage.contains("Selected window start (UTC, app-computed): 2026-"))
         assertTrue(payload.userMessage.contains("Do not invent or re-convert"))
         assertTrue(payload.userMessage.contains("Honda ELD") || payload.userMessage.contains("ELD"))
+        assertTrue(payload.userMessage.contains("Honda Civic FB2"))
+        assertTrue(payload.systemPrompt.contains("Civic FB2"))
         assertEquals(60L, payload.actualDurationSeconds)
+    }
+
+    @Test
+    fun buildUserMessage_genericOmitsCivicAndIncludesVinOrUnknown() {
+        val truncated = AiAnalysisPayloadBuilder.TruncatedLog(
+            csvText = "# dashboard_snapshots\n1000,800,0,90,,,,,,,,,,,,,,\n",
+            rowCount = 2,
+            eventCount = 0,
+            limited = false,
+            windowMinutesUsed = 1,
+            firstTimestampMs = 1_785_182_650_255L,
+            lastTimestampMs = 1_785_182_710_255L,
+            uniqueTimestampCount = 2,
+        )
+        val noVin = AiAnalysisPayloadBuilder.buildUserMessage(
+            sourceLabel = "live_window_1min",
+            windowMinutes = 1,
+            snapshotText = "rpm=900",
+            healthText = "(none)",
+            dtcText = "(none)",
+            log = truncated,
+            profile = VehicleProfile.GENERIC_OBD2,
+        )
+        assertTrue(noVin.userMessage.contains("GENERIC SAE OBD-II"))
+        assertTrue(noVin.userMessage.contains("sharing generic SAE data from a car"))
+        assertFalse(noVin.userMessage.contains("Analyze this Honda Civic FB2"))
+        assertFalse(noVin.userMessage.contains("include Honda ELD"))
+        assertTrue(noVin.systemPrompt.contains("Do NOT identify this vehicle as a Honda Civic"))
+        assertTrue(noVin.vehicleLabel.contains("Generic OBD2"))
+
+        val withVin = AiAnalysisPayloadBuilder.buildUserMessage(
+            sourceLabel = "live_window_1min",
+            windowMinutes = 1,
+            snapshotText = "rpm=900",
+            healthText = "(none)",
+            dtcText = "(none)",
+            log = truncated,
+            profile = VehicleProfile.GENERIC_OBD2,
+            vin = "JDAXXXMIRA123",
+            ecuName = "ECM",
+        )
+        assertTrue(withVin.userMessage.contains("JDAXXXMIRA123"))
+        assertTrue(withVin.userMessage.contains("ECM"))
+        assertFalse(withVin.userMessage.contains("VIN: not available"))
     }
 
     @Test
