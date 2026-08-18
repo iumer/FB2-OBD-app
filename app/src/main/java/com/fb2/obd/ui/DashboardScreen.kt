@@ -60,7 +60,6 @@ import com.fb2.obd.PerformanceState
 import com.fb2.obd.TripState
 import com.fb2.obd.data.ConnectionState
 import com.fb2.obd.obd.DashTheme
-import com.fb2.obd.obd.ConnectActionPolicy
 import com.fb2.obd.obd.EditableMetric
 import com.fb2.obd.obd.GearSource
 import com.fb2.obd.obd.Health
@@ -78,6 +77,7 @@ import com.fb2.obd.obd.VehicleProfile
 import com.fb2.obd.obd.VehicleProfileConfig
 import com.fb2.obd.obd.VehicleSnapshot
 import com.fb2.obd.obd.isEffectivelyBlank
+import com.fb2.obd.ui.dash.ConnectActionChip
 import com.fb2.obd.ui.dash.DashLinkStatus
 import com.fb2.obd.ui.dash.DashThemeMetrics
 import com.fb2.obd.ui.dash.OptAThemeDash
@@ -234,8 +234,9 @@ fun DashboardScreen(
     ) {
         if (immersive) {
             val link = DashLinkStatus(
-                elmLive = state.connection == ConnectionState.CONNECTED && state.sourceIsLive,
-                demo = state.connection == ConnectionState.CONNECTED && !state.sourceIsLive,
+                connection = state.connection,
+                sourceIsLive = state.sourceIsLive,
+                reconnecting = state.reconnecting,
                 logging = loggingActive,
                 online = networkOnline,
             )
@@ -1611,20 +1612,14 @@ private fun TopBar(
             TopBarChip("MIN", accent, onMinimizeClick)
             TopBarChip("DIAG", accent, onDiagnosticsClick)
             TopBarChip("SETTINGS", TextMuted, onSettingsClick)
-            val connect = ConnectActionPolicy.of(
-                state.connection,
-                state.sourceIsLive,
-                state.reconnecting,
-            )
-            TopBarChip(
-                text = connect.label,
-                color = when (connect.kind) {
-                    ConnectActionPolicy.Kind.DISCONNECT,
-                    ConnectActionPolicy.Kind.RECONNECT -> CritRed
-                    ConnectActionPolicy.Kind.RETRY -> WarnAmber
-                    ConnectActionPolicy.Kind.CONNECT -> accent
-                },
+            ConnectActionChip(
+                connection = state.connection,
+                sourceIsLive = state.sourceIsLive,
+                reconnecting = state.reconnecting,
+                accent = accent,
                 onClick = onConnectClick,
+                modifier = Modifier.padding(start = 8.dp),
+                fontSize = DashType.topChip,
             )
         }
     }

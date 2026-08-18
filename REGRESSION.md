@@ -4,7 +4,7 @@
 >
 > `app/` started as an exact copy of commit `d3790be` (0.1.15). Restored so far:
 > in-app updater (0.1.16), Nakamichi keep-alive (0.1.17), battery ALLOWED row
-> (0.1.18), Settings stop-simulation (0.1.19), and live-ELM Disconnect chip (0.1.20).
+> (0.1.18), Settings stop-simulation (0.1.19), live-ELM Disconnect chip (0.1.21: all themes).
 > Crash reporter, full-screen sensor picker, freshness LEDs, poll holds and
 > Robolectric tests are still **not** in this tree.
 
@@ -103,7 +103,7 @@ Keep these fixed. If a change might touch one of these areas, re-verify it.
 | I81 | `loadBondedDevices` / `connectTo` could throw `SecurityException` on the UI thread if BT permission is revoked after the gate | Fixed | Both wrapped; connect surfaces a toast instead of dying |
 | I82 | Show every newer version in a list, not only “latest”; after installing 0.1.18 the next check shows 0.1.19+ | Fixed | `AppUpdateChecker.newerThan`; Settings list GET/INSTALL per row; `versions.json` catalog |
 | I83 | No way to stop Demo values from Settings | Fixed | Settings → Simulation: **STOP** while Demo is running; **Demo / simulated data** toggle persists `allowDemo` |
-| I84 | After live OBD connect, chip still said CONNECT and opened the picker | Fixed | Live ELM → red **DISCONNECT** (tap drops adapter). Demo stays CONNECT. Opt ☰ / AA match |
+| I84 | After live OBD connect, chip still said CONNECT and opened the picker | Fixed | Live ELM → red **DISCONNECT** on Classic + OptA/B/C (visible chip + ☰ menu). Demo stays CONNECT |
 
 When the user reports a **new** bug, add a new `Ixx` row here (Status: Open → Fixed)
 and add a matching automated or manual check in sections 2–3.
