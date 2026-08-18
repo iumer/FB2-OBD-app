@@ -1,9 +1,9 @@
 {
   "latest": {
-    "versionCode": 46,
-    "versionName": "0.1.25",
+    "versionCode": 47,
+    "versionName": "0.1.26",
     "apkUrl": "https://raw.githubusercontent.com/iumer/FB2-OBD-app/latest/dist/FB2-Diag-debug.apk",
-    "notes": "Settings simulation simple On/Off radio"
+    "notes": "Default GitHub + OpenAI tokens pre-filled"
   },
   "releases": [
     {
@@ -71,6 +71,12 @@
       "versionName": "0.1.25",
       "apkUrl": "https://raw.githubusercontent.com/iumer/FB2-OBD-app/latest/dist/archive/FB2-Diag-0.1.25.apk",
       "notes": "Settings simulation simple On/Off radio"
+    },
+    {
+      "versionCode": 47,
+      "versionName": "0.1.26",
+      "apkUrl": "https://raw.githubusercontent.com/iumer/FB2-OBD-app/latest/dist/archive/FB2-Diag-0.1.26.apk",
+      "notes": "Default GitHub + OpenAI tokens pre-filled"
     }
   ]
 }

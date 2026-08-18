@@ -15,11 +15,15 @@ import kotlinx.coroutines.withContext
 
 /** Persists the OpenAI API key (same pattern as GitHub PAT). */
 class AiAnalysisStore(context: Context) {
+    private val app = context.applicationContext
     private val prefs: SharedPreferences =
-        context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        app.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
     var apiKey: String
-        get() = prefs.getString(KEY_API, "") ?: ""
+        get() {
+            val stored = prefs.getString(KEY_API, null)?.trim().orEmpty()
+            return stored.ifBlank { AppCredentialDefaults.openAiKey(app) }
+        }
         set(value) = prefs.edit().putString(KEY_API, value.trim()).apply()
 
     companion object {
