@@ -151,7 +151,7 @@ non-obvious cloud specifics.
   values. API key in Settings → AI analysis (`platform.openai.com` — Plus ≠ API).
   No conversational chat in-app.
 - **ELM idle drop:** cheap clones often hang mid-poll. The app uses short PID
-  timeouts (~650 ms poll / ~450 ms probe), skips repeatedly-failing **secondary**
+  timeouts (900 ms poll / 450 ms probe+recover), skips repeatedly-failing **secondary**
   PIDs, keeps last-good Dash values briefly, and retries RFCOMM forever with
   backoff (UI shows `RETRY`). **RPM + Speed are never fail-streak-skipped**
   (`PidPollPlanner`); secondary PIDs rotate (~4/cycle) so cycles stay short.
@@ -167,7 +167,8 @@ non-obvious cloud specifics.
   estimated gear only when both RPM and Speed are fresh.
   **Long-haul LOG:** session CSV is checkpointed to disk ~every 60s (and on STOP)
   so a crash does not lose the whole drive. Snapshot rows throttled to ~1 Hz.
-  Bus-lost soft-recover caps at 3 then RFCOMM reconnect; ATRV-only is not a
+  Bus-lost soft-recover caps at 5 (8 when ATRV still answers) then RFCOMM
+  reconnect; same caps for dead Mode 01 cycles; ATRV-only is not a
   healthy Mode 01 cycle. Dash-extra refresh does not softRecover every 5s.
 - **Screen off / background:** real ELM sessions start
   `ObdMonitorForegroundService` (`connectedDevice` FGS + wake lock +
@@ -215,9 +216,9 @@ non-obvious cloud specifics.
   “Installing…”. Prefer the ~7MB release-classpath APK over the bloated debug
   APK. If install sticks: uninstall old `FB2 Diag`, reboot HU, copy APK via USB
   (not a partial GitHub download), then install.
-- **Car HU readability:** Dash uses `DashType` (hero ~34sp, tile values ~22sp,
+- **Car HU readability:** Dash uses `DashType` (hero 30sp, tile values 22sp,
   88dp tiles, fewer/wider columns). Floating bubble sizes live in
-  `FloatingDashLayout` (collapsed/center 92dp, sat 100dp, expanded max 400dp,
+  `FloatingDashLayout` (collapsed/center 92dp, sat 100dp, expanded max 340dp,
   auto-shrinks on short-edge HUs). Re-record HU Paparazzi after type-scale or
   bubble size changes. Prefer glanceability without filling the short edge.
 - MAF/MAP health is context-aware (idle / coast / cruise / heavy); pass RPM,

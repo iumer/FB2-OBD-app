@@ -71,6 +71,8 @@ import com.fb2.obd.obd.withField
 import com.fb2.obd.perf.AccelResult
 import com.fb2.obd.perf.AccelerationTimer
 import com.fb2.obd.service.ObdMonitorForegroundService
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -644,7 +646,19 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** Push the phone main Dash (tiles + hero) to Android Auto / floating bubble. */
+    /**
+     * Safe by construction: this is called from ~16 sites across poll, stale-watch,
+     * readiness and UI paths. Only one of them used to guard it, so a throw from the
+     * Car App / bubble publish could kill `viewModelScope` — the 0.1.28 failure mode.
+     * Publishing a dash frame is never worth crashing a live drive.
+     */
     fun publishCarDash() {
+        runCatching { publishCarDashInternal() }.onFailure { e ->
+            ObdLogger.logDebug(ObdLogger.Dir.INFO, "publishCarDash failed: ${e.message}")
+        }
+    }
+
+    private fun publishCarDashInternal() {
         val ui = _uiState.value
         val decision = ui.decisionSnapshot.takeUnless { it.isEffectivelyBlank() } ?: ui.snapshot
         // CONNECTED or in-flight RETRY with sticky snapshot — never blank mid soft-recover.
@@ -1364,21 +1378,9 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
                     source.name,
                 )
                 if (source.isLive) {
-                    runCatching {
-                        ensureElmMonitor(ObdMonitorForegroundService.STATUS_LIVE)
-                    }.onFailure { e ->
-                        ObdLogger.logDebug(
-                            ObdLogger.Dir.INFO,
-                            "ELM monitor FGS failed: ${e.message}",
-                        )
-                    }
+                    ensureElmMonitor(ObdMonitorForegroundService.STATUS_LIVE)
                 }
-                runCatching { publishCarDash() }.onFailure { e ->
-                    ObdLogger.logDebug(
-                        ObdLogger.Dir.INFO,
-                        "publishCarDash failed: ${e.message}",
-                    )
-                }
+                publishCarDash()
                 // Sample main Dash only into the session CSV.
                 if (ObdLogger.valueLoggingEnabled) {
                     logDashValues(snapshot)
@@ -1481,7 +1483,14 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** Foreground-service starts can be refused on API 31+; never let that kill the session. */
     private fun ensureElmMonitor(status: String) {
+        runCatching { ensureElmMonitorInternal(status) }.onFailure { e ->
+            ObdLogger.logDebug(ObdLogger.Dir.INFO, "ensureElmMonitor failed: ${e.message}")
+        }
+    }
+
+    private fun ensureElmMonitorInternal(status: String) {
         val app = getApplication<Application>()
         if (!elmMonitorActive) {
             // First successful live connect — sticky "ELM connected".
@@ -1539,9 +1548,37 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
         elmMonitorStatus = null
     }
 
+    /**
+     * One-shot DIAG jobs (Faults, Fuel, Trans, Honda, Mode 09, deep scan).
+     *
+     * `viewModelScope` installs no [kotlinx.coroutines.CoroutineExceptionHandler], so an
+     * uncaught throw here reaches the thread's default handler and kills the process —
+     * even though the scope uses a SupervisorJob. A failed probe must degrade to a log
+     * line, never take down a live drive.
+     */
+    private fun launchDiag(
+        label: String,
+        onError: () -> Unit = {},
+        block: suspend CoroutineScope.() -> Unit,
+    ): Job =
+        viewModelScope.launch {
+            try {
+                block()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                ObdLogger.logDebug(ObdLogger.Dir.INFO, "$label failed: ${e.message}")
+                // Clear the page's loading flag, or the spinner never stops.
+                runCatching { onError() }
+            }
+        }
+
     fun readFaults() {
         val source = currentSource ?: return
-        viewModelScope.launch {
+        launchDiag(
+            "readFaults",
+            onError = { _faults.update { it.copy(loading = false, message = "Read failed") } },
+        ) {
             _faults.update { it.copy(loading = true, message = null) }
             val (stored, pending, permanent) = source.withDashKeptAlive {
                 Triple(
@@ -1575,7 +1612,10 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
 
     fun clearFaults() {
         val source = currentSource ?: return
-        viewModelScope.launch {
+        launchDiag(
+            "clearFaults",
+            onError = { _faults.update { it.copy(loading = false, message = "Clear failed") } },
+        ) {
             _faults.update { it.copy(loading = true, message = null) }
             val (ok, stored, pending, permanent) = source.withDashKeptAlive {
                 val cleared = source.clearDtcs()
@@ -1652,7 +1692,10 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
 
     fun probeCustomSelected() {
         val source = currentSource ?: return
-        viewModelScope.launch {
+        launchDiag(
+            "probeCustomSelected",
+            onError = { _custom.update { it.copy(probing = false) } },
+        ) {
             _custom.update { it.copy(probing = true) }
             val selected = pidCatalog.filter { it.id in _custom.value.selectedIds }
             val probed = source.withDashKeptAlive { source.probePids(selected) }
@@ -1667,7 +1710,7 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
 
     fun refreshFuelPage() {
         val source = currentSource ?: return
-        viewModelScope.launch {
+        launchDiag("refreshFuelPage") {
             val defs = StandardPidCatalog.fuelPageDefaults() +
                 VehicleProfileConfig.fuelExtraPids(vehicleProfile)
             val probed = source.withDashKeptAlive {
@@ -1683,7 +1726,10 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
 
     fun refreshIdleDiagnostics() {
         val source = currentSource ?: return
-        viewModelScope.launch {
+        launchDiag(
+            "refreshIdleDiagnostics",
+            onError = { _idleDiag.update { it.copy(loading = false) } },
+        ) {
             _idleDiag.update { it.copy(loading = true) }
             val liveSnap = _uiState.value.snapshot
             // Paint live Dash values immediately so the page isn't stuck on blank "Probing…".
@@ -1760,7 +1806,7 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
             return
         }
         val source = currentSource ?: return
-        viewModelScope.launch {
+        launchDiag("refreshTransmission") {
             val results = source.withDashKeptAlive {
                 source.probePids(HondaPidCatalog.transmission.pids)
             }
@@ -1785,7 +1831,7 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
 
     fun readVehicleInfo() {
         val source = currentSource ?: return
-        viewModelScope.launch {
+        launchDiag("readVehicleInfo", onError = { _vehicleInfoLoading.value = false }) {
             _vehicleInfoLoading.value = true
             val info = source.withDashKeptAlive { source.readVehicleInfo() }
             _vehicleInfo.value = info
@@ -1800,7 +1846,10 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
 
     fun scanDeepDiagnostics() {
         val source = currentSource ?: return
-        viewModelScope.launch {
+        launchDiag(
+            "scanDeepDiagnostics",
+            onError = { _deepDiag.update { it.copy(loading = false) } },
+        ) {
             _deepDiag.update { it.copy(loading = true) }
             val (readiness, freeze, o2, mode06) = source.withDashKeptAlive {
                 DeepSweep(
@@ -1834,7 +1883,7 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
             return
         }
         val source = currentSource ?: return
-        viewModelScope.launch {
+        launchDiag("scanHondaModules", onError = { _hondaScanning.value = false }) {
             _hondaScanning.value = true
             val modules = source.withDashKeptAlive { source.probeHondaModules() }
             _hondaScan.value = modules
