@@ -77,6 +77,7 @@ import com.fb2.obd.obd.VehicleProfile
 import com.fb2.obd.obd.VehicleProfileConfig
 import com.fb2.obd.obd.VehicleSnapshot
 import com.fb2.obd.obd.isEffectivelyBlank
+import com.fb2.obd.ui.dash.ConnectActionChip
 import com.fb2.obd.ui.dash.DashLinkStatus
 import com.fb2.obd.ui.dash.DashThemeMetrics
 import com.fb2.obd.ui.dash.OptAThemeDash
@@ -233,8 +234,9 @@ fun DashboardScreen(
     ) {
         if (immersive) {
             val link = DashLinkStatus(
-                elmLive = state.connection == ConnectionState.CONNECTED && state.sourceIsLive,
-                demo = state.connection == ConnectionState.CONNECTED && !state.sourceIsLive,
+                connection = state.connection,
+                sourceIsLive = state.sourceIsLive,
+                reconnecting = state.reconnecting,
                 logging = loggingActive,
                 online = networkOnline,
             )
@@ -1610,22 +1612,14 @@ private fun TopBar(
             TopBarChip("MIN", accent, onMinimizeClick)
             TopBarChip("DIAG", accent, onDiagnosticsClick)
             TopBarChip("SETTINGS", TextMuted, onSettingsClick)
-            // CONNECTED only for a real ELM adapter — Demo keeps CONNECT (+ yellow DEMO badge).
-            val liveConnected = state.connection == ConnectionState.CONNECTED &&
-                state.sourceIsLive && !state.reconnecting
-            TopBarChip(
-                text = when {
-                    liveConnected -> "CONNECTED"
-                    state.reconnecting || state.connection == ConnectionState.CONNECTING -> "RETRY…"
-                    state.connection == ConnectionState.ERROR -> "RECONNECT"
-                    else -> "CONNECT"
-                },
-                color = when {
-                    liveConnected -> GoodGreen
-                    state.connection == ConnectionState.ERROR -> CritRed
-                    else -> accent
-                },
+            ConnectActionChip(
+                connection = state.connection,
+                sourceIsLive = state.sourceIsLive,
+                reconnecting = state.reconnecting,
+                accent = accent,
                 onClick = onConnectClick,
+                modifier = Modifier.padding(start = 8.dp),
+                fontSize = DashType.topChip,
             )
         }
     }

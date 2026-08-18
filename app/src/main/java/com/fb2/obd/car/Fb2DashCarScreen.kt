@@ -13,6 +13,7 @@ import androidx.car.app.model.Template
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
+import com.fb2.obd.obd.ConnectActionPolicy
 import kotlinx.coroutines.launch
 
 /**
@@ -77,11 +78,19 @@ class Fb2DashCarScreen(carContext: CarContext) : Screen(carContext) {
             .setTitle(dash.connectLabel)
             .setOnClickListener(
                 ParkedOnlyOnClickListener.create {
+                    val disconnecting = ConnectActionPolicy.isDisconnectAction(
+                        dash.connection,
+                        dash.sourceIsLive,
+                    )
                     VehicleLiveStore.onConnectRequest?.invoke()
                         ?: CarToast.makeText(carContext, "Open FB2 Diag on phone first", CarToast.LENGTH_SHORT).show()
                     CarToast.makeText(
                         carContext,
-                        if (dash.sourceIsLive) "Already on live ELM" else "Use phone to pick ELM / Demo",
+                        when {
+                            disconnecting -> "Disconnecting ELM"
+                            dash.sourceIsLive -> "Already on live ELM"
+                            else -> "Use phone to pick ELM / Demo"
+                        },
                         CarToast.LENGTH_SHORT,
                     ).show()
                     invalidate()

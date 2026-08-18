@@ -32,20 +32,30 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.fb2.obd.data.ConnectionState
 import com.fb2.obd.obd.DashTheme
+import com.fb2.obd.obd.ConnectActionPolicy
 import com.fb2.obd.ui.theme.LocalThemePalette
 
 /**
  * Connection / logging status for themed Dash chrome.
- * [elmLive] = real ELM Bluetooth live link.
- * [demo] = simulated source with updating values.
+ * [elmLive] / [demo] are derived from [connection] + [sourceIsLive].
  */
 data class DashLinkStatus(
-    val elmLive: Boolean,
-    val demo: Boolean,
+    val connection: ConnectionState,
+    val sourceIsLive: Boolean,
+    val reconnecting: Boolean = false,
     val logging: Boolean,
     val online: Boolean,
-)
+) {
+    val elmLive: Boolean
+        get() = connection == ConnectionState.CONNECTED && sourceIsLive
+    val demo: Boolean
+        get() = connection == ConnectionState.CONNECTED && !sourceIsLive
+
+    val connectAction: ConnectActionPolicy.Appearance
+        get() = ConnectActionPolicy.of(connection, sourceIsLive, reconnecting)
+}
 
 @Composable
 fun ThemedTopBar(
@@ -67,7 +77,7 @@ fun ThemedTopBar(
 }
 
 @Composable
-private fun StatusPills(link: DashLinkStatus, accent: Color) {
+private fun StatusPills(link: DashLinkStatus) {
     val elmLabel = when {
         link.elmLive -> "ELM · LINKED"
         link.demo -> "DEMO"
@@ -130,14 +140,25 @@ private fun OptAHeader(
             )
             Column {
                 Text("FB2 DIAG", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Black, letterSpacing = 1.sp)
-                StatusPills(link, p.accent)
+                StatusPills(link)
             }
         }
         Spacer(Modifier.weight(1f))
+        ConnectActionChip(
+            connection = link.connection,
+            sourceIsLive = link.sourceIsLive,
+            reconnecting = link.reconnecting,
+            accent = p.accent,
+            onClick = onConnect,
+            modifier = Modifier.padding(end = 8.dp),
+            surfaceColor = Color(0xFF141414),
+        )
         ThemeMenuButton(
             accent = p.accent,
             border = p.accent.copy(alpha = 0.45f),
             logging = link.logging,
+            connectAction = link.connectAction,
+            accentForConnect = p.accent,
             onOpenSettings = onOpenSettings,
             onOpenDiag = onOpenDiag,
             onOpenMin = onOpenMin,
@@ -174,15 +195,25 @@ private fun OptBHeader(
                 letterSpacing = 2.sp,
                 fontFamily = FontFamily.SansSerif,
             )
-            StatusPills(link, p.accent)
+            StatusPills(link)
         }
         Spacer(Modifier.weight(1f))
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             // MIL only for real offline — not Demo
             MilLamp(on = !link.elmLive && !link.demo)
+            ConnectActionChip(
+                connection = link.connection,
+                sourceIsLive = link.sourceIsLive,
+                reconnecting = link.reconnecting,
+                accent = p.accent,
+                onClick = onConnect,
+                surfaceColor = Color(0xFF141414),
+            )
             OverflowMenu(
                 accent = p.accent,
                 logging = link.logging,
+                connectAction = link.connectAction,
+                accentForConnect = p.accent,
                 onOpenSettings = onOpenSettings,
                 onOpenDiag = onOpenDiag,
                 onOpenMin = onOpenMin,
@@ -221,7 +252,7 @@ private fun OptCHeader(
                 fontSize = 18.sp,
                 letterSpacing = 1.5.sp,
             )
-            StatusPills(link, p.accent)
+            StatusPills(link)
         }
         Spacer(Modifier.weight(1f))
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -235,10 +266,20 @@ private fun OptCHeader(
                 if (link.elmLive) Color(0xFFFF8A3D) else Color(0xFF666666),
                 size = 18.dp,
             )
+            ConnectActionChip(
+                connection = link.connection,
+                sourceIsLive = link.sourceIsLive,
+                reconnecting = link.reconnecting,
+                accent = p.accent,
+                onClick = onConnect,
+                surfaceColor = Color(0xFF141414),
+            )
             ThemeMenuButton(
                 accent = p.accent,
                 border = p.accent.copy(alpha = 0.45f),
                 logging = link.logging,
+                connectAction = link.connectAction,
+                accentForConnect = p.accent,
                 onOpenSettings = onOpenSettings,
                 onOpenDiag = onOpenDiag,
                 onOpenMin = onOpenMin,
@@ -272,6 +313,8 @@ private fun MilLamp(on: Boolean) {
 private fun OverflowMenu(
     accent: Color,
     logging: Boolean,
+    connectAction: ConnectActionPolicy.Appearance,
+    accentForConnect: Color,
     onOpenSettings: () -> Unit,
     onOpenDiag: () -> Unit,
     onOpenMin: () -> Unit,
@@ -294,6 +337,8 @@ private fun OverflowMenu(
             onDismiss = { open = false },
             accent = accent,
             logging = logging,
+            connectAction = connectAction,
+            accentForConnect = accentForConnect,
             onOpenSettings = onOpenSettings,
             onOpenDiag = onOpenDiag,
             onOpenMin = onOpenMin,
@@ -308,6 +353,8 @@ private fun ThemeMenuButton(
     accent: Color,
     border: Color,
     logging: Boolean,
+    connectAction: ConnectActionPolicy.Appearance,
+    accentForConnect: Color,
     onOpenSettings: () -> Unit,
     onOpenDiag: () -> Unit,
     onOpenMin: () -> Unit,
@@ -332,6 +379,8 @@ private fun ThemeMenuButton(
             onDismiss = { open = false },
             accent = accent,
             logging = logging,
+            connectAction = connectAction,
+            accentForConnect = accentForConnect,
             onOpenSettings = onOpenSettings,
             onOpenDiag = onOpenDiag,
             onOpenMin = onOpenMin,
@@ -347,12 +396,15 @@ private fun ThemeDropdown(
     onDismiss: () -> Unit,
     accent: Color,
     logging: Boolean,
+    connectAction: ConnectActionPolicy.Appearance,
+    accentForConnect: Color,
     onOpenSettings: () -> Unit,
     onOpenDiag: () -> Unit,
     onOpenMin: () -> Unit,
     onToggleLogging: () -> Unit,
     onConnect: () -> Unit,
 ) {
+    val connectColor = connectActionColor(connectAction.kind, accentForConnect)
     DropdownMenu(expanded = open, onDismissRequest = onDismiss) {
         DropdownMenuItem(text = { Text("Settings") }, onClick = { onDismiss(); onOpenSettings() })
         DropdownMenuItem(text = { Text("DIAG") }, onClick = { onDismiss(); onOpenDiag() })
@@ -367,7 +419,9 @@ private fun ThemeDropdown(
             onClick = { onDismiss(); onToggleLogging() },
         )
         DropdownMenuItem(
-            text = { Text("Connect", color = accent) },
+            text = {
+                Text(connectAction.label, color = connectColor)
+            },
             onClick = { onDismiss(); onConnect() },
         )
     }
