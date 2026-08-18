@@ -121,6 +121,36 @@ object SensorPickerReadings {
 
     val SAE_SUPPORT_BASES: List<Int> = listOf(0x00, 0x20, 0x40, 0x60, 0x80, 0xA0)
 
+    /**
+     * Apply one ELM response to every catalog row that shares the request
+     * (e.g. 0124 lambda + 0124I current). Torque shows both from the same PID.
+     */
+    fun expandProbeHits(
+        catalog: List<PidDefinition>,
+        hits: List<PidProbeResult>,
+    ): Map<String, PidProbeResult> {
+        val out = LinkedHashMap<String, PidProbeResult>()
+        hits.forEach { hit ->
+            val siblings = catalog.filter { it.request.equals(hit.pid.request, true) }
+            if (siblings.size <= 1) {
+                out[hit.pid.id] = hit
+                return@forEach
+            }
+            val bytes = hit.raw?.let { raw ->
+                when {
+                    hit.pid.request.startsWith("01") && hit.pid.request.length == 4 ->
+                        ObdResponseParser.rawDataBytes(hit.pid.request, 8, raw)
+                    else -> null
+                }
+            }
+            siblings.forEach { pid ->
+                val sample = if (hit.supported) bytes?.let(pid.decode) else null
+                out[pid.id] = PidProbeResult(pid, hit.supported, sample, hit.raw)
+            }
+        }
+        return out
+    }
+
     private fun liveText(pid: PidDefinition, snapshot: VehicleSnapshot): String? {
         if (pid.request.equals("0103", true)) {
             return snapshot.fuelSystemStatus?.takeIf { it.isNotBlank() }
