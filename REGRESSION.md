@@ -83,6 +83,8 @@ Keep these fixed. If a change might touch one of these areas, re-verify it.
 | I69 | 0.1.27 only battery/ATRV live — heroes n/s everywhere (FB2 + Generic) | Fixed | `shouldRecoverAfterResume` only after `FULL_PAUSE`; field `mergeLastGood`; batch Mode 01 picker scan; Demo reconnect guard |
 | I70 | 0.1.28 crash on ELM connect (Demo snapshot + mergeLastGood + FGS) | Fixed | Clear snapshot on fresh live `useSource`; runCatching FGS/bubble restore; `attachOverlay` guard; `ElmConnectTransitionTest` |
 | I71 | Check for updates stuck on stale 0.1.27/0.1.28 (raw CDN cache) | Fixed | GitHub Contents API primary fetch; raw CDN fallback with cache-bust |
+| I72 | Shipped APK was v2-only debug (11 MB) — violates documented HU requirement | Fixed | Ship via `scripts/package-hu-apk.sh`: v1+v2 signed, release classpath, 7.3 MB |
+| I73 | Whole suite was pure-JVM, so I69/I70 shipped green while the app crashed | Fixed | Robolectric `ElmConnectRuntimeTest` drives the real `DashboardViewModel` on a real Android context |
 
 When the user reports a **new** bug, add a new `Ixx` row here (Status: Open → Fixed)
 and add a matching automated or manual check in sections 2–3.
@@ -96,14 +98,29 @@ Run from repo root (`/workspace`):
 ```bash
 ./gradlew testDebugUnitTest
 ./gradlew lintDebug
-./gradlew assembleDebug
-cp app/build/outputs/apk/debug/app-debug.apk dist/FB2-Diag-debug.apk
-# Also publish to branch `latest` so the stable sideload URL stays current:
+# Ship the sideload APK with this script — NOT a plain `assembleDebug` copy.
+# It produces a v1+v2 signed release-classpath APK (~7 MB). A plain AGP debug
+# APK is v2-only and ~11 MB, which hangs some car HU installers (I72).
+bash scripts/package-hu-apk.sh   # writes dist/FB2-Diag-debug.apk
+# Then publish to branch `latest` so the stable sideload URL stays current:
 #   https://raw.githubusercontent.com/iumer/FB2-OBD-app/latest/dist/FB2-Diag-debug.apk
 ```
 
-All three Gradle tasks must pass. Copy the APK into `dist/` so sideload artifacts stay current,
-then update the `latest` branch APK (same path) so the bookmarkable download link does not change.
+All tasks must pass. Verify the shipped APK before publishing:
+
+```bash
+$ANDROID_HOME/build-tools/34.0.0/apksigner verify --verbose --min-sdk-version 21 dist/FB2-Diag-debug.apk
+# must print: v1 scheme ... true  AND  v2 scheme ... true
+$ANDROID_HOME/build-tools/34.0.0/aapt2 dump badging dist/FB2-Diag-debug.apk | grep '^package:'
+# versionCode must match dist/version.json
+```
+
+After publishing, confirm the feed the app actually reads returns the new version:
+
+```bash
+curl -fsSL "https://api.github.com/repos/iumer/FB2-OBD-app/contents/dist/version.json?ref=latest" \
+  | python3 -c "import sys,json,base64;print(base64.b64decode(json.load(sys.stdin)['content']).decode())"
+```
 
 ### Unit-test map (what “green” covers)
 
@@ -131,6 +148,7 @@ then update the `latest` branch APK (same path) so the bookmarkable download lin
 | `FloatingDashMetricsTest` | Radial order, RPM redline, RETRY sticky values, OFF on ERROR, n/s grey health |
 | `ElmPollHoldRecoverTest` | HEROES_ONLY→NONE must not arm recover; `mergeLastGood` keeps heroes on partial frames |
 | `ElmConnectTransitionTest` | Fresh ELM connect clears Demo prev; mid-session partial merge keeps heroes |
+| `ElmConnectRuntimeTest` | **Android runtime (Robolectric).** Real `DashboardViewModel` on a real `Application`: construct, Demo→live ELM connect without crashing, no Demo leak into first live frame, ATRV-only frame keeps heroes, disconnect clears state |
 | `DashboardSnapshotTest` / `ScreensSnapshotTest` / `ConnectSheetSnapshotTest` | Paparazzi UI snapshots |
 | `AppUpdateCheckerTest` | version.json parse + local/remote versionCode compare |
 | `DashExtraPidStoreTest` | **+** extras survive process death (`dash_extra_pids.json`) |
@@ -172,3 +190,17 @@ Future cloud agents: after code changes, run **section 2** fully before commit.
 If the change affects ELM/Dash/deep-search/share/alerts, note which **section 3**
 items were verified (or explicitly blocked, e.g. no car in VM). Never delete
 issue rows from section 1 — mark them Fixed/Open/Won't fix.
+
+**Mutation rule (added after I69/I70 shipped green).** A green suite is not
+evidence. When you fix a crash or a regression, prove the new test can fail:
+revert the fix, confirm the test goes red, restore the fix, confirm green again.
+Record that in the commit message. Three consecutive releases (0.1.27, 0.1.28)
+passed every test while broken on the user's car — a test that has never failed
+has not been shown to test anything.
+
+**Runtime rule.** Pure-Kotlin tests cannot instantiate `DashboardViewModel`,
+services, or anything touching `Context`, which is exactly where the connect
+crash lived. Anything on the connect / foreground-service / permission path
+needs a Robolectric test (`ElmConnectRuntimeTest`), not just a logic test.
+Do not call `advanceUntilIdle()` there — Demo polling and the upload/voice jobs
+loop forever, so it never returns; step virtual time with `advanceTimeBy`.
