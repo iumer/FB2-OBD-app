@@ -684,6 +684,9 @@ class FloatingDashOverlayService : Service() {
                 ObdLogger.Dir.INFO,
                 "Floating dash FGS start failed: ${e.message}",
             )
+            // Same ForegroundServiceDidNotStartInTime risk as ObdMonitor: a
+            // service that never reaches foreground takes the whole app down.
+            stopSelf()
         }
     }
 

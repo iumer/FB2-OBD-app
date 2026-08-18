@@ -103,6 +103,11 @@ class ObdMonitorForegroundService : Service() {
                 ObdLogger.Dir.INFO,
                 "ObdMonitor FGS start failed: ${e.message}",
             )
+            // Started via startForegroundService() but never became foreground.
+            // Android kills the process with ForegroundServiceDidNotStartInTime
+            // ~5s later, and that throw lands on the main looper where no
+            // runCatching can reach it. Stand down instead of being killed.
+            stopSelf()
         }
     }
 

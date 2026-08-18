@@ -1,6 +1,7 @@
 package com.fb2.obd
 
 import android.app.Application
+import com.fb2.obd.data.CrashReporter
 import androidx.lifecycle.HasDefaultViewModelProviderFactory
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.ViewModelStore
@@ -14,6 +15,11 @@ import androidx.lifecycle.ViewModelStoreOwner
 class Fb2App : Application(), ViewModelStoreOwner, HasDefaultViewModelProviderFactory {
 
     private val appStore = ViewModelStore()
+
+    override fun onCreate() {
+        super.onCreate()
+        CrashReporter.install(this, BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE)
+    }
 
     override val viewModelStore: ViewModelStore
         get() = appStore
