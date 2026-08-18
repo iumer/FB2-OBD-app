@@ -20,11 +20,11 @@ Keep these fixed. If a change might touch one of these areas, re-verify it.
 | I05 | MAF flagged CRITICAL while Torque shows normal | Fixed | Schema 3 R18 bands; coasting = `COAST OK`; PID `0110` SAE decode unit-tested |
 | I06 | Suspicion wrong PID/protocol for other sensors | Partially | Compare vs Torque trackLog; LTFT missing in **both** apps (ECU). Re-check if new mismatches appear |
 | I07 | Rough Idle page stuck on “Probing…” | Fixed | Live Dash prefill; Mode 01 first; skip Mode 22 if bus unhealthy; shorter probe timeout |
-| I08 | App very laggy / slow | Fixed | Timeouts ~650/450 ms; core-PID-only while recovering; less ATSP thrash; **PID rotate** (heroes every cycle, ≤4 secondaries) |
+| I08 | App very laggy / slow | Fixed | Timeouts **900 ms poll / 450 ms probe+recover**; core-PID-only while recovering; less ATSP thrash; **PID rotate** (heroes every cycle, ≤4 secondaries) |
 | I34 | Speed stuck / under-reads (e.g. 65 vs ~98 km/h) while RPM moves | Fixed | `PidPollPlanner` never fail-streak-skips RPM/Speed; `SnapshotFreshness` clears Speed after 2.5s stale; unit test recreates freeze |
 | I36 | Want Torque-style green blink when a value is freshly fetched | Fixed | Shared blink clock (`FreshnessLed` + `FreshnessBlinkHost`) on Classic + OptA/B/C; bright pulse while `freshAtMs` is live, dim when stale |
 | I37 | Long-trip: LOG only in RAM until STOP (crash loses hours) | Fixed | Checkpoint CSV to disk every ~60s from LOG start; finalize on STOP |
-| I38 | Long-trip: UNABLE soft-recover loops forever (sticky Dash) | Fixed | ATRV-only ≠ healthy cycle; hard reconnect after 3 soft recovers |
+| I38 | Long-trip: UNABLE soft-recover loops forever (sticky Dash) | Fixed | ATRV-only ≠ healthy cycle; hard reconnect after **5** soft recovers (**8** while ATRV still answers) |
 | I39 | Long-trip: Coolant/Battery/MAF/RPM sticky last-good | Fixed | Sanitize clears safety fields after TTL; smoother clears on null; EST gear needs fresh RPM+Speed |
 | I40 | Deep search shows 1/N then fails; Dash goes laggy / **pauses fetching** during search | Fixed | Heroes-only poll during deep search; each ATSH strategy is `withLinkExclusive`; TTL `holdValues` so Dash does not blank |
 | I41 | Need FB2 vs Generic OBD2 profiles (no Honda junk on other cars) | Fixed | Settings → Vehicle profile; SAE-only catalog/pages/DIAG/deep search for Generic; Mode 0A permanent DTCs |
@@ -56,8 +56,8 @@ Keep these fixed. If a change might touch one of these areas, re-verify it.
 | I21 | Cannot remap built-in Dash tiles | Fixed | Double-tap tile → same sensor picker as `+`; persisted overrides |
 | I22 | Sensor picker has no text search | Fixed | Search box in `SensorPickerDialog` (label / PID / category) |
 | I23 | MIN toast shows but bubble missing on Home | Fixed | FGS + attach/READY before `moveTaskToBack`; clamp on-screen |
-| I24 | Dash text too small to read while driving on HU | Fixed | `DashType` HU scale (~34/22sp, 88dp tiles); ellipsis; fewer wider columns |
-| I25 | Floating bubble ring too small / overflow on HU | Fixed | `FloatingDashLayout`: 92/100/max400dp; shrinks on short-edge HUs |
+| I24 | Dash text too small to read while driving on HU | Fixed | `DashType` HU scale (hero **30**sp / tile **22**sp, 80dp tiles, 92dp hero); ellipsis; fewer wider columns |
+| I25 | Floating bubble ring too small / overflow on HU | Fixed | `FloatingDashLayout`: 92/100/max **340**dp (tightened by I64); shrinks on short-edge HUs |
 | I26 | Log Share shows “No apps…” / opens Bluetooth search on HU | Fixed | Always save to Downloads/FB2-Diag; ignore BT as share target |
 | I48 | Want in-app Update button (check / download / install or “up to date”) | Fixed | Settings → App update; `version.json` on `latest`; FileProvider install |
 | I49 | Soft-recover / ATRV-only frames wipe Dash mid-drive; UI RETRY blanks bubble | Fixed | ATRV-only = blank sticky; recover heartbeat + 450ms AT timeout; stale UI 12s; deep-found TTL/clear; deep search gentle restore |
@@ -70,6 +70,29 @@ Keep these fixed. If a change might touch one of these areas, re-verify it.
 | I56 | Nakamichi / phone kills app mid-drive so LOG cannot be trusted vs Torque | Fixed | Process-scoped ViewModel (`Fb2App`); FGS `stopWithTask=false` + sticky reconnect; battery unrestricted prompt |
 | I57 | Green freshness dots static / missing on some themes | Fixed | Shared blink on Classic + OptA/B/C; dim when that field is not freshly fetched |
 | I58 | DIAG Faults Read blanks Dash heroes (`--`) while CONNECTED | Fixed | Mode 03/07/0A/09/probes use `withLinkExclusive` + `withDashKeptAlive` (heroes keep polling between commands; TTL `holdValues` mid-cycle) |
+| I59 | Floating bubble blanks on RETRY while phone Dash keeps values | Fixed | `showingLiveValues` sticky during CONNECTING; amber RETRY rim; `publishCarDash` every snapshot frame |
+| I60 | Bubble collapsed chip missing LIVE / RETRY / DEMO tag | Fixed | `bubbleLinkTag` on center text (LIVE · COOL · 91°C) |
+| I61 | Bubble n/s tiles showed cyan accent ring | Fixed | Unknown health → grey rim; Load/Throttle display-only (null health) |
+| I62 | Bubble not restored after HU process death / ELM reconnect | Fixed | `FloatingDashPrefs`; `stopWithTask=false`; START_STICKY + onTaskRemoved restart; `maybeRestoreFloatingBubble()` |
+| I63 | Bubble ~1 Hz updates felt frozen vs phone Dash | Fixed | `publishCarDash()` on every live snapshot, not only 1 Hz heavy UI tick |
+| I64 | Expanded bubble ring too large on phone / short-edge HU | Fixed | `FloatingDashLayout`: max 340dp, 72dp edge margin |
+| I65 | MIN 900 ms fallback backgrounded before overlay READY | Fixed | Removed timeout — only `ACTION_READY` triggers `moveTaskToBack` |
+| I66 | Swiping Fuel/Trip/Trans auto-probe starved ELM and blanked Dash | Fixed | Tab `LaunchedEffect` no-op; Probe/Refresh buttons only |
+| I67 | Dual FGS notifications felt noisy | Fixed | Shared group `fb2_diag_session`; bubble channel IMPORTANCE_MIN |
+| I68 | Sensor picker “N readable” confused vs main Dash heroes | Fixed | Subtitle clarifies catalog scan vs heroes-always-live |
+| I69 | 0.1.27 only battery/ATRV live — heroes n/s everywhere (FB2 + Generic) | Fixed | `shouldRecoverAfterResume` only after `FULL_PAUSE`; field `mergeLastGood`; batch Mode 01 picker scan; Demo reconnect guard |
+| I70 | 0.1.28 crash on ELM connect (Demo snapshot + mergeLastGood + FGS) | Fixed | Clear snapshot on fresh live `useSource`; runCatching FGS/bubble restore; `attachOverlay` guard; `ElmConnectTransitionTest` |
+| I71 | Check for updates stuck on stale 0.1.27/0.1.28 (raw CDN cache) | Fixed | GitHub Contents API primary fetch; raw CDN fallback with cache-bust |
+| I72 | Shipped APK was v2-only debug (11 MB) — violates documented HU requirement | Fixed | Ship via `scripts/package-hu-apk.sh`: v1+v2 signed, release classpath, 7.3 MB |
+| I73 | Whole suite was pure-JVM, so I69/I70 shipped green while the app crashed | Fixed | Robolectric `ElmConnectRuntimeTest` drives the real `DashboardViewModel` on a real Android context |
+| I74 | Unguarded FGS restart in both services' `onTaskRemoved` — swiping app from recents could crash on API 31+ | Fixed | `runCatching` around both restarts (matching the already-guarded call sites); `ForegroundServiceRuntimeTest` |
+| I75 | 15 of 16 `publishCarDash()` / 2 of 3 `ensureElmMonitor()` call sites unguarded | Fixed | Both made safe **inside the function** so no caller can reintroduce the 0.1.28 crash |
+| I76 | One-shot DIAG jobs (Faults/Fuel/Trans/Honda/Mode 09/deep scan) had no exception handling — `viewModelScope` has no handler, so a throw killed the process | Fixed | `launchDiag()` catches, logs, and clears the page spinner; `throwingFaultsProbe_doesNotCrash_andClearsSpinner` |
+| I77 | Bubble drag called `updateViewLayout` unguarded — `BadTokenException` if dragged during teardown | Fixed | `runCatching` in `applyDrag`; detaches and stops the service on failure |
+| I78 | REGRESSION/AGENTS quoted stale constants (650 ms, cap 3, 34sp, 400dp) | Fixed | Corrected to 900/450 ms, cap 5 (8 on ATRV), hero 30sp, bubble 340dp |
+| I79 | **Still crashing on connect at 0.1.33.** `startForeground()` failure was swallowed, so the service never reached foreground and Android killed the process with `ForegroundServiceDidNotStartInTime` ~5 s later — thrown on the main looper where no `runCatching` can reach it | Fixed | Both services now `stopSelf()` when promotion fails |
+| I80 | No stack trace available for on-car crashes (no logcat in the car) | Fixed | `CrashReporter` persists trace + device + **recent ELM log**; prompts to save on next launch; `CrashReporterTest` |
+| I81 | `loadBondedDevices` / `connectTo` could throw `SecurityException` on the UI thread if BT permission is revoked after the gate | Fixed | Both wrapped; connect surfaces a toast instead of dying |
 
 When the user reports a **new** bug, add a new `Ixx` row here (Status: Open → Fixed)
 and add a matching automated or manual check in sections 2–3.
@@ -83,14 +106,29 @@ Run from repo root (`/workspace`):
 ```bash
 ./gradlew testDebugUnitTest
 ./gradlew lintDebug
-./gradlew assembleDebug
-cp app/build/outputs/apk/debug/app-debug.apk dist/FB2-Diag-debug.apk
-# Also publish to branch `latest` so the stable sideload URL stays current:
+# Ship the sideload APK with this script — NOT a plain `assembleDebug` copy.
+# It produces a v1+v2 signed release-classpath APK (~7 MB). A plain AGP debug
+# APK is v2-only and ~11 MB, which hangs some car HU installers (I72).
+bash scripts/package-hu-apk.sh   # writes dist/FB2-Diag-debug.apk
+# Then publish to branch `latest` so the stable sideload URL stays current:
 #   https://raw.githubusercontent.com/iumer/FB2-OBD-app/latest/dist/FB2-Diag-debug.apk
 ```
 
-All three Gradle tasks must pass. Copy the APK into `dist/` so sideload artifacts stay current,
-then update the `latest` branch APK (same path) so the bookmarkable download link does not change.
+All tasks must pass. Verify the shipped APK before publishing:
+
+```bash
+$ANDROID_HOME/build-tools/34.0.0/apksigner verify --verbose --min-sdk-version 21 dist/FB2-Diag-debug.apk
+# must print: v1 scheme ... true  AND  v2 scheme ... true
+$ANDROID_HOME/build-tools/34.0.0/aapt2 dump badging dist/FB2-Diag-debug.apk | grep '^package:'
+# versionCode must match dist/version.json
+```
+
+After publishing, confirm the feed the app actually reads returns the new version:
+
+```bash
+curl -fsSL "https://api.github.com/repos/iumer/FB2-OBD-app/contents/dist/version.json?ref=latest" \
+  | python3 -c "import sys,json,base64;print(base64.b64decode(json.load(sys.stdin)['content']).decode())"
+```
 
 ### Unit-test map (what “green” covers)
 
@@ -115,6 +153,11 @@ then update the `latest` branch APK (same path) so the bookmarkable download lin
 | `ObdLoggerTest` | Debug buffer, lean CSV, LOG toggle |
 | `SessionLogStoreTest` | Saved session naming |
 | `CarDashBuilderTest` | Android Auto dash model |
+| `FloatingDashMetricsTest` | Radial order, RPM redline, RETRY sticky values, OFF on ERROR, n/s grey health |
+| `ElmPollHoldRecoverTest` | HEROES_ONLY→NONE must not arm recover; `mergeLastGood` keeps heroes on partial frames |
+| `ElmConnectTransitionTest` | Fresh ELM connect clears Demo prev; mid-session partial merge keeps heroes |
+| `ElmConnectRuntimeTest` | **Android runtime (Robolectric).** Real `DashboardViewModel` on a real `Application`: construct, Demo→live ELM connect without crashing, no Demo leak into first live frame, ATRV-only frame keeps heroes, disconnect clears state |
+| `ForegroundServiceRuntimeTest` | **Android runtime (Robolectric).** Neither service propagates an exception out of `onTaskRemoved` (app swiped from recents) or `startOverlay` |
 | `DashboardSnapshotTest` / `ScreensSnapshotTest` / `ConnectSheetSnapshotTest` | Paparazzi UI snapshots |
 | `AppUpdateCheckerTest` | version.json parse + local/remote versionCode compare |
 | `DashExtraPidStoreTest` | **+** extras survive process death (`dash_extra_pids.json`) |
@@ -143,7 +186,7 @@ touches ELM, Dash health, deep search, logging, or share:
 7. **Value LOG Save** — same Save flow for current buffer or listed sessions.
 8. **Screen off alerts** — real ELM connected → sticky notification present; with voice alerts on, a critical condition still beeps + speaks after screen off.
 9. **Check sound alert** — Settings → **Check sound alert** must play beep + “Battery critical” on phone and (when BT audio is up) in the car.
-9. **Floating bubble (MIN)** — grant overlay permission → MIN → collapsed circle appears; drag works; tap expands **radial ring** (up to 5 live values around center); vertical swipe pages; **tap a satellite** pins that value as the collapsed blob; idle ~6s auto-collapses; tap center collapses; hold opens app. **Back → Exit & disconnect** must remove the bubble entirely. (On Dellson: verify over CarPlay if used.)
+9. **Floating bubble (MIN)** — grant overlay permission → MIN → collapsed circle shows **LIVE** tag; drag works; tap expands radial ring; on ELM drop bubble keeps last-good with **RETRY** amber rim (matches phone); vertical swipe pages; tap satellite pins; idle ~6s auto-collapses; hold opens app; Exit removes bubble. After HU kill + ELM reconnect, bubble restores if MIN was active.
 10. **Car HU layout (automated)** — Paparazzi at 1024×600, 1280×720, 1920×720 in `CarHuSnapshotTest` / `CarHuBubbleSnapshotTest` (collapsed + radial expanded). Adaptive column counts for Dash/dense pages.
 11. **Android Auto** — phone UI / DHU only unless installed via Play Internal testing.
 12. **Morning regression trio** — Battery volts via ATRV (not n/s); Idle page shows values (not stuck Probing); MAF idle ~3–5 g/s = IDLE OK not CRITICAL.
@@ -156,3 +199,17 @@ Future cloud agents: after code changes, run **section 2** fully before commit.
 If the change affects ELM/Dash/deep-search/share/alerts, note which **section 3**
 items were verified (or explicitly blocked, e.g. no car in VM). Never delete
 issue rows from section 1 — mark them Fixed/Open/Won't fix.
+
+**Mutation rule (added after I69/I70 shipped green).** A green suite is not
+evidence. When you fix a crash or a regression, prove the new test can fail:
+revert the fix, confirm the test goes red, restore the fix, confirm green again.
+Record that in the commit message. Three consecutive releases (0.1.27, 0.1.28)
+passed every test while broken on the user's car — a test that has never failed
+has not been shown to test anything.
+
+**Runtime rule.** Pure-Kotlin tests cannot instantiate `DashboardViewModel`,
+services, or anything touching `Context`, which is exactly where the connect
+crash lived. Anything on the connect / foreground-service / permission path
+needs a Robolectric test (`ElmConnectRuntimeTest`), not just a logic test.
+Do not call `advanceUntilIdle()` there — Demo polling and the upload/voice jobs
+loop forever, so it never returns; step virtual time with `advanceTimeBy`.

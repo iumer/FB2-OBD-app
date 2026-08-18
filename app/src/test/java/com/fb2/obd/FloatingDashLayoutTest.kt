@@ -25,7 +25,7 @@ class FloatingDashLayoutTest {
 
     @Test
     fun expanded_fitsCommonSevenInchHu() {
-        // 1024×600 mdpi → 600dp short edge; uses max 400 with margin.
+        // 1024×600 mdpi → 600dp short edge; uses max with margin.
         val expanded = FloatingDashLayout.expandedDp(600)
         assertEquals(FloatingDashLayout.EXPANDED_MAX_DP, expanded)
         assertTrue(FloatingDashLayout.fitsInside(expanded))

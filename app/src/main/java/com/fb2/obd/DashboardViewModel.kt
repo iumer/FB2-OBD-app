@@ -18,6 +18,7 @@ import com.fb2.obd.data.DemoObdSource
 import com.fb2.obd.data.HealthThresholdStore
 import com.fb2.obd.data.MaintenanceEntry
 import com.fb2.obd.data.MaintenanceStore
+import com.fb2.obd.data.FloatingDashPrefs
 import com.fb2.obd.data.LastElmStore
 import com.fb2.obd.data.Elm327BluetoothSource
 import com.fb2.obd.data.LogExportHelper
@@ -59,6 +60,7 @@ import com.fb2.obd.obd.PidDefinition
 import com.fb2.obd.obd.SnapshotFreshness
 import com.fb2.obd.obd.VehicleSnapshot
 import com.fb2.obd.obd.isEffectivelyBlank
+import com.fb2.obd.obd.mergeLastGood
 import com.fb2.obd.obd.PidProbeResult
 import com.fb2.obd.obd.SensorPickerReadings
 import com.fb2.obd.obd.ReadinessStatus
@@ -69,6 +71,8 @@ import com.fb2.obd.obd.withField
 import com.fb2.obd.perf.AccelResult
 import com.fb2.obd.perf.AccelerationTimer
 import com.fb2.obd.service.ObdMonitorForegroundService
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -483,10 +487,24 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
                 val toProbe = catalog.filter { pid -> pid.id !in known }.sortedBy { pid ->
                     if (pid.request.startsWith("01")) 0 else 1
                 }
-                source.enqueueBackgroundProbes(toProbe)
+                // Fast Mode 01 catalog pass (batch) — background queue alone is ~1 PID/cycle.
+                val mode01 = toProbe.filter { it.request.startsWith("01", ignoreCase = true) }
+                val advanced = toProbe.filter { !it.request.startsWith("01", ignoreCase = true) }
+                mode01.chunked(6).forEach { batch ->
+                    if (!isActive) return@forEach
+                    val results = source.withDashKeptAlive {
+                        source.probePids(batch, recoverFirst = false)
+                    }
+                    _pickerScan.update { st ->
+                        st.copy(results = st.results + results.associateBy { it.pid.id })
+                    }
+                }
+                if (advanced.isNotEmpty()) {
+                    source.enqueueBackgroundProbes(advanced)
+                }
                 val pending = toProbe.map { it.id }.toMutableSet()
                 var ticks = 0
-                while (isActive && pending.isNotEmpty() && ticks < 300) {
+                while (isActive && pending.isNotEmpty() && ticks < 600) {
                     delay(200L)
                     ticks++
                     pending.removeAll(_pickerScan.value.results.keys)
@@ -628,12 +646,24 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** Push the phone main Dash (tiles + hero) to Android Auto / floating bubble. */
+    /**
+     * Safe by construction: this is called from ~16 sites across poll, stale-watch,
+     * readiness and UI paths. Only one of them used to guard it, so a throw from the
+     * Car App / bubble publish could kill `viewModelScope` — the 0.1.28 failure mode.
+     * Publishing a dash frame is never worth crashing a live drive.
+     */
     fun publishCarDash() {
+        runCatching { publishCarDashInternal() }.onFailure { e ->
+            ObdLogger.logDebug(ObdLogger.Dir.INFO, "publishCarDash failed: ${e.message}")
+        }
+    }
+
+    private fun publishCarDashInternal() {
         val ui = _uiState.value
         val decision = ui.decisionSnapshot.takeUnless { it.isEffectivelyBlank() } ?: ui.snapshot
-        // Only CONNECTED (live ELM or Demo) may show numbers. ERROR / DISCONNECTED /
-        // reconnecting blank the bubble so a stale 88°C cannot look "live" over CarPlay.
-        val linkActive = ui.connection == ConnectionState.CONNECTED
+        // CONNECTED or in-flight RETRY with sticky snapshot — never blank mid soft-recover.
+        val linkActive = ui.connection == ConnectionState.CONNECTED ||
+            (ui.connection == ConnectionState.CONNECTING && !ui.snapshot.isEffectivelyBlank())
         val snap = if (linkActive) ui.snapshot else VehicleSnapshot.EMPTY
         val healthSnap = if (linkActive) decision else VehicleSnapshot.EMPTY
         VehicleLiveStore.publish(
@@ -649,12 +679,37 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
                 sourceName = ui.sourceName,
                 logging = _settings.value.valueLogging,
                 showEstimatedGear = _settings.value.showEstimatedGear,
+                reconnecting = ui.reconnecting,
                 dtcCount = if (linkActive) ui.dtcCount else null,
                 healthScore = if (linkActive) _health.value else null,
                 healthSnapshot = healthSnap,
                 latch = diagnosticBrain::latch,
             ),
         )
+        maybeRestoreFloatingBubble()
+    }
+
+    private var floatingBubbleRestoreDone = false
+
+    /** After ELM reconnect, bring back MIN bubble if the user had it enabled. */
+    private fun maybeRestoreFloatingBubble() {
+        if (floatingBubbleRestoreDone) return
+        val ui = _uiState.value
+        if (ui.connection != ConnectionState.CONNECTED || !ui.sourceIsLive) return
+        val app = getApplication<Application>()
+        if (!FloatingDashPrefs.isEnabled(app)) return
+        if (!com.fb2.obd.service.FloatingDashOverlayService.isOverlayAllowed(app)) return
+        floatingBubbleRestoreDone = true
+        runCatching {
+            com.fb2.obd.service.FloatingDashOverlayService.startOverlay(app)
+            ObdLogger.logDebug(ObdLogger.Dir.INFO, "Restored floating Dash bubble after reconnect")
+        }.onFailure { e ->
+            floatingBubbleRestoreDone = false
+            ObdLogger.logDebug(
+                ObdLogger.Dir.INFO,
+                "Floating bubble restore failed: ${e.message}",
+            )
+        }
     }
 
     /** Zone hysteresis shared by phone Dash + Android Auto tiles. */
@@ -1199,7 +1254,14 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
         probeCollectJob?.cancel()
         currentSource = source
         if (source is Elm327BluetoothSource) {
-            lastElmStore.saveConnected(source.deviceAddress, source.deviceName)
+            runCatching {
+                lastElmStore.saveConnected(source.deviceAddress, source.deviceName)
+            }.onFailure { e ->
+                ObdLogger.logDebug(
+                    ObdLogger.Dir.INFO,
+                    "Last ELM save failed: ${e.message}",
+                )
+            }
         }
         syncKeepaliveProbes()
         // Demo / non-live: drop the connected-device FGS. Live ELM starts it on first frame.
@@ -1207,14 +1269,19 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
             stopElmMonitor()
         }
         eventTracker.reset()
+        floatingBubbleRestoreDone = false
         diagnosticBrain.reset()
         voiceAlerter.resetHoldTimers()
         _faults.update { FaultsState() }
+        // Fresh live ELM connect must not inherit Demo numbers — mergeLastGood is for
+        // partial RFCOMM frames mid-session, not Demo→ELM transitions.
+        val clearedSnap = if (source.isLive) VehicleSnapshot.EMPTY else null
         _uiState.update {
             it.copy(
                 connection = ConnectionState.CONNECTING,
                 sourceName = source.name,
                 sourceIsLive = source.isLive,
+                snapshot = clearedSnap ?: it.snapshot,
                 decisionSnapshot = VehicleSnapshot.EMPTY,
                 dtcCount = null,
                 reconnecting = false,
@@ -1224,22 +1291,20 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
         publishCarDash()
         // Real ELM: auto-start value logging unless already running.
         // Manual STOP LOG turns it off until the next fresh ELM connect.
-        if (source.isLive && !_settings.value.valueLogging) {
-            startValueLogging()
-            ObdLogger.logDebug(ObdLogger.Dir.INFO, "VALUE LOG auto-started on ELM connect")
+        if (source.isLive) {
+            if (_settings.value.valueLogging) {
+                sessionLoggingIsDemo = false
+            } else {
+                startValueLogging()
+                ObdLogger.logDebug(ObdLogger.Dir.INFO, "VALUE LOG auto-started on ELM connect")
+            }
         }
         collectJob = source.snapshots()
             .onEach { incoming ->
                 lastLiveSnapshotMs = System.currentTimeMillis()
                 val prev = _uiState.value.snapshot
-                // Never wipe a live Dash with a blank reconnect frame.
-                val base = if (incoming.isEffectivelyBlank() && !prev.isEffectivelyBlank()) {
-                    prev
-                } else {
-                    incoming
-                }
-                // Keep deep-search recoveries until a live poll fills that field again.
-                val snapshot = overlayDeepFoundOntoSnapshot(base)
+                // Never wipe heroes on partial frames (ATRV-only, one secondary, etc.).
+                val snapshot = overlayDeepFoundOntoSnapshot(prev.mergeLastGood(incoming))
                 clearDeepFoundWhenLive(incoming)
                 val now = System.currentTimeMillis()
                 if (ObdLogger.valueLoggingEnabled && now - lastSnapshotLogMs >= 1_000L) {
@@ -1315,9 +1380,7 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
                 if (source.isLive) {
                     ensureElmMonitor(ObdMonitorForegroundService.STATUS_LIVE)
                 }
-                if (heavyDue) {
-                    publishCarDash()
-                }
+                publishCarDash()
                 // Sample main Dash only into the session CSV.
                 if (ObdLogger.valueLoggingEnabled) {
                     logDashValues(snapshot)
@@ -1388,7 +1451,7 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
                                 connection = ConnectionState.CONNECTING,
                             )
                         }
-                        // Bubble blanks via publishCarDash (not CONNECTED); phone keeps last-good + RETRY.
+                        // Bubble + AA keep last-good during RETRY (same as phone Dash).
                         ensureElmMonitor(ObdMonitorForegroundService.STATUS_RETRY)
                         publishCarDash()
                     }
@@ -1420,7 +1483,14 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** Foreground-service starts can be refused on API 31+; never let that kill the session. */
     private fun ensureElmMonitor(status: String) {
+        runCatching { ensureElmMonitorInternal(status) }.onFailure { e ->
+            ObdLogger.logDebug(ObdLogger.Dir.INFO, "ensureElmMonitor failed: ${e.message}")
+        }
+    }
+
+    private fun ensureElmMonitorInternal(status: String) {
         val app = getApplication<Application>()
         if (!elmMonitorActive) {
             // First successful live connect — sticky "ELM connected".
@@ -1452,6 +1522,12 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
             ensureElmMonitor(ObdMonitorForegroundService.STATUS_LIVE)
             return
         }
+        // Do not stomp an active Demo session with a flaky ELM reconnect.
+        if (_settings.value.allowDemo && !_uiState.value.sourceIsLive &&
+            conn == ConnectionState.CONNECTED
+        ) {
+            return
+        }
         val saved = lastElmStore.load()
         if (!KeepAlivePolicy.shouldReconnectAfterDeath(saved.address, saved.userDisconnected)) {
             return
@@ -1472,9 +1548,37 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
         elmMonitorStatus = null
     }
 
+    /**
+     * One-shot DIAG jobs (Faults, Fuel, Trans, Honda, Mode 09, deep scan).
+     *
+     * `viewModelScope` installs no [kotlinx.coroutines.CoroutineExceptionHandler], so an
+     * uncaught throw here reaches the thread's default handler and kills the process —
+     * even though the scope uses a SupervisorJob. A failed probe must degrade to a log
+     * line, never take down a live drive.
+     */
+    private fun launchDiag(
+        label: String,
+        onError: () -> Unit = {},
+        block: suspend CoroutineScope.() -> Unit,
+    ): Job =
+        viewModelScope.launch {
+            try {
+                block()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                ObdLogger.logDebug(ObdLogger.Dir.INFO, "$label failed: ${e.message}")
+                // Clear the page's loading flag, or the spinner never stops.
+                runCatching { onError() }
+            }
+        }
+
     fun readFaults() {
         val source = currentSource ?: return
-        viewModelScope.launch {
+        launchDiag(
+            "readFaults",
+            onError = { _faults.update { it.copy(loading = false, message = "Read failed") } },
+        ) {
             _faults.update { it.copy(loading = true, message = null) }
             val (stored, pending, permanent) = source.withDashKeptAlive {
                 Triple(
@@ -1508,7 +1612,10 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
 
     fun clearFaults() {
         val source = currentSource ?: return
-        viewModelScope.launch {
+        launchDiag(
+            "clearFaults",
+            onError = { _faults.update { it.copy(loading = false, message = "Clear failed") } },
+        ) {
             _faults.update { it.copy(loading = true, message = null) }
             val (ok, stored, pending, permanent) = source.withDashKeptAlive {
                 val cleared = source.clearDtcs()
@@ -1585,7 +1692,10 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
 
     fun probeCustomSelected() {
         val source = currentSource ?: return
-        viewModelScope.launch {
+        launchDiag(
+            "probeCustomSelected",
+            onError = { _custom.update { it.copy(probing = false) } },
+        ) {
             _custom.update { it.copy(probing = true) }
             val selected = pidCatalog.filter { it.id in _custom.value.selectedIds }
             val probed = source.withDashKeptAlive { source.probePids(selected) }
@@ -1600,7 +1710,7 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
 
     fun refreshFuelPage() {
         val source = currentSource ?: return
-        viewModelScope.launch {
+        launchDiag("refreshFuelPage") {
             val defs = StandardPidCatalog.fuelPageDefaults() +
                 VehicleProfileConfig.fuelExtraPids(vehicleProfile)
             val probed = source.withDashKeptAlive {
@@ -1616,7 +1726,10 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
 
     fun refreshIdleDiagnostics() {
         val source = currentSource ?: return
-        viewModelScope.launch {
+        launchDiag(
+            "refreshIdleDiagnostics",
+            onError = { _idleDiag.update { it.copy(loading = false) } },
+        ) {
             _idleDiag.update { it.copy(loading = true) }
             val liveSnap = _uiState.value.snapshot
             // Paint live Dash values immediately so the page isn't stuck on blank "Probing…".
@@ -1693,7 +1806,7 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
             return
         }
         val source = currentSource ?: return
-        viewModelScope.launch {
+        launchDiag("refreshTransmission") {
             val results = source.withDashKeptAlive {
                 source.probePids(HondaPidCatalog.transmission.pids)
             }
@@ -1718,7 +1831,7 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
 
     fun readVehicleInfo() {
         val source = currentSource ?: return
-        viewModelScope.launch {
+        launchDiag("readVehicleInfo", onError = { _vehicleInfoLoading.value = false }) {
             _vehicleInfoLoading.value = true
             val info = source.withDashKeptAlive { source.readVehicleInfo() }
             _vehicleInfo.value = info
@@ -1733,7 +1846,10 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
 
     fun scanDeepDiagnostics() {
         val source = currentSource ?: return
-        viewModelScope.launch {
+        launchDiag(
+            "scanDeepDiagnostics",
+            onError = { _deepDiag.update { it.copy(loading = false) } },
+        ) {
             _deepDiag.update { it.copy(loading = true) }
             val (readiness, freeze, o2, mode06) = source.withDashKeptAlive {
                 DeepSweep(
@@ -1767,7 +1883,7 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
             return
         }
         val source = currentSource ?: return
-        viewModelScope.launch {
+        launchDiag("scanHondaModules", onError = { _hondaScanning.value = false }) {
             _hondaScanning.value = true
             val modules = source.withDashKeptAlive { source.probeHondaModules() }
             _hondaScan.value = modules

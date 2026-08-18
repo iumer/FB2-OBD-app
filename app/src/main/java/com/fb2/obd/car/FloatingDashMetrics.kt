@@ -20,10 +20,9 @@ object FloatingDashMetrics {
     )
 
     fun from(state: CarDashState): List<Metric> {
-        // Offline / reconnecting: single OFF tile so the bubble cannot freeze on last-good.
+        // Hard offline only — RETRY keeps the full metric wheel with last-good numbers.
         if (!state.showingLiveValues) {
             val tag = when (state.connection) {
-                ConnectionState.CONNECTING -> "RETRY"
                 ConnectionState.ERROR -> "OFF"
                 else -> "OFF"
             }
@@ -43,7 +42,15 @@ object FloatingDashMetrics {
             Metric("Gear", state.gear, state.gearBadge, null, null),
         )
         val tiles = state.tiles.map {
-            Metric(it.label, it.value, it.unit, it.health, it.status)
+            val displayOnly = it.label.equals("Load", ignoreCase = true) ||
+                it.label.startsWith("Throttle", ignoreCase = true)
+            Metric(
+                label = it.label,
+                value = it.value,
+                unit = it.unit,
+                health = if (displayOnly) null else it.health,
+                status = it.status,
+            )
         }
         // Prefer tile Coolant (has live health) over any duplicate hero entry.
         val combined = (tiles + hero).distinctBy { it.label.lowercase() }

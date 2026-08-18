@@ -64,7 +64,17 @@ class ObdMonitorForegroundService : Service() {
             putExtra(EXTRA_STATUS, STATUS_LIVE)
             putExtra(EXTRA_RECONNECT, true)
         }
-        ContextCompat.startForegroundService(applicationContext, restart)
+        // Swiping the app from recents leaves us in the background, where a
+        // restart can be refused (ForegroundServiceStartNotAllowedException).
+        // Losing keep-alive is acceptable; crashing the process is not.
+        runCatching {
+            ContextCompat.startForegroundService(applicationContext, restart)
+        }.onFailure { e ->
+            ObdLogger.logDebug(
+                ObdLogger.Dir.INFO,
+                "ObdMonitor onTaskRemoved restart refused: ${e.message}",
+            )
+        }
         super.onTaskRemoved(rootIntent)
     }
 
@@ -78,14 +88,26 @@ class ObdMonitorForegroundService : Service() {
 
     private fun promoteToForeground(status: String) {
         val notification = buildNotification(status)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            startForeground(
-                NOTIFICATION_ID,
-                notification,
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE,
+        runCatching {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                startForeground(
+                    NOTIFICATION_ID,
+                    notification,
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE,
+                )
+            } else {
+                startForeground(NOTIFICATION_ID, notification)
+            }
+        }.onFailure { e ->
+            ObdLogger.logDebug(
+                ObdLogger.Dir.INFO,
+                "ObdMonitor FGS start failed: ${e.message}",
             )
-        } else {
-            startForeground(NOTIFICATION_ID, notification)
+            // Started via startForegroundService() but never became foreground.
+            // Android kills the process with ForegroundServiceDidNotStartInTime
+            // ~5s later, and that throw lands on the main looper where no
+            // runCatching can reach it. Stand down instead of being killed.
+            stopSelf()
         }
     }
 
@@ -106,6 +128,7 @@ class ObdMonitorForegroundService : Service() {
             .setContentIntent(pending)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
+            .setGroup(NOTIFICATION_GROUP)
             .setCategory(NotificationCompat.CATEGORY_SERVICE)
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
@@ -122,6 +145,7 @@ class ObdMonitorForegroundService : Service() {
         ).apply {
             description = "Keeps FB2 Diag logging while the ELM327 is connected"
             setShowBadge(false)
+            setGroup(NOTIFICATION_GROUP)
         }
         mgr.createNotificationChannel(channel)
     }
@@ -148,6 +172,7 @@ class ObdMonitorForegroundService : Service() {
     companion object {
         private const val CHANNEL_ID = "obd_monitor"
         private const val NOTIFICATION_ID = 1001
+        private const val NOTIFICATION_GROUP = "fb2_diag_session"
 
         const val EXTRA_STATUS = "status"
         const val EXTRA_RECONNECT = "reconnect"
@@ -160,7 +185,14 @@ class ObdMonitorForegroundService : Service() {
             val intent = Intent(context, ObdMonitorForegroundService::class.java).apply {
                 putExtra(EXTRA_STATUS, status)
             }
-            ContextCompat.startForegroundService(context.applicationContext, intent)
+            runCatching {
+                ContextCompat.startForegroundService(context.applicationContext, intent)
+            }.onFailure { e ->
+                ObdLogger.logDebug(
+                    ObdLogger.Dir.INFO,
+                    "ObdMonitor startForegroundService failed: ${e.message}",
+                )
+            }
         }
 
         fun updateStatus(context: Context, status: String) {
