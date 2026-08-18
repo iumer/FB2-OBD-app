@@ -106,6 +106,10 @@ Keep these fixed. If a change might touch one of these areas, re-verify it.
 | I84 | Classic Dash hero (RPM/Speed/Gear) sticky while tiles scroll | Fixed | Hero is first row inside Dash `LazyVerticalGrid` — scrolls off with tiles |
 | I83 | No way to stop Demo values from Settings | Fixed | Settings → Simulation: **STOP** while Demo is running; **Demo / simulated data** toggle persists `allowDemo` |
 | I84 | After live OBD connect, chip still said CONNECT and opened the picker | Fixed | Live ELM → red **DISCONNECT** on Classic + OptA/B/C (visible chip + ☰ menu). Demo stays CONNECT |
+| I85 | Select sensor: MAP (and other secondaries) appear then vanish from Readable | Fixed | Live snapshot beats 0100 bitmask; latch last-good; picker does not pause Mode 01 (MAP TTL ~2.5s vs always-polled MAF) |
+| I86 | Select sensor title/search/chips sticky — landscape list almost unusable | Fixed | Chrome is a normal `LazyColumn` item (same unsticky rule as Classic hero) |
+| I87 | Picker missed Torque-readable Mode 01 PIDs (APP D/E, baro, abs load, rel throttle, O2 current) | Fixed | Probe every unique Mode 01 request, not only bitmask hits; `0124I` sibling decode |
+| I88 | Red Orbit side wheels not smooth (22 dp snap + `AnimatedContent`) | Fixed | Pixel-follow `OrbitWheelPhysics` + spring settle to slot |
 
 When the user reports a **new** bug, add a new `Ixx` row here (Status: Open → Fixed)
 and add a matching automated or manual check in sections 2–3.
@@ -182,7 +186,9 @@ curl -fsSL "https://api.github.com/repos/iumer/FB2-OBD-app/contents/dist/version
 | `AppUpdateCheckerTest` | versions.json catalog parse; newerThan lists 0.1.16–0.1.20 then only 0.1.19+ after installing 0.1.18 |
 | `PublishCatalogGuardTest` | publish script ships both JSON catalogs + archive; dist matches BuildConfig; no `lumer` typo; archive APKs on disk |
 | `DashExtraPidStoreTest` | **+** extras survive process death (`dash_extra_pids.json`) |
-| `SensorPickerReadingsTest` | Green/live vs waiting vs ECU-unsupported; SAE support bitmask parse; **ATRV battery live even if 0142 unsupported**; 2026-07-24 FB2 Dash PIDs stay LIVE |
+| `SensorPickerReadingsTest` | Green/live vs waiting vs ECU-unsupported; live MAP beats bitmask; latch last-good; SAE support parse; 0124I sibling decode |
+| `TorqueReadablePidCoverageTest` | Catalog includes every Mode 01 PID Torque showed readable in the 2026-08-18 recording |
+| `OrbitWheelPhysicsTest` | Pixel-follow fold at half-item; successive 1 px drags match one jump; fling cap |
 | `ChromeCollapseTest` | Classic Dash chrome hides on scroll-up and returns at list top |
 | `FreshnessLedTest` | Shared blink: bright on fetch, dim when stale |
 | `KeepAlivePolicyTest` / `LastElmStoreTest` | Reconnect after HU process death unless user disconnected |
