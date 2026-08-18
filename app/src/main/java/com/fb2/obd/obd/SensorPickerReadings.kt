@@ -49,6 +49,7 @@ object SensorPickerReadings {
         snapshot: VehicleSnapshot,
         probeById: Map<String, PidProbeResult>,
         extraValues: Map<String, String> = emptyMap(),
+        scanning: Boolean = false,
     ): SensorPickerReading {
         // Torque-style: a PID that already answered stays readable. Honda / clone
         // Mode 01 support bitmasks often omit MAP (010B) even while 010B is live.
@@ -80,7 +81,14 @@ object SensorPickerReadings {
 
         val mode01 = pid.mode01Number
         if (mode01 != null && mode01 in snapshot.unsupportedPids) {
-            return SensorPickerReading(SensorReadKind.NONE)
+            // Connect-time bitmask often omits live PIDs (MAP, LTFT, …). While the
+            // catalog scan is still running, stay "Waiting" — not "No data" — until
+            // we actually probe. Torque probes anyway; it does not trust 0100 alone.
+            return if (scanning) {
+                SensorPickerReading(SensorReadKind.WAITING)
+            } else {
+                SensorPickerReading(SensorReadKind.NONE)
+            }
         }
 
         return SensorPickerReading(SensorReadKind.WAITING)
@@ -88,13 +96,32 @@ object SensorPickerReadings {
 
     /**
      * Once a row is LIVE, keep the last good value for this picker session.
-     * Scan / TTL / bitmask must not yank MAP off Readable after the ECU answered.
+     * Scan / TTL / bitmask / transient probe misses must not yank any PID off
+     * Readable after the ECU answered (MAP, Coolant, Intake, …).
      */
     fun latch(previous: SensorPickerReading?, next: SensorPickerReading): SensorPickerReading {
         if (previous?.kind == SensorReadKind.LIVE && next.kind != SensorReadKind.LIVE) {
             return previous
         }
         return next
+    }
+
+    /**
+     * Merge batch probe hits into the running picker scan. Never downgrade a PID
+     * that already answered (including fuel-loop text rows with null sample).
+     */
+    fun mergeProbeResults(
+        existing: Map<String, PidProbeResult>,
+        expanded: Map<String, PidProbeResult>,
+    ): Map<String, PidProbeResult> {
+        if (expanded.isEmpty()) return existing
+        val merged = existing.toMutableMap()
+        expanded.forEach { (id, hit) ->
+            val prev = merged[id]
+            if (prev?.supported == true && !hit.supported) return@forEach
+            merged[id] = hit
+        }
+        return merged
     }
 
     fun matchesQuery(pid: PidDefinition, query: String): Boolean {

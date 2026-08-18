@@ -1,9 +1,9 @@
 {
   "latest": {
-    "versionCode": 54,
-    "versionName": "0.1.33",
+    "versionCode": 55,
+    "versionName": "0.1.34",
     "apkUrl": "https://raw.githubusercontent.com/iumer/FB2-OBD-app/latest/dist/FB2-Diag-debug.apk",
-    "notes": "Red Orbit wheels continuous smooth scroll"
+    "notes": "Picker Readable latch: no MAP/Coolant/any PID flicker off green"
   },
   "releases": [
     {
@@ -119,6 +119,12 @@
       "versionName": "0.1.33",
       "apkUrl": "https://raw.githubusercontent.com/iumer/FB2-OBD-app/latest/dist/archive/FB2-Diag-0.1.33.apk",
       "notes": "Red Orbit wheels continuous smooth scroll"
+    },
+    {
+      "versionCode": 55,
+      "versionName": "0.1.34",
+      "apkUrl": "https://raw.githubusercontent.com/iumer/FB2-OBD-app/latest/dist/archive/FB2-Diag-0.1.34.apk",
+      "notes": "Picker Readable latch: no MAP/Coolant/any PID flicker off green"
     }
   ]
 }
