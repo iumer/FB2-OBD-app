@@ -249,8 +249,10 @@ object DashThemeMetrics {
 
     fun splitWheels(all: List<DashThemeMetric>): Pair<List<DashThemeMetric>, List<DashThemeMetric>> {
         if (all.isEmpty()) return emptyList<DashThemeMetric>() to emptyList()
-        val mid = (all.size + 1) / 2
-        return all.subList(0, mid) to all.subList(mid, all.size)
+        if (all.size == 1) return all to all
+        val left = all.filterIndexed { index, _ -> index % 2 == 0 }
+        val right = all.filterIndexed { index, _ -> index % 2 == 1 }
+        return left to if (right.isEmpty()) left else right
     }
 
     fun freshnessKeyForHero(label: String): String? = when (label.lowercase()) {
