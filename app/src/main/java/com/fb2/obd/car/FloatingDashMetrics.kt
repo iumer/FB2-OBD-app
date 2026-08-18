@@ -1,6 +1,5 @@
 package com.fb2.obd.car
 
-import com.fb2.obd.data.ConnectionState
 import com.fb2.obd.obd.Health
 
 /**
@@ -20,14 +19,6 @@ object FloatingDashMetrics {
     )
 
     fun from(state: CarDashState): List<Metric> {
-        // Hard offline only — RETRY keeps the full metric wheel with last-good numbers.
-        if (!state.showingLiveValues) {
-            val tag = when (state.connection) {
-                ConnectionState.ERROR -> "OFF"
-                else -> "OFF"
-            }
-            return listOf(Metric(tag, "--", "", null, state.statusLine))
-        }
         // Coolant first — collapsed bubble + page 0 lead with temp while driving.
         // RPM stays early so high/redline colour is one swipe away on the ring.
         val preferredOrder = listOf(
@@ -42,15 +33,7 @@ object FloatingDashMetrics {
             Metric("Gear", state.gear, state.gearBadge, null, null),
         )
         val tiles = state.tiles.map {
-            val displayOnly = it.label.equals("Load", ignoreCase = true) ||
-                it.label.startsWith("Throttle", ignoreCase = true)
-            Metric(
-                label = it.label,
-                value = it.value,
-                unit = it.unit,
-                health = if (displayOnly) null else it.health,
-                status = it.status,
-            )
+            Metric(it.label, it.value, it.unit, it.health, it.status)
         }
         // Prefer tile Coolant (has live health) over any duplicate hero entry.
         val combined = (tiles + hero).distinctBy { it.label.lowercase() }

@@ -1,5 +1,14 @@
 # AGENTS.md
 
+> ## ⚠️ App code is reverted to 0.1.15
+>
+> `app/` and `scripts/` are an exact copy of commit `d3790be` (0.1.15). Sections
+> below describing the in-app updater, crash reporter, full-screen sensor picker,
+> freshness LEDs, poll holds, keep-alive/auto-reconnect and Robolectric tests
+> describe **0.1.34, not the current build**. See
+> [`CHANGELOG-0.1.15-to-0.1.34.md`](CHANGELOG-0.1.15-to-0.1.34.md).
+> The 0.1.34 tree is preserved on branch `cursor/obd-connect-crash-c3be`.
+
 ## Cursor Cloud specific instructions
 
 This repo is a single-module Android app (Kotlin + Jetpack Compose), Gradle

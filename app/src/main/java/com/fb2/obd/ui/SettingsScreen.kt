@@ -100,22 +100,15 @@ fun SettingsScreen(
     onVehicleProfileChange: (VehicleProfile) -> Unit = {},
     onDashThemeChange: (DashTheme) -> Unit = {},
     onToggleEstimatedGear: (Boolean) -> Unit,
-    onToggleAllowDemo: (Boolean) -> Unit = {},
     onToggleVoiceAlerts: (Boolean) -> Unit = {},
     onToggleDuckMedia: (Boolean) -> Unit = {},
     onCheckSoundAlert: () -> Unit = {},
-    onKeepAliveBattery: () -> Unit = {},
     uploadStatus: LogUploadManager.Status = LogUploadManager.Status(),
     githubToken: String = "",
     onGithubTokenChange: (String) -> Unit = {},
     onUploadLogs: () -> Unit = {},
     openAiApiKey: String = "",
     onOpenAiApiKeyChange: (String) -> Unit = {},
-    appVersionLabel: String = "",
-    updateStatusText: String = "",
-    updateActionLabel: String = "CHECK",
-    updateBusy: Boolean = false,
-    onAppUpdateAction: () -> Unit = {},
     nav: SettingsNav,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
@@ -141,24 +134,6 @@ fun SettingsScreen(
             color = palette.textMuted,
             fontSize = 12.sp,
             modifier = Modifier.padding(bottom = 8.dp),
-        )
-
-        SectionLabel("App update")
-        Text(
-            text = if (appVersionLabel.isNotBlank()) {
-                "Installed: $appVersionLabel. Checks the always-latest sideload on GitHub and installs when newer."
-            } else {
-                "Checks the always-latest sideload on GitHub and installs when newer."
-            },
-            color = TextMuted,
-            fontSize = 12.sp,
-            modifier = Modifier.padding(bottom = 8.dp),
-        )
-        ActionRow(
-            title = if (updateStatusText.isNotBlank()) updateStatusText else "Check for update",
-            subtitle = "Needs internet. Allow “install unknown apps” for FB2 Diag when prompted.",
-            actionLabel = updateActionLabel,
-            onClick = { if (!updateBusy) onAppUpdateAction() },
         )
 
         SectionLabel("Vehicle profile")
@@ -203,30 +178,10 @@ fun SettingsScreen(
             onCheckedChange = onToggleEstimatedGear,
         )
 
-        SectionLabel("Data source")
-        ToggleRow(
-            title = "Demo / simulated data",
-            subtitle = if (settings.allowDemo) {
-                "On: with no ELM, Dash runs simulated values (DEMO badge). Turn off to force disconnected / -- on Dash and the floating bubble."
-            } else {
-                "Off: no fake numbers. Connect an ELM327 for live data; bubble shows OFF / -- when the adapter drops."
-            },
-            checked = settings.allowDemo,
-            onCheckedChange = onToggleAllowDemo,
-        )
-
-        SectionLabel("Keep-alive (Torque-style)")
-        ActionRow(
-            title = "Unrestricted battery",
-            subtitle = "Nakamichi / phone OEM killers stop logging when they reclaim RAM. Allow unrestricted battery so the ELM session + LOG survive Home / screen-off. Prompt also appears on live connect.",
-            actionLabel = "ALLOW",
-            onClick = onKeepAliveBattery,
-        )
-
         SectionLabel("Alerts")
         ToggleRow(
             title = "Voice alerts",
-            subtitle = "Beep + speak on critical (battery also warns when orange/weak). Coolant voice at/above your Coolant threshold (default 104°C).",
+            subtitle = "Beep + speak on critical (battery also warns when orange/weak).",
             checked = settings.voiceAlerts,
             onCheckedChange = onToggleVoiceAlerts,
         )

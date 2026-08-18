@@ -66,7 +66,6 @@ class AiReportStore(
         windowEndUtc: String? = null,
         snapshotRows: Int? = null,
         uniqueTimestamps: Int? = null,
-        vehicleLabel: String? = null,
     ): SavedAiReport {
         dir.mkdirs()
         val stamp = FILE_FMT.format(Date(createdMs))
@@ -93,7 +92,6 @@ class AiReportStore(
             windowEndUtc = windowEndUtc,
             snapshotRows = snapshotRows,
             uniqueTimestamps = uniqueTimestamps,
-            vehicleLabel = vehicleLabel,
         )
         file.writeText(text)
         mirrorToDownloads(file, name)
@@ -133,7 +131,6 @@ class AiReportStore(
             windowEndUtc: String? = null,
             snapshotRows: Int? = null,
             uniqueTimestamps: Int? = null,
-            vehicleLabel: String? = null,
         ): String = buildString {
             appendLine("# FB2-OBD AI diagnostic report")
             appendLine("# created_ms=$createdMs")
@@ -145,9 +142,7 @@ class AiReportStore(
             snapshotRows?.let { appendLine("# snapshot_rows=$it") }
             uniqueTimestamps?.let { appendLine("# unique_timestamps=$it") }
             appendLine("# model=$model")
-            appendLine(
-                "# vehicle=${vehicleLabel ?: "Honda Civic FB2 2013 R18 PK UG AT (D/D3/D2/D1)"}",
-            )
+            appendLine("# vehicle=Honda Civic FB2 2013 R18 PK UG AT (D/D3/D2/D1)")
             if (isDemo) {
                 appendLine("# mode=demo")
                 appendLine("# note: Readings are from DEMO (simulated), not a live ELM/vehicle connection.")

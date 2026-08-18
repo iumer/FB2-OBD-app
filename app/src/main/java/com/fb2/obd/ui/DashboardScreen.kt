@@ -17,11 +17,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -32,11 +30,13 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -46,15 +46,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.clipToBounds
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
-import androidx.compose.ui.input.nestedscroll.NestedScrollSource
-import androidx.compose.ui.input.nestedscroll.nestedScroll
-import androidx.compose.ui.layout.onSizeChanged
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -77,6 +69,7 @@ import com.fb2.obd.obd.HealthThresholds
 import com.fb2.obd.obd.LiveSnapshotOverlay
 import com.fb2.obd.obd.MetricStatus
 import com.fb2.obd.obd.ObdPid
+import com.fb2.obd.obd.PidCategory
 import com.fb2.obd.obd.PidDefinition
 import com.fb2.obd.obd.SnapshotFreshness
 import com.fb2.obd.obd.StandardPidCatalog
@@ -173,10 +166,6 @@ fun DashboardScreen(
     extraPidIds: List<String> = emptyList(),
     extraValues: Map<String, String> = emptyMap(),
     tileOverrides: Map<String, String> = emptyMap(),
-    pickerProbe: Map<String, com.fb2.obd.obd.PidProbeResult> = emptyMap(),
-    pickerScanning: Boolean = false,
-    onPickerOpen: () -> Unit = {},
-    onPickerClose: () -> Unit = {},
     onSetExtraPid: (slot: Int, pid: PidDefinition) -> Unit = { _, _ -> },
     onSetTileOverride: (baseLabel: String, pid: PidDefinition) -> Unit = { _, _ -> },
     onClearTileOverride: (baseLabel: String) -> Unit = {},
@@ -217,42 +206,16 @@ fun DashboardScreen(
     var editMetric by remember { mutableStateOf<EditableMetric?>(null) }
     val palette = remember(dashTheme) { ThemePalette.of(dashTheme) }
     val immersive = dashTheme != DashTheme.CLASSIC
-    val chromeHeaderPx = remember { mutableIntStateOf(0) }
-    val chromeCollapsedPx = remember { mutableFloatStateOf(0f) }
-    val chromeConnection = remember {
-        object : NestedScrollConnection {
-            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
-                val step = ChromeCollapse.onPreScroll(
-                    available.y,
-                    chromeCollapsedPx.floatValue,
-                    chromeHeaderPx.intValue.toFloat(),
-                )
-                chromeCollapsedPx.floatValue = step.collapsedPx
-                return Offset(0f, step.consumedY)
-            }
-            override fun onPostScroll(
-                consumed: Offset,
-                available: Offset,
-                source: NestedScrollSource,
-            ): Offset {
-                val step = ChromeCollapse.onPostScroll(
-                    available.y,
-                    chromeCollapsedPx.floatValue,
-                    chromeHeaderPx.intValue.toFloat(),
-                )
-                chromeCollapsedPx.floatValue = step.collapsedPx
-                return Offset(0f, step.consumedY)
-            }
-        }
-    }
-    val density = LocalDensity.current
 
-    // Secondary tabs refresh only via their on-screen Probe / Refresh buttons —
-    // auto-probing on swipe starved the ELM and blanked the live Dash.
-    @Suppress("UNUSED_PARAMETER")
     LaunchedEffect(pagerState.currentPage, titles, immersive) {
         if (immersive) return@LaunchedEffect
-        // Intentionally no-op: was onRefreshCustom/Idle/Fuel/Trans on page change.
+        when (titles.getOrNull(pagerState.currentPage)) {
+            "Custom" -> onRefreshCustom()
+            "Idle" -> onRefreshIdle()
+            "Fuel" -> onRefreshFuel()
+            "Trans" -> onRefreshTrans()
+            "Health" -> onRefreshHealth()
+        }
     }
 
     val gearSrc = if (!showEstimatedGear && s.gearSource == GearSource.ESTIMATED) {
@@ -266,8 +229,7 @@ fun DashboardScreen(
         modifier = modifier
             .fillMaxSize()
             .background(palette.background)
-            .padding(horizontal = 10.dp, vertical = 6.dp)
-            .then(if (immersive) Modifier else Modifier.nestedScroll(chromeConnection)),
+            .padding(horizontal = 10.dp, vertical = 6.dp),
     ) {
         if (immersive) {
             val link = DashLinkStatus(
@@ -345,52 +307,29 @@ fun DashboardScreen(
                 }
             }
         } else {
-            val headerMeasured = chromeHeaderPx.intValue > 0
-            val visibleChromePx = (chromeHeaderPx.intValue - chromeCollapsedPx.floatValue).coerceAtLeast(0f)
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clipToBounds()
-                    .then(
-                        if (headerMeasured) {
-                            Modifier.height(with(density) { visibleChromePx.toDp() })
-                        } else {
-                            Modifier
-                        },
-                    ),
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .wrapContentHeight(unbounded = true)
-                        .onSizeChanged { if (it.height > 0) chromeHeaderPx.intValue = it.height }
-                        .offset { IntOffset(0, -chromeCollapsedPx.floatValue.toInt()) },
-                ) {
-                    TopBar(
-                        state = state,
-                        loggingActive = loggingActive,
-                        networkOnline = networkOnline,
-                        profileBadge = profileBadge,
-                        onConnectClick = onConnectClick,
-                        onSettingsClick = onSettingsClick,
-                        onDiagnosticsClick = onDiagnosticsClick,
-                        onToggleLogging = onToggleLogging,
-                        onMinimizeClick = onMinimizeClick,
-                    )
+            TopBar(
+                state = state,
+                loggingActive = loggingActive,
+                networkOnline = networkOnline,
+                profileBadge = profileBadge,
+                onConnectClick = onConnectClick,
+                onSettingsClick = onSettingsClick,
+                onDiagnosticsClick = onDiagnosticsClick,
+                onToggleLogging = onToggleLogging,
+                onMinimizeClick = onMinimizeClick,
+            )
 
-                    CompactHeroStrip(
-                        rpm = s.rpm,
-                        speedKmh = s.speedKmh,
-                        gear = s.gear,
-                        gearSource = gearSrc,
-                        gearConfidencePct = s.gearConfidencePct,
-                        thresholds = healthThresholds,
-                        rpmFreshAtMs = s.freshAtMs[SnapshotFreshness.KEY_RPM],
-                        speedFreshAtMs = s.freshAtMs[SnapshotFreshness.KEY_SPEED],
-                        onEditRpm = { editMetric = EditableMetric.RPM },
-                    )
-                }
-            }
+            CompactHeroStrip(
+                rpm = s.rpm,
+                speedKmh = s.speedKmh,
+                gear = s.gear,
+                gearSource = gearSrc,
+                gearConfidencePct = s.gearConfidencePct,
+                thresholds = healthThresholds,
+                rpmFreshAtMs = s.freshAtMs[SnapshotFreshness.KEY_RPM],
+                speedFreshAtMs = s.freshAtMs[SnapshotFreshness.KEY_SPEED],
+                onEditRpm = { editMetric = EditableMetric.RPM },
+            )
 
             PageTabs(
                 titles = titles,
@@ -517,10 +456,6 @@ fun DashboardScreen(
     if (target != null) {
         SensorPickerDialog(
             catalog = catalog,
-            snapshot = state.snapshot,
-            probeById = pickerProbe,
-            scanning = pickerScanning,
-            extraValues = extraValues,
             restoreLabel = (target as? PickerTarget.RemapBase)?.label
                 ?.takeIf { tileOverrides.containsKey(it) },
             onPick = { pid ->
@@ -535,8 +470,6 @@ fun DashboardScreen(
                 pickerTarget = null
             },
             onDismiss = { pickerTarget = null },
-            onOpen = onPickerOpen,
-            onClose = onPickerClose,
         )
     }
 
@@ -1346,10 +1279,240 @@ private fun EmptyTile(modifier: Modifier = Modifier, onClick: () -> Unit) {
     }
 }
 
+private fun PidCategory.displayName(): String = when (this) {
+    PidCategory.ENGINE -> "Engine"
+    PidCategory.FUEL -> "Fuel"
+    PidCategory.TEMPS -> "Temperatures"
+    PidCategory.AIR -> "Air / Intake"
+    PidCategory.ELECTRICAL -> "Electrical"
+    PidCategory.EMISSIONS -> "Emissions"
+    PidCategory.TRANSMISSION -> "Transmission"
+    PidCategory.ABS -> "ABS / Brakes"
+    PidCategory.EPS -> "Steering (EPS)"
+    PidCategory.SRS -> "SRS / Airbags"
+    PidCategory.BODY -> "Body"
+    PidCategory.CLIMATE -> "HVAC / Climate"
+    PidCategory.TPMS -> "Tire pressure"
+    PidCategory.OTHER -> "Other"
+}
+
+private fun profileDisplayName(profile: String): String = when {
+    profile.equals("SAE", ignoreCase = true) -> "Standard OBD (Mode 01)"
+    profile.contains("tcm", ignoreCase = true) -> "Honda Transmission"
+    profile.contains("engine", ignoreCase = true) -> "Honda Engine"
+    profile.contains("abs", ignoreCase = true) -> "Honda ABS"
+    profile.contains("eps", ignoreCase = true) -> "Honda EPS"
+    profile.contains("srs", ignoreCase = true) -> "Honda SRS"
+    profile.contains("body", ignoreCase = true) -> "Honda Body"
+    profile.contains("climate", ignoreCase = true) -> "Honda HVAC"
+    profile.contains("tpms", ignoreCase = true) -> "Honda TPMS"
+    else -> profile
+}
+
+/**
+ * In-dialog drill-down: Categories → Subcategories (profile packs) → Sensors.
+ * Type in the search box to jump straight to matching sensors.
+ */
+@Composable
+private fun SensorPickerDialog(
+    catalog: List<PidDefinition>,
+    onPick: (PidDefinition) -> Unit,
+    onDismiss: () -> Unit,
+    restoreLabel: String? = null,
+    onRestore: (() -> Unit)? = null,
+) {
+    var category by remember { mutableStateOf<PidCategory?>(null) }
+    var subProfile by remember { mutableStateOf<String?>(null) }
+    var query by remember { mutableStateOf("") }
+    val q = query.trim()
+    val searching = q.length >= 2
+
+    val title = when {
+        searching -> "Search sensors"
+        category == null -> "Add sensor — pick category"
+        subProfile == null -> category!!.displayName()
+        else -> "${category!!.displayName()} › ${profileDisplayName(subProfile!!)}"
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title, color = TextPrimary, fontSize = 15.sp, fontWeight = FontWeight.Bold) },
+        text = {
+            Column(modifier = Modifier.fillMaxHeight(0.82f)) {
+                OutlinedTextField(
+                    value = query,
+                    onValueChange = { query = it },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 8.dp),
+                    singleLine = true,
+                    placeholder = {
+                        Text("Type to search (e.g. gear, MAF, 01A4)", color = TextMuted, fontSize = 12.sp)
+                    },
+                    textStyle = TextStyle(color = TextPrimary, fontSize = 14.sp),
+                )
+                Column(modifier = Modifier.weight(1f).verticalScroll(rememberScrollState())) {
+                    if (restoreLabel != null && onRestore != null && !searching) {
+                        PickerRow(
+                            title = "Restore default",
+                            subtitle = restoreLabel,
+                            trailing = "↺",
+                            onClick = onRestore,
+                        )
+                    }
+                    if (searching) {
+                        val hits = catalog.filter { pid ->
+                            pid.label.contains(q, true) ||
+                                pid.request.contains(q, true) ||
+                                pid.id.contains(q, true) ||
+                                pid.unit.contains(q, true) ||
+                                pid.category.displayName().contains(q, true) ||
+                                profileDisplayName(pid.profile).contains(q, true)
+                        }.sortedBy { it.label }.take(60)
+                        if (hits.isEmpty()) {
+                            Text(
+                                text = "No sensors match \"$q\"",
+                                color = TextMuted,
+                                fontSize = 12.sp,
+                                modifier = Modifier.padding(vertical = 8.dp),
+                            )
+                        } else {
+                            hits.forEach { pid ->
+                                PickerRow(
+                                    title = pid.label,
+                                    subtitle = listOfNotNull(
+                                        pid.request,
+                                        pid.unit.takeIf { it.isNotBlank() },
+                                        pid.category.displayName(),
+                                    ).joinToString(" · "),
+                                    trailing = "+",
+                                    onClick = { onPick(pid) },
+                                )
+                            }
+                        }
+                    } else {
+                        Text(
+                            text = "Scroll categories, or type above to search",
+                            color = TextMuted,
+                            fontSize = 11.sp,
+                            modifier = Modifier.padding(bottom = 6.dp),
+                        )
+                        if (category != null) {
+                            Text(
+                                text = if (subProfile != null) "← Subcategories" else "← Categories",
+                                color = MaterialTheme.colorScheme.primary,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        if (subProfile != null) {
+                                            subProfile = null
+                                        } else {
+                                            category = null
+                                        }
+                                    }
+                                    .padding(vertical = 6.dp),
+                            )
+                        }
+
+                        when {
+                            category == null -> {
+                                val cats = catalog
+                                    .groupBy { it.category }
+                                    .entries
+                                    .sortedBy { it.key.displayName() }
+                                cats.forEach { (cat, pids) ->
+                                    PickerRow(
+                                        title = cat.displayName(),
+                                        subtitle = "${pids.size} sensors",
+                                        trailing = "›",
+                                        onClick = {
+                                            category = cat
+                                            subProfile = null
+                                        },
+                                    )
+                                }
+                            }
+
+                            subProfile == null -> {
+                                val inCat = catalog.filter { it.category == category }
+                                val groups = inCat.groupBy { it.profile }.entries.sortedBy { profileDisplayName(it.key) }
+                                if (groups.size <= 1) {
+                                    inCat.sortedBy { it.label }.forEach { pid ->
+                                        PickerRow(
+                                            title = pid.label,
+                                            subtitle = pid.request + if (pid.unit.isNotBlank()) " · ${pid.unit}" else "",
+                                            trailing = "+",
+                                            onClick = { onPick(pid) },
+                                        )
+                                    }
+                                } else {
+                                    groups.forEach { (profile, pids) ->
+                                        PickerRow(
+                                            title = profileDisplayName(profile),
+                                            subtitle = "${pids.size} sensors",
+                                            trailing = "›",
+                                            onClick = { subProfile = profile },
+                                        )
+                                    }
+                                }
+                            }
+
+                            else -> {
+                                catalog
+                                    .filter { it.category == category && it.profile == subProfile }
+                                    .sortedBy { it.label }
+                                    .forEach { pid ->
+                                        PickerRow(
+                                            title = pid.label,
+                                            subtitle = pid.request + if (pid.unit.isNotBlank()) " · ${pid.unit}" else "",
+                                            trailing = "+",
+                                            onClick = { onPick(pid) },
+                                        )
+                                    }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel", color = MaterialTheme.colorScheme.primary) }
+        },
+        containerColor = MaterialTheme.colorScheme.background,
+    )
+}
 
 private sealed class PickerTarget {
     data class ExtraSlot(val index: Int) : PickerTarget()
     data class RemapBase(val label: String) : PickerTarget()
+}
+
+@Composable
+private fun PickerRow(
+    title: String,
+    subtitle: String,
+    trailing: String,
+    onClick: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = 4.dp)
+            .clip(RoundedCornerShape(8.dp))
+            .clickable(onClick = onClick)
+            .background(MaterialTheme.colorScheme.surface)
+            .padding(horizontal = 10.dp, vertical = 6.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(title, color = TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(subtitle, color = TextMuted, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+        Text(trailing, color = MaterialTheme.colorScheme.primary, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+    }
 }
 
 @Composable

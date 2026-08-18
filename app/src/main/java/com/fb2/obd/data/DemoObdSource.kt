@@ -14,11 +14,9 @@ import com.fb2.obd.obd.ReadinessStatus
 import com.fb2.obd.obd.SnapshotFreshness
 import com.fb2.obd.obd.VehicleInfo
 import com.fb2.obd.obd.VehicleSnapshot
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.MutableSharedFlow
-import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.delay
 import kotlin.math.roundToInt
 import kotlin.math.sin
 
@@ -42,8 +40,6 @@ class DemoObdSource(
         DemoFlavour.GENERIC -> "Demo Generic OBD2"
     }
     override val isLive: Boolean = false
-
-    private val probeOut = MutableSharedFlow<PidProbeResult>(extraBufferCapacity = 128)
 
     override fun snapshots(): Flow<VehicleSnapshot> = flow {
         var t = 0.0
@@ -217,28 +213,23 @@ class DemoObdSource(
         "221316" to 12.0, // total misfire
     )
 
-    override fun enqueueBackgroundProbes(pids: List<PidDefinition>) {
-        pids.forEach { probeOut.tryEmit(demoProbe(it)) }
-    }
-
-    override fun backgroundProbes() = probeOut.asSharedFlow()
-
     override suspend fun probePids(
         pids: List<PidDefinition>,
         recoverFirst: Boolean,
-    ) = pids.map { demoProbe(it) }
-
-    private fun demoProbe(pid: PidDefinition): PidProbeResult = when {
-        pid.request.equals("0103", true) -> {
-            PidProbeResult(pid, true, 2.0, "41 03 02 00")
+    ) = pids.map { pid ->
+        when {
+            pid.request.equals("0103", true) -> {
+                // Byte A = 0x02 → CLOSED LOOP
+                PidProbeResult(pid, true, 2.0, "41 03 02 00")
+            }
+            pid.request.startsWith("01") -> {
+                val sample = pid.decode(intArrayOf(120, 0, 0, 0)) ?: 1.0
+                PidProbeResult(pid, true, sample, "OK")
+            }
+            demoMode22.containsKey(pid.request) ->
+                PidProbeResult(pid, true, demoMode22[pid.request], "62 OK")
+            else -> PidProbeResult(pid, false, null, "NO DATA")
         }
-        pid.request.startsWith("01") -> {
-            val sample = pid.decode(intArrayOf(120, 0, 0, 0)) ?: 1.0
-            PidProbeResult(pid, true, sample, "OK")
-        }
-        demoMode22.containsKey(pid.request) ->
-            PidProbeResult(pid, true, demoMode22[pid.request], "62 OK")
-        else -> PidProbeResult(pid, false, null, "NO DATA")
     }
 
     override suspend fun probeHondaModules(): List<ModuleScanResult> {

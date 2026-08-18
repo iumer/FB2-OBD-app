@@ -8,9 +8,8 @@ import kotlinx.coroutines.delay
  * Runs [DeepSearchKnowledgeBase] strategies against a live [ObdSource].
  *
  * Smart flow (learned from FB2 + cheap ELM clones + Torque):
- * 1. Hold heroes-only Mode 01 (RPM/Speed/Coolant/MAF/ATRV) so the Dash does not
- *    freeze or TTL-blank. Each ATSH strategy runs [ObdSource.withLinkExclusive]
- *    so headers cannot interleave with a hero PID.
+ * 1. Pause continuous Mode 01 polling so ATSH/ATSP thrash cannot interleave
+ *    with the Dash (that produced laggy / wrong values during deep search).
  * 2. Soft-restore the adapter first (don't start mid-UNABLE storm).
  * 3. Prefer adapter-local recipes (ATRV) — they work even when the ECU link is down.
  * 4. Always try simple broadcast Mode 01 forces next (e.g. Coolant 0105) — these
@@ -22,9 +21,7 @@ object DeepSensorSearch {
 
     private val BAD = listOf("NO DATA", "UNABLE", "ERROR", "?", "STOPPED", "BUS INIT")
 
-    private val FULL_RESTORE = listOf("ATD", "ATE0", "ATL0", "ATS0", "ATSH7DF", "ATAR")
-    /** Last resort when gentle restore leaves the bus dead — includes ATSP0. */
-    private val HARD_RESTORE = listOf("ATD", "ATE0", "ATL0", "ATS0", "ATSP0", "ATSH7DF", "ATAR")
+    private val FULL_RESTORE = listOf("ATD", "ATE0", "ATL0", "ATS0", "ATSP0", "ATSH7DF", "ATAR")
 
     /** Soft-restore after this many consecutive UNABLE/timeout misses (keep walking the list). */
     private const val RESTORE_EVERY_UNABLE = 2
@@ -49,8 +46,8 @@ object DeepSensorSearch {
         }
 
         ObdLogger.logDebug(ObdLogger.Dir.INFO, "DEEP SEARCH begin [$label] ${all.size} strategies")
-        source.setPollHold(PollHold.HEROES_ONLY)
-        onProgress(0, all.size, "Keeping live Dash (heroes)…")
+        source.pausePolling()
+        onProgress(0, all.size, "Pausing live Dash poll…")
         delay(80L)
 
         val adapterLocal = all.filter { it.isAdapterLocal }
@@ -60,22 +57,22 @@ object DeepSensorSearch {
 
         try {
             onProgress(0, all.size, "Restoring adapter…")
-            source.withLinkExclusive { restore(source) }
+            restore(source)
 
             // --- Phase A: adapter-local (ATRV etc.) with retries ---
             for ((i, strategy) in adapterLocal.withIndex()) {
                 attempts++
                 onProgress(attempts, all.size, strategy.title)
                 delay(if (source.isLive) 40L else 120L)
-                val hit = source.withLinkExclusive { tryStrategy(source, strategy) }
+                val hit = tryStrategy(source, strategy)
                 if (hit != null) {
                     return success(label, pid, requestHint, attempts, hit, notes)
                 }
                 if (strategy.request.equals("ATRV", true) && i == 0) {
-                    source.withLinkExclusive { restore(source) }
+                    restore(source)
                     attempts++
                     onProgress(attempts, all.size, "Retry ${strategy.title}")
-                    source.withLinkExclusive { tryStrategy(source, strategy) }?.let { hit2 ->
+                    tryStrategy(source, strategy)?.let { hit2 ->
                         return success(label, pid, requestHint, attempts, hit2, notes)
                     }
                 }
@@ -86,12 +83,12 @@ object DeepSensorSearch {
             // made a quick 010C ping look dead while ELM still shows LINKED.
             if (simpleForce.isNotEmpty()) {
                 onProgress(attempts.coerceAtLeast(0), all.size, "Trying broadcast Mode 01…")
-                source.withLinkExclusive { restore(source) }
+                restore(source)
                 for (strategy in simpleForce) {
                     attempts++
                     onProgress(attempts, all.size, strategy.title)
                     delay(if (source.isLive) 40L else 120L)
-                    source.withLinkExclusive { tryStrategy(source, strategy) }?.let { hit ->
+                    tryStrategy(source, strategy)?.let { hit ->
                         return success(label, pid, requestHint, attempts, hit, notes)
                     }
                 }
@@ -103,22 +100,16 @@ object DeepSensorSearch {
             if (!busOk) {
                 notes += "ECU link check was shaky after restore (UNABLE / timeout). " +
                     "Already tried ${simpleForce.size} broadcast Mode 01 strategies. " +
-                    "Retrying once with protocol search (ATSP0) before skipping advanced."
-                source.withLinkExclusive { restore(source, hard = true) }
-                val busOkHard = busHealthy(source)
-                if (!busOkHard) {
-                    notes += "Still shaky after ATSP0. " +
-                        "Skipping ${advanced.size} header/Mode 22 strategies that need a solid ECM link."
-                    return DeepSearchReport(
-                        targetLabel = label,
-                        targetId = pid?.id ?: requestHint ?: label,
-                        attempts = attempts,
-                        hit = null,
-                        notes = notes + "Still unable to find this sensor. " +
-                            "Tried $attempts / ${all.size} strategies" +
-                            if (advanced.isNotEmpty()) " (skipped ${advanced.size} advanced)." else ".",
-                    )
-                }
+                    "Skipping ${advanced.size} header/Mode 22 strategies that need a solid ECM link."
+                return DeepSearchReport(
+                    targetLabel = label,
+                    targetId = pid?.id ?: requestHint ?: label,
+                    attempts = attempts,
+                    hit = null,
+                    notes = notes + "Still unable to find this sensor. " +
+                        "Tried $attempts / ${all.size} strategies" +
+                        if (advanced.isNotEmpty()) " (skipped ${advanced.size} advanced)." else ".",
+                )
             }
 
             // --- Phase D: walk advanced list while bus healthy ---
@@ -128,7 +119,7 @@ object DeepSensorSearch {
                 onProgress(attempts, all.size, strategy.title)
                 delay(if (source.isLive) 25L else 150L)
 
-                val hit = source.withLinkExclusive { tryStrategy(source, strategy) }
+                val hit = tryStrategy(source, strategy)
                 if (hit != null) {
                     return success(label, pid, requestHint, attempts, hit, notes)
                 }
@@ -138,7 +129,7 @@ object DeepSensorSearch {
                     unableStreak++
                     if (unableStreak % RESTORE_EVERY_UNABLE == 0) {
                         onProgress(attempts, all.size, "Soft-restore after UNABLE…")
-                        source.withLinkExclusive { restore(source) }
+                        restore(source)
                     }
                 } else {
                     unableStreak = 0
@@ -149,9 +140,9 @@ object DeepSensorSearch {
             }
         } finally {
             // Always restore + resume so Dash never stays frozen after deep search.
-            runCatching { source.withLinkExclusive { restore(source) } }
-            source.setPollHold(PollHold.NONE)
-            ObdLogger.logDebug(ObdLogger.Dir.INFO, "DEEP SEARCH restore + heroes-only lift done [$label]")
+            runCatching { restore(source) }
+            source.resumePolling()
+            ObdLogger.logDebug(ObdLogger.Dir.INFO, "DEEP SEARCH restore + poll resume done [$label]")
         }
 
         ObdLogger.logDebug(ObdLogger.Dir.INFO, "DEEP SEARCH miss [$label] after $attempts / ${all.size} tries")
@@ -187,14 +178,13 @@ object DeepSensorSearch {
         )
     }
 
-    private suspend fun restore(source: ObdSource, hard: Boolean = false) {
-        val seq = if (hard) HARD_RESTORE else FULL_RESTORE
-        seq.forEach { cmd ->
+    private suspend fun restore(source: ObdSource) {
+        FULL_RESTORE.forEach { cmd ->
             runCatching { source.command(cmd) }
             delay(30L)
         }
-        // Brief settle; hard path needs longer for ATSP0 SEARCHING…
-        delay(if (hard) 120L else 40L)
+        // Give ATSP0 SEARCHING… time before the next PID.
+        delay(120L)
     }
 
     private suspend fun busHealthy(source: ObdSource): Boolean {

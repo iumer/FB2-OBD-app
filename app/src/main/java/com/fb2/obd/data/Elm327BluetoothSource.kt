@@ -7,7 +7,6 @@ import android.bluetooth.BluetoothSocket
 import com.fb2.obd.obd.DiagnosticParsers
 import com.fb2.obd.obd.Dtc
 import com.fb2.obd.obd.DtcDecoder
-import com.fb2.obd.obd.ElmLinkForensics
 import com.fb2.obd.obd.FreezeFrame
 import com.fb2.obd.obd.FuelSystemDecoder
 import com.fb2.obd.obd.GearEstimator
@@ -21,13 +20,11 @@ import com.fb2.obd.obd.ObdResponseParser
 import com.fb2.obd.obd.PidDefinition
 import com.fb2.obd.obd.PidPollPlanner
 import com.fb2.obd.obd.PidProbeResult
-import com.fb2.obd.obd.PollHold
 import com.fb2.obd.obd.ReadinessStatus
 import com.fb2.obd.obd.SnapshotFreshness
 import com.fb2.obd.obd.SupportedPids
 import com.fb2.obd.obd.VehicleInfo
 import com.fb2.obd.obd.VehicleSnapshot
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.delay
@@ -36,14 +33,9 @@ import kotlinx.coroutines.flow.channelFlow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.retryWhen
 import kotlinx.coroutines.isActive
-import kotlinx.coroutines.flow.MutableSharedFlow
-import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.launch
 import java.io.IOException
 import java.util.UUID
-import java.util.concurrent.ConcurrentLinkedQueue
-import java.util.concurrent.atomic.AtomicInteger
-import java.util.concurrent.atomic.AtomicReference
 
 /**
  * Real ELM327 adapter over Bluetooth Classic (SPP), built on a shared
@@ -65,23 +57,12 @@ class Elm327BluetoothSource(
     override val name: String = "ELM327 (Bluetooth)"
     override val isLive: Boolean = true
 
-    val deviceAddress: String
-        @SuppressLint("MissingPermission")
-        get() = device.address
-
-    val deviceName: String
-        @SuppressLint("MissingPermission")
-        get() = runCatching { device.name }.getOrNull().orEmpty()
-
     @Volatile
     private var connection: Elm327Connection? = null
 
-    private val pollHold = AtomicReference(PollHold.NONE)
-    private val exclusiveCount = AtomicInteger(0)
-    private val probeQueue = ConcurrentLinkedQueue<PidDefinition>()
-    private val keepalivePids = AtomicReference<List<PidDefinition>>(emptyList())
-    private val probeResults = MutableSharedFlow<PidProbeResult>(extraBufferCapacity = 64)
-    private var keepaliveIndex = 0
+    /** When true, the Mode 01 poll loop yields so deep search owns the serial link. */
+    @Volatile
+    private var pollingPaused: Boolean = false
 
     /** After deep search, force a soft recover + clear fail streaks on resume. */
     @Volatile
@@ -90,42 +71,16 @@ class Elm327BluetoothSource(
     /** Rolling ATRV samples for median filter (cheap clones spit occasional false lows). */
     private val atrvWindow = ArrayDeque<Double>(3)
 
-    override fun setPollHold(hold: PollHold) {
-        val prev = pollHold.getAndSet(hold)
-        // Only a real full pause (picker/deep-search end / legacy pausePolling) needs
-        // post-hold soft recover. HEROES_ONLY → NONE runs every ~12s for readiness
-        // and every DIAG probe — recovering there thrashed Mode 01 and left ATRV-only.
-        if (shouldRecoverAfterResume(prev, hold)) {
-            recoverAfterResume = true
-        }
-        logger.logDebug(ObdLogger.Dir.INFO, "ELM poll hold $prev → $hold")
+    override fun pausePolling() {
+        pollingPaused = true
+        logger.logDebug(ObdLogger.Dir.INFO, "ELM poll paused")
     }
 
-    override fun pollHold(): PollHold = pollHold.get()
-
-    override suspend fun <T> withLinkExclusive(block: suspend () -> T): T {
-        exclusiveCount.incrementAndGet()
-        return try {
-            block()
-        } finally {
-            exclusiveCount.decrementAndGet()
-        }
+    override fun resumePolling() {
+        pollingPaused = false
+        recoverAfterResume = true
+        logger.logDebug(ObdLogger.Dir.INFO, "ELM poll resumed (recover pending)")
     }
-
-    override fun enqueueBackgroundProbes(pids: List<PidDefinition>) {
-        pids.forEach { probeQueue.offer(it) }
-    }
-
-    override fun clearBackgroundProbes() {
-        probeQueue.clear()
-    }
-
-    override fun setKeepaliveProbes(pids: List<PidDefinition>) {
-        keepalivePids.set(pids.toList())
-        keepaliveIndex = 0
-    }
-
-    override fun backgroundProbes() = probeResults.asSharedFlow()
 
     private val polled = listOf(
         ObdPid.ENGINE_RPM,
@@ -192,44 +147,30 @@ class Elm327BluetoothSource(
 
                 var snapshot = VehicleSnapshot.EMPTY.copy(unsupportedPids = unsupported)
                 var deadCycles = 0
-                var softRecoverCount = 0
                 val failStreak = mutableMapOf<ObdPid, Int>()
                 val freshness = SnapshotFreshness()
                 var cycles = 0
-                var lastMode01OkMs = System.currentTimeMillis()
-                var lastOkPid: String? = null
-                var consecutiveUnableCycles = 0
-                var lastEmitted: VehicleSnapshot? = null
                 while (isActive) {
-                    // Exclusive ATSH (one deep-search strategy) owns the socket.
-                    // Keep last-good Dash numbers on screen — do not let TTL blank them.
-                    while ((exclusiveCount.get() > 0 || pollHold.get() == PollHold.FULL_PAUSE) && isActive) {
-                        val now = System.currentTimeMillis()
-                        snapshot = freshness.sanitize(
-                            snapshot.withGear(hasEcuGear),
-                            now,
-                            rpmUpdatedThisCycle = false,
-                            holdValues = true,
-                        )
-                        trySend(snapshot)
-                        lastEmitted = snapshot
-                        delay(80L)
+                    // Deep search / exclusive probes own the RFCOMM socket — do not
+                    // interleave Mode 01 polls (that caused laggy/wrong Dash values).
+                    while (pollingPaused && isActive) {
+                        delay(40L)
                     }
                     if (!isActive) break
 
                     if (recoverAfterResume) {
                         recoverAfterResume = false
-                        softRecover(conn, gentle = true)
+                        softRecover(conn)
                         failStreak.clear()
                         deadCycles = 0
-                        softRecoverCount = 0
-                        consecutiveUnableCycles = 0
+                        // Deep search paused polling — prior lastOk clocks aged out.
+                        // Remake marks for fields we still hold so sanitize does not
+                        // blank the Dash before the first post-resume poll lands.
                         freshness.remakePresent(snapshot, System.currentTimeMillis())
-                        logger.logDebug(ObdLogger.Dir.INFO, "post-hold soft recover + streaks cleared + freshness remade")
+                        logger.logDebug(ObdLogger.Dir.INFO, "post-deep-search soft recover + streaks cleared + freshness remade")
                     }
 
                     cycles++
-                    val cycleStartMs = System.currentTimeMillis()
                     var responded = 0
                     var timedOut = 0
                     var unable = 0
@@ -240,7 +181,7 @@ class Elm327BluetoothSource(
 
                     // ATRV every cycle — adapter-local, cheap, Torque-style battery source.
                     var atrvThisCycle: Double? = null
-                    readAtrv(conn, logVerbose = cycles % 10 == 1)?.let { v ->
+                    readAtrv(conn)?.let { v ->
                         responded++
                         atrvThisCycle = v
                         snapshot = snapshot.copy(batteryVolts = v)
@@ -250,18 +191,15 @@ class Elm327BluetoothSource(
                     }
 
                     val recovering = deadCycles > 0
-                    val holdNow = pollHold.get()
                     // Heroes every cycle; rotate secondaries so Speed cannot freeze behind a long PID list.
                     val cyclePids = PidPollPlanner.selectForCycle(
                         activePids = activePids,
                         failStreak = failStreak,
                         cycle = cycles,
                         recovering = recovering,
-                        hold = holdNow,
                     )
                     for (pid in cyclePids) {
                         if (busLost) break
-                        if (exclusiveCount.get() > 0) break
 
                         val streak = failStreak[pid] ?: 0
                         val raw = try {
@@ -273,32 +211,18 @@ class Elm327BluetoothSource(
                                 ObdLogger.Dir.INFO,
                                 "skip ${pid.request}: ${io.message} (fail#${failStreak[pid]})",
                             )
-                            // Socket death mid-cycle — escalate immediately (not a soft ECU glitch).
-                            if ((io.message ?: "").contains("socket closed", ignoreCase = true)) {
-                                logger.logEvent(
-                                    ElmLinkForensics.CATEGORY,
-                                    ElmLinkForensics.message(
-                                        reason = ElmLinkForensics.REASON_SOCKET_CLOSED,
-                                        lastOkPid = lastOkPid,
-                                        silenceMs = System.currentTimeMillis() - lastMode01OkMs,
-                                        socketConnected = conn.isConnected(),
-                                        detail = io.message,
-                                    ),
-                                )
-                                throw io
-                            }
                             continue
                         }
 
                         if (isUnable(raw)) {
                             unable++
                             failStreak[pid] = streak + 1
-                            // Need a few UNABLE in one cycle before aborting — Torque is more patient.
-                            if (unable >= UNABLE_BEFORE_BUS_LOST) {
+                            // ECU link gone — stop burning timeouts on the rest of the cycle.
+                            if (unable >= 2) {
                                 busLost = true
                                 logger.logDebug(
                                     ObdLogger.Dir.INFO,
-                                    "bus lost (UNABLE×$unable) — soft recover",
+                                    "bus lost (UNABLE) — soft recover",
                                 )
                             }
                             continue
@@ -310,8 +234,6 @@ class Elm327BluetoothSource(
                             mode01Ok = true
                             failStreak[pid] = 0
                             val okAt = System.currentTimeMillis()
-                            lastMode01OkMs = okAt
-                            lastOkPid = pid.request
                             val key = SnapshotFreshness.keyFor(pid)
                             // Do not let 0142 overwrite a fresh ATRV reading this cycle.
                             if (pid == ObdPid.CONTROL_MODULE_VOLTAGE && atrvThisCycle != null) {
@@ -324,10 +246,10 @@ class Elm327BluetoothSource(
                             }
                             if (pid == ObdPid.ENGINE_RPM) rpmUpdated = true
                         } else {
-                            // Frame arrived but didn't decode (SEARCHING… / garbage).
-                            // Do NOT count as mode01Ok — that false "healthy" reset left
-                            // heroes stale and blanked via freshness without reconnecting.
+                            // Frame arrived but didn't decode — still counts as link alive.
                             responded++
+                            mode01Ok = true
+                            // Heroes keep retrying next cycle; cap streak so planner never skips them.
                             failStreak[pid] = if (PidPollPlanner.isAlways(pid)) {
                                 (streak + 1).coerceAtMost(1)
                             } else {
@@ -339,7 +261,7 @@ class Elm327BluetoothSource(
                     // Extra ATRV refresh if volts still missing after Mode 01.
                     val voltFail = failStreak[ObdPid.CONTROL_MODULE_VOLTAGE] ?: 0
                     if (atrvThisCycle == null && (snapshot.batteryVolts == null || voltFail >= 2)) {
-                        readAtrv(conn, logVerbose = true)?.let { v ->
+                        readAtrv(conn)?.let { v ->
                             responded++
                             atrvThisCycle = v
                             snapshot = snapshot.copy(batteryVolts = v)
@@ -349,158 +271,31 @@ class Elm327BluetoothSource(
                         }
                     }
 
-                    // Sensor picker / Dash + extras: one extra PID per cycle so Dash heroes
-                    // never pause. Mutex still serialises with command() callers.
-                    if (holdNow != PollHold.FULL_PAUSE && !busLost && exclusiveCount.get() == 0) {
-                        nextBackgroundPid()?.let { extra ->
-                            val result = probeOneBackground(conn, extra)
-                            probeResults.tryEmit(result)
-                            if (result.supported && result.sample != null) {
-                                snapshot = overlayCatalogPid(snapshot, extra, result.sample)
-                                polled.firstOrNull { it.request.equals(extra.request, true) }?.let { obd ->
-                                    val okAt = System.currentTimeMillis()
-                                    freshness.markPid(obd, okAt)
-                                    markedThisCycle += SnapshotFreshness.keyFor(obd)
-                                }
-                            }
-                        }
-                    }
-
-                    val cycleMs = System.currentTimeMillis() - cycleStartMs
-                    val atrvOk = atrvThisCycle != null
-                    val silenceMs = System.currentTimeMillis() - lastMode01OkMs
-                    // DIAG/deep-search can raise exclusive mid-cycle. Do not count
-                    // that as a dead Mode 01 frame (would RETRY/reconnect).
-                    val interruptedByExclusive = exclusiveCount.get() > 0
-
-                    if (interruptedByExclusive && !busLost) {
-                        // Socket yielded to Faults/VIN/ATSH — not a link failure.
-                    } else if (busLost) {
-                        consecutiveUnableCycles++
-                        softRecoverCount++
-                        // Soft recover can take seconds — emit a heartbeat first so the
-                        // 8–12s UI stale-watch does not blank bubble/Dash mid-recover.
-                        lastEmitted?.let { trySend(it) }
-                        softRecover(conn, gentle = true)
+                    if (busLost) {
+                        softRecover(conn)
                         deadCycles++
-                        logger.logEvent(
-                            ElmLinkForensics.CATEGORY,
-                            ElmLinkForensics.message(
-                                reason = ElmLinkForensics.REASON_SOFT_RECOVER,
-                                unable = unable,
-                                timeouts = timedOut,
-                                deadCycles = deadCycles,
-                                softRecover = softRecoverCount,
-                                mode01Ok = false,
-                                atrvOk = atrvOk,
-                                atrvV = atrvThisCycle,
-                                lastOkPid = lastOkPid,
-                                silenceMs = silenceMs,
-                                cycleMs = cycleMs,
-                                pidsThisCycle = cyclePids.size,
-                                socketConnected = conn.isConnected(),
-                                detail = "UNABLE×$unable consecutiveUnableCycles=$consecutiveUnableCycles",
-                            ),
-                        )
                         logger.logDebug(
                             ObdLogger.Dir.INFO,
-                            "soft recover #$softRecoverCount (unable=$unable atrvOk=$atrvOk)",
+                            "soft recover #$deadCycles (unable=$unable)",
                         )
-                        val softCap = if (atrvOk) {
-                            MAX_SOFT_RECOVER_WHEN_ATRV_OK
-                        } else {
-                            MAX_SOFT_RECOVER_BEFORE_RECONNECT
-                        }
-                        if (softRecoverCount >= softCap) {
-                            logger.logEvent(
-                                ElmLinkForensics.CATEGORY,
-                                ElmLinkForensics.message(
-                                    reason = ElmLinkForensics.REASON_HARD_RECONNECT,
-                                    unable = unable,
-                                    deadCycles = deadCycles,
-                                    softRecover = softRecoverCount,
-                                    atrvOk = atrvOk,
-                                    atrvV = atrvThisCycle,
-                                    lastOkPid = lastOkPid,
-                                    silenceMs = silenceMs,
-                                    socketConnected = conn.isConnected(),
-                                    detail = "softRecoverCap=$softCap",
-                                ),
-                            )
+                        if (deadCycles >= MAX_SOFT_RECOVER_BEFORE_RECONNECT) {
                             throw IOException(
-                                "ECU bus lost after $softRecoverCount soft recovers — reconnecting",
+                                "ECU bus lost after $deadCycles soft recovers — reconnecting",
                             )
                         }
                     } else if (!mode01Ok) {
-                        consecutiveUnableCycles = 0
                         // ATRV-only or total silence — do not treat as a healthy Dash cycle.
                         deadCycles++
-                        val deadCap = if (atrvOk) {
-                            MAX_DEAD_CYCLES_WHEN_ATRV_OK
-                        } else {
-                            MAX_DEAD_CYCLES_BEFORE_RECONNECT
-                        }
-                        logger.logEvent(
-                            ElmLinkForensics.CATEGORY,
-                            ElmLinkForensics.message(
-                                reason = ElmLinkForensics.REASON_DEAD_MODE01,
-                                unable = unable,
-                                timeouts = timedOut,
-                                deadCycles = deadCycles,
-                                mode01Ok = false,
-                                atrvOk = atrvOk,
-                                atrvV = atrvThisCycle,
-                                lastOkPid = lastOkPid,
-                                silenceMs = silenceMs,
-                                cycleMs = cycleMs,
-                                pidsThisCycle = cyclePids.size,
-                                socketConnected = conn.isConnected(),
-                                detail = "deadCap=$deadCap",
-                            ),
-                        )
                         logger.logDebug(
                             ObdLogger.Dir.INFO,
                             "dead cycle $deadCycles (timeouts=$timedOut unable=$unable/" +
-                                "${activePids.size} atrvOnly=${atrvOk})",
+                                "${activePids.size} atrvOnly=${responded > 0})",
                         )
-                        if (deadCycles >= deadCap) {
-                            logger.logEvent(
-                                ElmLinkForensics.CATEGORY,
-                                ElmLinkForensics.message(
-                                    reason = ElmLinkForensics.REASON_HARD_RECONNECT,
-                                    timeouts = timedOut,
-                                    deadCycles = deadCycles,
-                                    atrvOk = atrvOk,
-                                    atrvV = atrvThisCycle,
-                                    lastOkPid = lastOkPid,
-                                    silenceMs = silenceMs,
-                                    socketConnected = conn.isConnected(),
-                                    detail = "deadMode01Cap=$deadCap",
-                                ),
-                            )
+                        if (deadCycles >= 4) {
                             throw IOException("No ECU Mode 01 response after $deadCycles dead cycles")
                         }
                     } else {
-                        if (deadCycles > 0 || softRecoverCount > 0) {
-                            logger.logEvent(
-                                ElmLinkForensics.CATEGORY,
-                                ElmLinkForensics.message(
-                                    reason = ElmLinkForensics.REASON_LINK_OK,
-                                    deadCycles = deadCycles,
-                                    softRecover = softRecoverCount,
-                                    atrvOk = atrvOk,
-                                    atrvV = atrvThisCycle,
-                                    lastOkPid = lastOkPid,
-                                    cycleMs = cycleMs,
-                                    pidsThisCycle = cyclePids.size,
-                                    socketConnected = conn.isConnected(),
-                                    detail = "recovered",
-                                ),
-                            )
-                        }
                         deadCycles = 0
-                        softRecoverCount = 0
-                        consecutiveUnableCycles = 0
                     }
 
                     // Anything decoded this cycle must survive sanitize even if the
@@ -511,27 +306,15 @@ class Elm327BluetoothSource(
                         snapshot.withGear(hasEcuGear),
                         sanitizeAt,
                         rpmUpdatedThisCycle = rpmUpdated,
-                        holdValues = interruptedByExclusive || holdNow == PollHold.FULL_PAUSE,
                     )
                     val hasAny = snapshot.rpm != null || snapshot.coolantC != null ||
                         snapshot.batteryVolts != null || snapshot.mafGps != null ||
                         snapshot.speedKmh != null
-                    if (hasAny || deadCycles == 0 || interruptedByExclusive) {
+                    if (hasAny || deadCycles == 0) {
                         trySend(snapshot)
-                        lastEmitted = snapshot
                     }
                 }
             } catch (e: Exception) {
-                if (e !is CancellationException) {
-                    logger.logEvent(
-                        ElmLinkForensics.CATEGORY,
-                        ElmLinkForensics.message(
-                            reason = ElmLinkForensics.reasonFromThrowable(e),
-                            socketConnected = connection?.isConnected(),
-                            detail = e.message,
-                        ),
-                    )
-                }
                 logger.logDebug(ObdLogger.Dir.INFO, "ELM poll stopped: ${e.message}")
                 close(e)
             }
@@ -546,15 +329,6 @@ class Elm327BluetoothSource(
         .retryWhen { cause, attempt ->
             if (cause is IOException) {
                 val backoff = (1_000L * (attempt + 1).coerceAtMost(8)).coerceAtMost(10_000L)
-                logger.logEvent(
-                    ElmLinkForensics.CATEGORY,
-                    ElmLinkForensics.message(
-                        reason = ElmLinkForensics.REASON_RECONNECT_ATTEMPT,
-                        retryAttempt = attempt + 1,
-                        backoffMs = backoff,
-                        detail = cause.message,
-                    ),
-                )
                 logger.logDebug(
                     ObdLogger.Dir.INFO,
                     "reconnect attempt ${attempt + 1} in ${backoff}ms (${cause.message})",
@@ -562,13 +336,6 @@ class Elm327BluetoothSource(
                 delay(backoff)
                 true
             } else {
-                logger.logEvent(
-                    ElmLinkForensics.CATEGORY,
-                    ElmLinkForensics.message(
-                        reason = ElmLinkForensics.REASON_RECONNECT_ABORT,
-                        detail = cause.message,
-                    ),
-                )
                 logger.logDebug(ObdLogger.Dir.INFO, "reconnect aborted: ${cause.message}")
                 false
             }
@@ -577,38 +344,34 @@ class Elm327BluetoothSource(
 
     override suspend fun readStoredDtcs(): List<Dtc> {
         val conn = connection ?: return emptyList()
-        val raw = execExclusive(conn, "03") ?: return emptyList()
-        return DtcDecoder.decode(raw, 0x43)
+        return runCatching { DtcDecoder.decode(conn.exec("03"), 0x43) }.getOrDefault(emptyList())
     }
 
     override suspend fun readPendingDtcs(): List<Dtc> {
         val conn = connection ?: return emptyList()
-        val raw = execExclusive(conn, "07") ?: return emptyList()
-        return DtcDecoder.decode(raw, 0x47)
+        return runCatching { DtcDecoder.decode(conn.exec("07"), 0x47) }.getOrDefault(emptyList())
     }
 
     override suspend fun readPermanentDtcs(): List<Dtc> {
         val conn = connection ?: return emptyList()
-        val raw = execExclusive(conn, "0A") ?: return emptyList()
-        return DtcDecoder.decode(raw, 0x4A)
+        return runCatching { DtcDecoder.decode(conn.exec("0A"), 0x4A) }.getOrDefault(emptyList())
     }
 
     override suspend fun clearDtcs(): Boolean {
         val conn = connection ?: return false
-        val raw = execExclusive(conn, "04") ?: return false
-        return raw.uppercase().contains("44")
+        return runCatching { conn.exec("04").uppercase().contains("44") }.getOrDefault(false)
     }
 
     override suspend fun command(raw: String): String? {
         val conn = connection ?: return null
-        return execExclusive(conn, raw.trim())
+        return runCatching { conn.exec(raw.trim()) }.getOrNull()
     }
 
     override suspend fun readVehicleInfo(): VehicleInfo {
         val conn = connection ?: return VehicleInfo()
-        val vinRaw = execExclusive(conn, "0902")
-        val calRaw = execExclusive(conn, "0904")
-        val nameRaw = execExclusive(conn, "090A")
+        val vinRaw = runCatching { conn.exec("0902") }.getOrNull()
+        val calRaw = runCatching { conn.exec("0904") }.getOrNull()
+        val nameRaw = runCatching { conn.exec("090A") }.getOrNull()
         return VehicleInfo(
             vin = vinRaw?.let { DiagnosticParsers.parseMode09Vin(it) },
             calibrationIds = calRaw?.let { DiagnosticParsers.parseMode09CalIds(it) } ?: emptyList(),
@@ -619,38 +382,29 @@ class Elm327BluetoothSource(
 
     override suspend fun readReadiness(): ReadinessStatus {
         val conn = connection ?: return ReadinessStatus()
-        val raw = execExclusive(conn, "0101") ?: return ReadinessStatus()
+        val raw = runCatching { conn.exec("0101") }.getOrNull() ?: return ReadinessStatus()
         return DiagnosticParsers.parseReadiness(raw)
     }
 
     override suspend fun readFreezeFrame(): FreezeFrame {
         val conn = connection ?: return FreezeFrame()
-        val parts = listOf("0202", "020C", "020D", "0205", "0204").mapNotNull { cmd ->
-            execExclusive(conn, cmd)
-        }
-        if (parts.isEmpty()) return FreezeFrame()
-        return DiagnosticParsers.parseFreezeFrame(parts.joinToString(" "))
+        val raw = runCatching {
+            conn.exec("0202") + " " + conn.exec("020C") + " " + conn.exec("020D") +
+                " " + conn.exec("0205") + " " + conn.exec("0204")
+        }.getOrNull() ?: return FreezeFrame()
+        return DiagnosticParsers.parseFreezeFrame(raw)
     }
 
     override suspend fun readMode05(): List<O2TestResult> {
         val conn = connection ?: return emptyList()
-        val raw = execExclusive(conn, "05") ?: return emptyList()
+        val raw = runCatching { conn.exec("05") }.getOrNull() ?: return emptyList()
         return DiagnosticParsers.dumpMode05(raw)
     }
 
     override suspend fun readMode06(): List<Mode06Result> {
         val conn = connection ?: return emptyList()
-        val raw = execExclusive(conn, "06") ?: return emptyList()
+        val raw = runCatching { conn.exec("06") }.getOrNull() ?: return emptyList()
         return DiagnosticParsers.dumpMode06(raw)
-    }
-
-    /** One ELM command; poll loop parks with holdValues so Dash TTL cannot blank. */
-    private suspend fun execExclusive(
-        conn: Elm327Connection,
-        command: String,
-        timeoutMs: Long = Elm327Connection.DEFAULT_TIMEOUT_MS,
-    ): String? = withLinkExclusive {
-        runCatching { conn.exec(command, timeoutMs) }.getOrNull()
     }
 
     override suspend fun probePids(
@@ -659,7 +413,7 @@ class Elm327BluetoothSource(
     ): List<PidProbeResult> {
         val conn = connection ?: return emptyList()
         if (recoverFirst) {
-            withLinkExclusive { softRecover(conn) }
+            softRecover(conn)
         }
         val out = ArrayList<PidProbeResult>(pids.size)
         var failStreak = 0
@@ -669,12 +423,16 @@ class Elm327BluetoothSource(
                 out += PidProbeResult(pid, false, null, "SKIPPED (bus unhealthy)")
                 continue
             }
-            var raw = execExclusive(conn, pid.request, Elm327Connection.PROBE_TIMEOUT_MS)
+            var raw = runCatching {
+                conn.exec(pid.request, Elm327Connection.PROBE_TIMEOUT_MS)
+            }.getOrNull()
             var up = raw?.uppercase().orEmpty()
             var bad = raw == null || BAD_TOKENS.any { up.contains(it) }
             if (bad && up.contains("NO DATA")) {
                 delay(20L)
-                raw = execExclusive(conn, pid.request, Elm327Connection.PROBE_TIMEOUT_MS)
+                raw = runCatching {
+                    conn.exec(pid.request, Elm327Connection.PROBE_TIMEOUT_MS)
+                }.getOrNull()
                 up = raw?.uppercase().orEmpty()
                 bad = raw == null || BAD_TOKENS.any { up.contains(it) }
             }
@@ -697,7 +455,7 @@ class Elm327BluetoothSource(
             }
         }
         if (failStreak >= 2) {
-            withLinkExclusive { softRecover(conn) }
+            softRecover(conn)
         }
         return out
     }
@@ -724,44 +482,6 @@ class Elm327BluetoothSource(
 
     override suspend fun readPid(pid: PidDefinition): Double? {
         return probePids(listOf(pid)).firstOrNull()?.sample
-    }
-
-    private fun nextBackgroundPid(): PidDefinition? {
-        probeQueue.poll()?.let { return it }
-        val keep = keepalivePids.get()
-        if (keep.isEmpty()) return null
-        val i = keepaliveIndex
-        keepaliveIndex = (i + 1) % keep.size
-        return keep[i % keep.size]
-    }
-
-    private suspend fun probeOneBackground(
-        conn: Elm327Connection,
-        pid: PidDefinition,
-    ): PidProbeResult {
-        val raw = runCatching {
-            conn.exec(pid.request, Elm327Connection.PROBE_TIMEOUT_MS)
-        }.getOrNull()
-        val up = raw?.uppercase().orEmpty()
-        val bad = raw == null || BAD_TOKENS.any { up.contains(it) }
-        if (bad) return PidProbeResult(pid, false, null, raw)
-        val bytes = when {
-            pid.request.startsWith("01") && pid.request.length == 4 ->
-                ObdResponseParser.rawDataBytes(pid.request, pid.dataBytes, raw!!)
-            pid.request.startsWith("22") -> extractMode22(pid.request, raw!!)
-            else -> null
-        }
-        val value = bytes?.let { pid.decode(it) }
-        return PidProbeResult(pid, true, value, raw)
-    }
-
-    private fun overlayCatalogPid(
-        snapshot: VehicleSnapshot,
-        pid: PidDefinition,
-        sample: Double,
-    ): VehicleSnapshot {
-        val obd = polled.firstOrNull { it.request.equals(pid.request, true) } ?: return snapshot
-        return snapshot.merge(obd, sample)
     }
 
     private fun extractMode22(request: String, raw: String): IntArray? {
@@ -855,22 +575,15 @@ class Elm327BluetoothSource(
         }
     }
 
-    /**
-     * Restore broadcast Mode 01 after deep-search / UNABLE thrashing.
-     * [gentle]=true skips ATSP0 (protocol re-search) — that thrash is a common
-     * cause of app-driven "disconnects" vs Torque Pro's stickier session.
-     */
-    private suspend fun softRecover(conn: Elm327Connection, gentle: Boolean = true) {
-        val seq = if (gentle) GENTLE_RECOVER_SEQUENCE else HARD_RECOVER_SEQUENCE
-        for (cmd in seq) {
-            // Short AT timeout — INIT_TIMEOUT (1.8s)×6 could exceed the UI stale
-            // watcher and look like a disconnect even when RFCOMM is still up.
-            runCatching { conn.exec(cmd, Elm327Connection.RECOVER_TIMEOUT_MS) }
-            delay(25L)
+    /** Restore broadcast Mode 01 after deep-search / UNABLE thrashing. */
+    private suspend fun softRecover(conn: Elm327Connection) {
+        for (cmd in RECOVER_SEQUENCE) {
+            runCatching { conn.exec(cmd, Elm327Connection.INIT_TIMEOUT_MS) }
+            delay(40L)
         }
     }
 
-    private suspend fun readAtrv(conn: Elm327Connection, logVerbose: Boolean = false): Double? {
+    private suspend fun readAtrv(conn: Elm327Connection): Double? {
         val raw = runCatching {
             conn.exec("ATRV", Elm327Connection.ATRV_TIMEOUT_MS)
         }.getOrNull() ?: return null
@@ -881,12 +594,7 @@ class Elm327BluetoothSource(
         atrvWindow.addLast(v)
         while (atrvWindow.size > 3) atrvWindow.removeFirst()
         val median = atrvWindow.sorted()[atrvWindow.size / 2]
-        if (logVerbose) {
-            logger.logDebug(
-                ObdLogger.Dir.INFO,
-                "ATRV battery raw=$v median=$median V (n=${atrvWindow.size})",
-            )
-        }
+        logger.logDebug(ObdLogger.Dir.INFO, "ATRV battery raw=$v median=$median V (n=${atrvWindow.size})")
         return median
     }
 
@@ -896,23 +604,9 @@ class Elm327BluetoothSource(
     companion object {
         val SPP_UUID: UUID = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB")
         private val INIT_SEQUENCE = listOf("ATZ", "ATE0", "ATL0", "ATS0", "ATSP0")
-        /** Soft recover without ATSP0 — keep current protocol, restore broadcast. */
-        private val GENTLE_RECOVER_SEQUENCE = listOf("ATD", "ATE0", "ATL0", "ATS0", "ATSH7DF", "ATAR")
-        /** Full recover including protocol search — only for hard reconnect paths. */
-        private val HARD_RECOVER_SEQUENCE =
-            listOf("ATD", "ATE0", "ATL0", "ATS0", "ATSP0", "ATSH7DF", "ATAR")
+        private val RECOVER_SEQUENCE = listOf("ATD", "ATE0", "ATL0", "ATS0", "ATSP0", "ATSH7DF", "ATAR")
         private val BAD_TOKENS = listOf("NO DATA", "UNABLE", "ERROR", "?", "STOPPED")
         /** Soft-recover loops that never reconnect leave a sticky false Dash. */
-        private const val MAX_SOFT_RECOVER_BEFORE_RECONNECT = 5
-        /** Adapter still answering ATRV — wait longer before killing RFCOMM. */
-        private const val MAX_SOFT_RECOVER_WHEN_ATRV_OK = 8
-        private const val MAX_DEAD_CYCLES_BEFORE_RECONNECT = 5
-        private const val MAX_DEAD_CYCLES_WHEN_ATRV_OK = 8
-        /** UNABLE replies in one cycle before aborting remaining PIDs. */
-        private const val UNABLE_BEFORE_BUS_LOST = 3
-
-        /** Post-hold soft recover only after a full Mode 01 pause — not heroes-only borrow. */
-        internal fun shouldRecoverAfterResume(prev: PollHold, hold: PollHold): Boolean =
-            prev == PollHold.FULL_PAUSE && hold == PollHold.NONE
+        private const val MAX_SOFT_RECOVER_BEFORE_RECONNECT = 3
     }
 }
