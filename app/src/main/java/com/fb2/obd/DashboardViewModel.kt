@@ -31,6 +31,7 @@ import com.fb2.obd.data.DashThemeStore
 import com.fb2.obd.data.VehicleProfileStore
 import com.fb2.obd.obd.KeepAlivePolicy
 import com.fb2.obd.obd.DashTheme
+import com.fb2.obd.obd.DemoAllowPolicy
 import com.fb2.obd.data.VoiceAlerter
 import com.fb2.obd.obd.AiAnalysisPayloadBuilder
 import com.fb2.obd.obd.ColdStartIdleCatalog
@@ -106,6 +107,11 @@ data class SettingsState(
      * inverse as “CarPlay / Android Auto connected” = Yes).
      */
     val duckMediaDuringAlerts: Boolean = false,
+    /**
+     * When true, simulated Demo may run without an ELM (launch + Connect sheet).
+     * When false, Dash shows disconnected / `--` instead of fake numbers.
+     */
+    val allowDemo: Boolean = true,
     val vehicleProfile: VehicleProfile = VehicleProfile.DEFAULT,
     /** Phone Dash presentation theme (Classic / OptA / OptB / OptC). */
     val dashTheme: DashTheme = DashTheme.DEFAULT,
@@ -456,6 +462,7 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
         val profileGearDefault = VehicleProfileConfig.defaultShowEstimatedGear(loadedProfile)
         _settings.value = SettingsState(
             showEstimatedGear = dashThemeStore.loadShowEstimatedGear(profileGearDefault),
+            allowDemo = dashThemeStore.loadAllowDemo(default = true),
             vehicleProfile = loadedProfile,
             dashTheme = dashThemeStore.load(),
         )
@@ -492,8 +499,8 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
             publishCarDash()
         }
         VehicleLiveStore.onConnectRequest = {
-            // Car cannot pick BT devices — start Demo if offline; live ELM must be chosen on phone.
-            if (!_uiState.value.sourceIsLive) {
+            // Car cannot pick BT devices — Demo only when Settings allow it.
+            if (!_uiState.value.sourceIsLive && _settings.value.allowDemo) {
                 useSource(demoSourceForProfile())
             }
             publishCarDash()
@@ -501,8 +508,11 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
         _custom.update {
             it.copy(selectedIds = StandardPidCatalog.fuelPageDefaults().map { p -> p.id }.toSet())
         }
-        useSource(demoSourceForProfile())
-        publishCarDash()
+        if (_settings.value.allowDemo) {
+            useSource(demoSourceForProfile())
+        } else {
+            publishCarDash()
+        }
     }
 
     private fun demoSourceForProfile(): DemoObdSource = DemoObdSource(
@@ -542,8 +552,8 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
         if (!thresholdStore.hasUserEdits()) {
             _healthThresholds.value = VehicleProfileConfig.healthDefaults(profile)
         }
-        // Restart Demo under the new flavour when not on a live ELM.
-        if (!_uiState.value.sourceIsLive) {
+        // Restart Demo under the new flavour when not on a live ELM (and Demo is allowed).
+        if (!_uiState.value.sourceIsLive && _settings.value.allowDemo) {
             useSource(demoSourceForProfile())
         }
         publishCarDash()
@@ -1006,6 +1016,22 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
     fun setShowEstimatedGear(enabled: Boolean) {
         dashThemeStore.saveShowEstimatedGear(enabled)
         _settings.update { it.copy(showEstimatedGear = enabled) }
+    }
+
+    /**
+     * Settings → Simulation. Off while on Demo clears the feed to disconnected
+     * (`--` on Dash). On while disconnected starts the profile Demo source.
+     */
+    fun setAllowDemo(enabled: Boolean) {
+        dashThemeStore.saveAllowDemo(enabled)
+        _settings.update { it.copy(allowDemo = enabled) }
+        val ui = _uiState.value
+        when (DemoAllowPolicy.next(enabled, ui.sourceIsLive, ui.connection)) {
+            DemoAllowPolicy.Next.DISCONNECT -> disconnect()
+            DemoAllowPolicy.Next.START_DEMO -> useSource(demoSourceForProfile())
+            DemoAllowPolicy.Next.NONE -> Unit
+        }
+        publishCarDash()
     }
 
     fun setDashTheme(theme: DashTheme) {
