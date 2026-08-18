@@ -25,6 +25,10 @@ notes = {
     "0.1.27": "Full-screen Torque-style sensor picker with live green rows",
     "0.1.28": "Remove deep search (use picker instead)",
     "0.1.29": "Red Orbit side wheels smooth circular scroll",
+    "0.1.30": "Picker keeps MAP/live PIDs readable (Torque-style, no Mode 01 pause)",
+    "0.1.31": "Select sensor chrome scrolls with the list (not sticky)",
+    "0.1.32": "Probe all Mode 01 PIDs Torque shows as readable",
+    "0.1.33": "Red Orbit wheels continuous smooth scroll",
 }.get(vn, catalog["latest"].get("notes", ""))
 catalog["latest"] = {
     "versionCode": vc,

@@ -1,6 +1,7 @@
 package com.fb2.obd
 
 import com.fb2.obd.obd.PidProbeResult
+import com.fb2.obd.obd.SensorPickerReading
 import com.fb2.obd.obd.SensorPickerReadings
 import com.fb2.obd.obd.SensorReadKind
 import com.fb2.obd.obd.StandardPidCatalog
@@ -29,6 +30,24 @@ class SensorPickerReadingsTest {
         val loop = SensorPickerReadings.resolve(fuelLoop, snap, emptyMap())
         assertEquals(SensorReadKind.LIVE, loop.kind)
         assertEquals("Latest value: CLOSED LOOP", loop.subtitle)
+    }
+
+    @Test
+    fun liveMap_beatsEcuUnsupportedBitmask() {
+        val map = StandardPidCatalog.all.first { it.request.equals("010B", true) }
+        val snap = VehicleSnapshot(mapKpa = 97.0, mafGps = 0.33, unsupportedPids = setOf(0x0B))
+        val reading = SensorPickerReadings.resolve(map, snap, emptyMap())
+        assertEquals(SensorReadKind.LIVE, reading.kind)
+        assertTrue(reading.latest!!.contains("97"))
+    }
+
+    @Test
+    fun latch_keepsLiveWhenSnapshotClears() {
+        val live = SensorPickerReading(SensorReadKind.LIVE, "97.00 kPa")
+        val gone = SensorPickerReading(SensorReadKind.NONE)
+        val kept = SensorPickerReadings.latch(live, gone)
+        assertEquals(SensorReadKind.LIVE, kept.kind)
+        assertEquals("97.00 kPa", kept.latest)
     }
 
     @Test

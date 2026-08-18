@@ -356,16 +356,21 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
         val catalog = pidCatalog
         val snap = _uiState.value.snapshot
         val seeded = LinkedHashMap<String, PidProbeResult>()
+        // Latch whatever the Dash already decoded so a later bitmask / TTL cannot
+        // yank MAP (etc.) off Readable — Torque keeps a PID once it has answered.
         catalog.forEach { pid ->
-            val n = pid.mode01Number
-            if (n != null && n in snap.unsupportedPids) {
-                seeded[pid.id] = PidProbeResult(pid, supported = false, sample = null, raw = "UNSUPPORTED")
+            val live = LiveSnapshotOverlay.liveSample(pid, snap)
+            if (live != null) {
+                seeded[pid.id] = PidProbeResult(pid, supported = true, sample = live, raw = "from-live-dashboard")
+            } else if (pid.request.equals("0103", true) && !snap.fuelSystemStatus.isNullOrBlank()) {
+                seeded[pid.id] = PidProbeResult(pid, supported = true, sample = null, raw = snap.fuelSystemStatus)
             }
         }
         _pickerScan.value = SensorPickerScanState(running = source != null, results = HashMap(seeded))
         if (source == null) return
         pickerScanJob = viewModelScope.launch {
-            source.setPollHold(PollHold.HEROES_ONLY)
+            // Do not pause Mode 01 (I54). Heroes-only hold lets MAP TTL-expire in ~2.5s
+            // while MAF (always-polled) stays — that is the MAP flicker in the recording.
             try {
                 val supportScan = probeSaeSupportBitmask(source)
                 if (supportScan != null) {
@@ -374,7 +379,7 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
                         val n = pid.mode01Number ?: return@forEach
                         if (SensorPickerReadings.pidInCoveredSupportBlock(n, coveredBases) &&
                             n !in support &&
-                            pid.id !in _pickerScan.value.results
+                            pid.id !in seeded
                         ) {
                             seeded[pid.id] = PidProbeResult(
                                 pid,
@@ -386,12 +391,8 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
                     }
                     _pickerScan.update { it.copy(results = HashMap(seeded)) }
                 }
-                val knownLive = catalog.filter { pid ->
-                    LiveSnapshotOverlay.liveSample(pid, snap) != null ||
-                        (pid.request.equals("0103", true) && !snap.fuelSystemStatus.isNullOrBlank())
-                }.map { it.id }.toSet()
                 val toProbe = catalog.filter { pid ->
-                    pid.id !in seeded && pid.id !in knownLive
+                    pid.id !in seeded
                 }.sortedBy { pid ->
                     if (pid.request.startsWith("01")) 0 else 1
                 }
@@ -399,11 +400,18 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
                     if (!isActive) break
                     val probed = source.probePids(batch, recoverFirst = false)
                     _pickerScan.update { st ->
-                        st.copy(results = st.results + probed.associateBy { it.pid.id })
+                        val merged = st.results.toMutableMap()
+                        probed.forEach { hit ->
+                            val prev = merged[hit.pid.id]
+                            if (prev?.supported == true && prev.sample != null && !hit.supported) {
+                                return@forEach
+                            }
+                            merged[hit.pid.id] = hit
+                        }
+                        st.copy(results = merged)
                     }
                 }
             } finally {
-                source.setPollHold(PollHold.NONE)
                 _pickerScan.update { it.copy(running = false) }
             }
         }
