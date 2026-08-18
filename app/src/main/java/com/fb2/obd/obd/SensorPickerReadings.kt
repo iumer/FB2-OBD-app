@@ -49,19 +49,17 @@ object SensorPickerReadings {
         snapshot: VehicleSnapshot,
         probeById: Map<String, PidProbeResult>,
         extraValues: Map<String, String> = emptyMap(),
+        scanning: Boolean = false,
     ): SensorPickerReading {
-        val mode01 = pid.mode01Number
-        if (mode01 != null && mode01 in snapshot.unsupportedPids) {
-            return SensorPickerReading(SensorReadKind.NONE)
-        }
-
+        // Torque-style: a PID that already answered stays readable. Honda / clone
+        // Mode 01 support bitmasks often omit MAP (010B) even while 010B is live.
         liveText(pid, snapshot)?.let { text ->
             return SensorPickerReading(SensorReadKind.LIVE, text)
         }
 
         extraValues[pid.id]?.let { raw ->
             val cleaned = raw.trim()
-            if (cleaned.isNotEmpty() && !isNoDataText(cleaned)) {
+            if (cleaned.isNotEmpty() && !looksLikeNoData(cleaned)) {
                 return SensorPickerReading(SensorReadKind.LIVE, cleaned)
             }
         }
@@ -72,7 +70,7 @@ object SensorPickerReadings {
         if (probed != null) {
             if (probed.supported) {
                 val text = LiveSnapshotOverlay.formatDisplay(probed)
-                return if (isNoDataText(text)) {
+                return if (looksLikeNoData(text)) {
                     SensorPickerReading(SensorReadKind.NONE)
                 } else {
                     SensorPickerReading(SensorReadKind.LIVE, text)
@@ -81,7 +79,44 @@ object SensorPickerReadings {
             return SensorPickerReading(SensorReadKind.NONE)
         }
 
+        val mode01 = pid.mode01Number
+        if (mode01 != null && mode01 in snapshot.unsupportedPids) {
+            // Bitmask is a hint, not a veto. Stay Waiting so Refresh can probe.
+            return SensorPickerReading(SensorReadKind.WAITING)
+        }
+
         return SensorPickerReading(SensorReadKind.WAITING)
+    }
+
+    /**
+     * Once a row is LIVE, keep the last good value for this picker session.
+     * Scan / TTL / bitmask / transient probe misses must not yank any PID off
+     * Readable after the ECU answered (MAP, Coolant, Intake, …).
+     */
+    fun latch(previous: SensorPickerReading?, next: SensorPickerReading): SensorPickerReading {
+        if (previous?.kind == SensorReadKind.LIVE && next.kind != SensorReadKind.LIVE) {
+            return previous
+        }
+        return next
+    }
+
+    /**
+     * Merge batch probe hits into the running picker scan. Never downgrade a PID
+     * that already answered (including fuel-loop text rows with null sample).
+     */
+    fun mergeProbeResults(
+        existing: Map<String, PidProbeResult>,
+        expanded: Map<String, PidProbeResult>,
+    ): Map<String, PidProbeResult> {
+        if (expanded.isEmpty()) return existing
+        val merged = existing.toMutableMap()
+        expanded.forEach { (id, hit) ->
+            if (!hit.supported) return@forEach
+            val prev = merged[id]
+            if (prev?.supported == true && hit.sample == null && prev.sample != null) return@forEach
+            merged[id] = hit
+        }
+        return merged
     }
 
     fun matchesQuery(pid: PidDefinition, query: String): Boolean {
@@ -108,18 +143,49 @@ object SensorPickerReadings {
 
     val SAE_SUPPORT_BASES: List<Int> = listOf(0x00, 0x20, 0x40, 0x60, 0x80, 0xA0)
 
+    /**
+     * Apply one ELM response to every catalog row that shares the request
+     * (e.g. 0124 lambda + 0124I current). Torque shows both from the same PID.
+     */
+    fun expandProbeHits(
+        catalog: List<PidDefinition>,
+        hits: List<PidProbeResult>,
+    ): Map<String, PidProbeResult> {
+        val out = LinkedHashMap<String, PidProbeResult>()
+        hits.forEach { hit ->
+            val siblings = catalog.filter { it.request.equals(hit.pid.request, true) }
+            if (siblings.size <= 1) {
+                out[hit.pid.id] = hit
+                return@forEach
+            }
+            val bytes = hit.raw?.let { raw ->
+                when {
+                    hit.pid.request.startsWith("01") && hit.pid.request.length == 4 ->
+                        ObdResponseParser.rawDataBytes(hit.pid.request, 8, raw)
+                    else -> null
+                }
+            }
+            siblings.forEach { pid ->
+                val sample = if (hit.supported) bytes?.let(pid.decode) else null
+                out[pid.id] = PidProbeResult(pid, hit.supported, sample, hit.raw)
+            }
+        }
+        return out
+    }
+
     private fun liveText(pid: PidDefinition, snapshot: VehicleSnapshot): String? {
         if (pid.request.equals("0103", true)) {
-            return snapshot.fuelSystemStatus?.takeIf { it.isNotBlank() }
+            return snapshot.fuelSystemStatus?.takeIf { it.isNotBlank() && !looksLikeNoData(it) }
         }
         val sample = LiveSnapshotOverlay.liveSample(pid, snapshot) ?: return null
         return "%.2f %s".format(sample, pid.unit).trim()
     }
 
-    private fun isNoDataText(text: String): Boolean {
+    fun looksLikeNoData(text: String): Boolean {
         val t = text.trim()
         if (t.isEmpty() || t == "—" || t == "--" || t == "n/s") return true
         val up = t.uppercase()
-        return up.startsWith("N/S") || up.startsWith("NO DATA") || up == "UNSUPPORTED"
+        return up.startsWith("N/S") || up.startsWith("NO DATA") || up == "UNSUPPORTED" ||
+            up == "UNKNOWN" || up.startsWith("SKIPPED")
     }
 }

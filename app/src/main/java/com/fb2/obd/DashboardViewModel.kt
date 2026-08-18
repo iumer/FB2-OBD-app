@@ -53,7 +53,7 @@ import com.fb2.obd.obd.LiveSnapshotOverlay
 import com.fb2.obd.obd.MetricStatus
 import com.fb2.obd.obd.Mode06Result
 import com.fb2.obd.obd.ModuleScanResult
-import com.fb2.obd.obd.ObdResponseParser
+import com.fb2.obd.obd.PickerScanPlanner
 import com.fb2.obd.obd.PollHold
 import com.fb2.obd.obd.SensorPickerReadings
 import com.fb2.obd.obd.O2TestResult
@@ -351,59 +351,63 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun startSensorPickerScan() {
-        if (pickerScanJob?.isActive == true) return
+        startSensorPickerScan(force = false)
+    }
+
+    /** Re-probe Mode 01 PIDs that are still waiting — keeps LIVE rows. */
+    fun refreshSensorPickerScan() {
+        startSensorPickerScan(force = true)
+    }
+
+    private fun startSensorPickerScan(force: Boolean) {
+        if (!force && pickerScanJob?.isActive == true) return
+        if (force) {
+            pickerScanJob?.cancel()
+            pickerScanJob = null
+        }
         val source = currentSource
         val catalog = pidCatalog
         val snap = _uiState.value.snapshot
         val seeded = LinkedHashMap<String, PidProbeResult>()
+        val keep = if (force) HashMap(_pickerScan.value.results.filter { it.value.supported }) else emptyMap()
+        keep.forEach { (id, hit) -> seeded[id] = hit }
         catalog.forEach { pid ->
-            val n = pid.mode01Number
-            if (n != null && n in snap.unsupportedPids) {
-                seeded[pid.id] = PidProbeResult(pid, supported = false, sample = null, raw = "UNSUPPORTED")
+            if (pid.id in seeded) return@forEach
+            val live = LiveSnapshotOverlay.liveSample(pid, snap)
+            if (live != null) {
+                seeded[pid.id] = PidProbeResult(pid, supported = true, sample = live, raw = "from-live-dashboard")
+            } else if (pid.request.equals("0103", true)) {
+                val loop = snap.fuelSystemStatus?.trim().orEmpty()
+                if (loop.isNotEmpty() && !SensorPickerReadings.looksLikeNoData(loop)) {
+                    seeded[pid.id] = PidProbeResult(pid, supported = true, sample = null, raw = loop)
+                }
             }
         }
         _pickerScan.value = SensorPickerScanState(running = source != null, results = HashMap(seeded))
         if (source == null) return
         pickerScanJob = viewModelScope.launch {
-            source.setPollHold(PollHold.HEROES_ONLY)
             try {
-                val supportScan = probeSaeSupportBitmask(source)
-                if (supportScan != null) {
-                    val (support, coveredBases) = supportScan
-                    catalog.forEach { pid ->
-                        val n = pid.mode01Number ?: return@forEach
-                        if (SensorPickerReadings.pidInCoveredSupportBlock(n, coveredBases) &&
-                            n !in support &&
-                            pid.id !in _pickerScan.value.results
-                        ) {
-                            seeded[pid.id] = PidProbeResult(
-                                pid,
-                                supported = false,
-                                sample = null,
-                                raw = "UNSUPPORTED",
-                            )
-                        }
-                    }
-                    _pickerScan.update { it.copy(results = HashMap(seeded)) }
-                }
-                val knownLive = catalog.filter { pid ->
-                    LiveSnapshotOverlay.liveSample(pid, snap) != null ||
-                        (pid.request.equals("0103", true) && !snap.fuelSystemStatus.isNullOrBlank())
-                }.map { it.id }.toSet()
-                val toProbe = catalog.filter { pid ->
-                    pid.id !in seeded && pid.id !in knownLive
-                }.sortedBy { pid ->
-                    if (pid.request.startsWith("01")) 0 else 1
-                }
-                for (batch in toProbe.chunked(6)) {
+                val toProbe = PickerScanPlanner.requestsToProbe(
+                    catalog = catalog,
+                    alreadyLiveIds = seeded.keys,
+                    advertised = source.advertisedMode01(),
+                )
+                for (pid in toProbe) {
                     if (!isActive) break
-                    val probed = source.probePids(batch, recoverFirst = false)
+                    // One PID at a time, then yield so Dash heroes keep the ELM mutex.
+                    val probed = source.probePids(
+                        listOf(pid),
+                        recoverFirst = false,
+                        retryNoData = false,
+                    )
+                    val expanded = SensorPickerReadings.expandProbeHits(catalog, probed)
                     _pickerScan.update { st ->
-                        st.copy(results = st.results + probed.associateBy { it.pid.id })
+                        st.copy(results = SensorPickerReadings.mergeProbeResults(st.results, expanded))
                     }
+                    val hit = probed.any { it.supported }
+                    delay(PickerScanPlanner.yieldMs(hit))
                 }
             } finally {
-                source.setPollHold(PollHold.NONE)
                 _pickerScan.update { it.copy(running = false) }
             }
         }
@@ -414,22 +418,6 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
         pickerScanJob = null
         currentSource?.setPollHold(PollHold.NONE)
         _pickerScan.update { it.copy(running = false) }
-    }
-
-    private suspend fun probeSaeSupportBitmask(source: ObdSource): Pair<Set<Int>, Set<Int>>? {
-        val supported = HashSet<Int>()
-        val coveredBases = HashSet<Int>()
-        for (base in SensorPickerReadings.SAE_SUPPORT_BASES) {
-            val req = "01%02X".format(base)
-            val raw = source.command(req) ?: continue
-            val parsed = SensorPickerReadings.parseSaeSupport(base, raw)
-            val bytes = ObdResponseParser.rawDataBytes(req, 4, raw)
-            if (bytes != null) {
-                coveredBases += base
-                supported += parsed
-            }
-        }
-        return if (coveredBases.isNotEmpty()) supported to coveredBases else null
     }
 
     /** Replace a built-in Dash tile (e.g. Coolant 1) with any catalog sensor. */

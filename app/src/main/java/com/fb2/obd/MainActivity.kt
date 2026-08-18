@@ -368,6 +368,7 @@ class MainActivity : ComponentActivity() {
                         pickerScanning = pickerScan.running,
                         onPickerOpen = viewModel::startSensorPickerScan,
                         onPickerClose = viewModel::stopSensorPickerScan,
+                        onPickerRefresh = viewModel::refreshSensorPickerScan,
                         onSetExtraPid = viewModel::setDashExtraPid,
                         onSetTileOverride = viewModel::setDashTileOverride,
                         onClearTileOverride = viewModel::clearDashTileOverride,
@@ -435,7 +436,10 @@ class MainActivity : ComponentActivity() {
                             onGithubTokenChange = viewModel::setGithubUploadToken,
                             onUploadLogs = {
                                 viewModel.uploadSavedLogs()
-                                toast("Uploading saved logs…")
+                        toast(
+                            if (uploadStatus.online) "Uploading saved logs…"
+                            else "No internet — check HU Wi‑Fi / 4G",
+                        )
                             },
                             openAiApiKey = viewModel.openAiApiKey(),
                             onOpenAiApiKeyChange = viewModel::setOpenAiApiKey,
@@ -462,8 +466,6 @@ class MainActivity : ComponentActivity() {
                             onBack = { screen = Screen.DASHBOARD },
                             modifier = Modifier.fillMaxSize(),
                             scrollState = settingsScrollState,
-                            demoRunning = state.connection == ConnectionState.CONNECTED &&
-                                !state.sourceIsLive,
                         )
                     }
 

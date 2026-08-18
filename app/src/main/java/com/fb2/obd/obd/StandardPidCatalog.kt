@@ -76,6 +76,18 @@ object StandardPidCatalog {
         entry(0x22, "Fuel rail pressure (rel)", "kPa", PidCategory.FUEL, 2, ::rail),
         entry(0x23, "Fuel rail pressure (abs)", "kPa", PidCategory.FUEL, 2, ::railAbs),
         entry(0x24, "O2 S1 lambda", "", PidCategory.FUEL, 4, ::lambda),
+        PidDefinition(
+            id = "0124I",
+            request = "0124",
+            label = "O2 S1 wide-range current",
+            unit = "mA",
+            category = PidCategory.FUEL,
+            dataBytes = 4,
+            profile = "SAE",
+            decode = { d ->
+                if (d.size >= 4) (d[2] * 256 + d[3]) / 256.0 - 128.0 else null
+            },
+        ),
         entry(0x25, "O2 S2 lambda", "", PidCategory.FUEL, 4, ::lambda),
         entry(0x26, "O2 S3 lambda", "", PidCategory.FUEL, 4, ::lambda),
         entry(0x27, "O2 S4 lambda", "", PidCategory.FUEL, 4, ::lambda),

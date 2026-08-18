@@ -1,6 +1,5 @@
 package com.fb2.obd.ui
 
-import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -23,6 +22,7 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -78,6 +78,7 @@ fun SensorPickerDialog(
     onRestore: (() -> Unit)? = null,
     onPick: (PidDefinition) -> Unit,
     onDismiss: () -> Unit,
+    onRefresh: () -> Unit = {},
     onOpen: () -> Unit = {},
     onClose: () -> Unit = {},
 ) {
@@ -103,12 +104,14 @@ fun SensorPickerDialog(
             onRestore = onRestore,
             onPick = onPick,
             onDismiss = onDismiss,
-            modifier = Modifier.fillMaxSize(),
+            onRefresh = onRefresh,
+            modifier = Modifier
+                .fillMaxSize()
+                .background(PickerBg),
         )
     }
 }
 
-@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun SensorPickerContent(
     catalog: List<PidDefinition>,
@@ -120,37 +123,51 @@ fun SensorPickerContent(
     onRestore: (() -> Unit)? = null,
     onPick: (PidDefinition) -> Unit,
     onDismiss: () -> Unit,
+    onRefresh: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     var query by remember { mutableStateOf("") }
     var filter by remember { mutableStateOf<PickerFilter>(PickerFilter.All) }
 
-    val readings = remember(catalog, snapshot, probeById, extraValues) {
+    var latched by remember { mutableStateOf<Map<String, SensorPickerReading>>(emptyMap()) }
+    val displayReadings = remember(catalog, snapshot, probeById, extraValues, scanning, latched) {
         catalog.associate { pid ->
-            pid.id to SensorPickerReadings.resolve(pid, snapshot, probeById, extraValues)
+            val resolved = SensorPickerReadings.resolve(
+                pid,
+                snapshot,
+                probeById,
+                extraValues,
+                scanning,
+            )
+            pid.id to SensorPickerReadings.latch(latched[pid.id], resolved)
         }
     }
-    val liveCount = readings.values.count { it.isReadable }
+    // SideEffect (not LaunchedEffect): latch must update in the same frame as a
+    // LIVE row, before the next snapshot TTL can emit NONE and drop Readable.
+    SideEffect {
+        if (displayReadings != latched) latched = displayReadings
+    }
+    val liveCount = displayReadings.values.count { it.isReadable }
 
-    val filtered = remember(catalog, readings, query, filter) {
+    val filtered = remember(catalog, displayReadings, query, filter) {
         catalog.filter { pid ->
             if (!SensorPickerReadings.matchesQuery(pid, query)) return@filter false
             when (val f = filter) {
                 PickerFilter.All -> true
-                PickerFilter.Readable -> readings[pid.id]?.isReadable == true
+                PickerFilter.Readable -> displayReadings[pid.id]?.isReadable == true
                 is PickerFilter.Category -> pid.category == f.cat
             }
         }
     }
 
-    val grouped = remember(filtered, readings) {
+    val grouped = remember(filtered, displayReadings) {
         filtered
             .groupBy { it.category }
             .toSortedMap(compareBy { SensorPickerReadings.categoryLabel(it) })
             .mapValues { (_, pids) ->
                 pids.sortedWith(
                     compareBy<PidDefinition> { pid ->
-                        when (readings[pid.id]?.kind) {
+                        when (displayReadings[pid.id]?.kind) {
                             SensorReadKind.LIVE -> 0
                             SensorReadKind.WAITING -> 1
                             SensorReadKind.NONE -> 2
@@ -165,113 +182,131 @@ fun SensorPickerContent(
         catalog.map { it.category }.distinct().sortedBy { SensorPickerReadings.categoryLabel(it) }
     }
 
-    Column(
+    LazyColumn(
         modifier = modifier.background(PickerBg),
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(PickerHeader)
-                .padding(horizontal = 16.dp, vertical = 10.dp),
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    text = "Select sensor",
-                    color = Color.White,
-                    fontSize = 22.sp,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.weight(1f),
-                )
-                Text(
-                    text = "Close",
-                    color = PickerCyan,
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(8.dp))
-                        .clickable(onClick = onDismiss)
-                        .padding(horizontal = 10.dp, vertical = 6.dp),
-                )
-            }
-            Text(
-                text = if (scanning) {
-                    "Scanning ECU… $liveCount readable"
-                } else {
-                    "$liveCount readable · tap a green row to add"
-                },
-                color = PickerCyan,
-                fontSize = 13.sp,
-                modifier = Modifier.padding(top = 4.dp, bottom = 8.dp),
-            )
-            OutlinedTextField(
-                value = query,
-                onValueChange = { query = it },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true,
-                placeholder = {
-                    Text("Search sensors (name or PID)", color = PickerMuted, fontSize = 14.sp)
-                },
-                textStyle = TextStyle(color = Color.White, fontSize = 16.sp),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = PickerLiveBar,
-                    unfocusedBorderColor = PickerDivider,
-                    cursorColor = PickerCyan,
-                    focusedTextColor = Color.White,
-                    unfocusedTextColor = Color.White,
-                ),
-            )
-            Row(
+        item(key = "chrome") {
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState())
-                    .padding(top = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically,
+                    .background(PickerHeader)
+                    .padding(horizontal = 16.dp, vertical = 10.dp),
             ) {
-                FilterChip("All", filter is PickerFilter.All) { filter = PickerFilter.All }
-                FilterChip("Readable", filter is PickerFilter.Readable) { filter = PickerFilter.Readable }
-                categoriesPresent.forEach { cat ->
-                    val selected = (filter as? PickerFilter.Category)?.cat == cat
-                    FilterChip(SensorPickerReadings.categoryLabel(cat), selected) {
-                        filter = PickerFilter.Category(cat)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = "Select sensor",
+                        color = Color.White,
+                        fontSize = 22.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Text(
+                        text = "Close",
+                        color = PickerCyan,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable(onClick = onDismiss)
+                            .padding(horizontal = 10.dp, vertical = 6.dp),
+                    )
+                }
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 4.dp, bottom = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = if (scanning) {
+                            "Scanning ECU… $liveCount readable"
+                        } else {
+                            "$liveCount readable · tap a green row to add"
+                        },
+                        color = PickerCyan,
+                        fontSize = 13.sp,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Text(
+                        text = if (scanning) "…" else "Refresh",
+                        color = if (scanning) PickerMuted else PickerCyan,
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable(enabled = !scanning, onClick = onRefresh)
+                            .padding(horizontal = 10.dp, vertical = 4.dp),
+                    )
+                }
+                OutlinedTextField(
+                    value = query,
+                    onValueChange = { query = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    placeholder = {
+                        Text("Search sensors (name or PID)", color = PickerMuted, fontSize = 14.sp)
+                    },
+                    textStyle = TextStyle(color = Color.White, fontSize = 16.sp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = PickerLiveBar,
+                        unfocusedBorderColor = PickerDivider,
+                        cursorColor = PickerCyan,
+                        focusedTextColor = Color.White,
+                        unfocusedTextColor = Color.White,
+                    ),
+                )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState())
+                        .padding(top = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    FilterChip("All", filter is PickerFilter.All) { filter = PickerFilter.All }
+                    FilterChip("Readable", filter is PickerFilter.Readable) { filter = PickerFilter.Readable }
+                    categoriesPresent.forEach { cat ->
+                        val selected = (filter as? PickerFilter.Category)?.cat == cat
+                        FilterChip(SensorPickerReadings.categoryLabel(cat), selected) {
+                            filter = PickerFilter.Category(cat)
+                        }
                     }
                 }
             }
         }
-
         if (filtered.isEmpty()) {
-            Text(
-                text = if (query.isNotBlank()) "No sensors match \"$query\"" else "No sensors in this filter",
-                color = PickerMuted,
-                fontSize = 15.sp,
-                modifier = Modifier.padding(20.dp),
-            )
+            item(key = "empty") {
+                Text(
+                    text = if (query.isNotBlank()) "No sensors match \"$query\"" else "No sensors in this filter",
+                    color = PickerMuted,
+                    fontSize = 15.sp,
+                    modifier = Modifier.padding(20.dp),
+                )
+            }
         } else {
-            LazyColumn(modifier = Modifier.fillMaxSize()) {
-                if (restoreLabel != null && onRestore != null && query.isBlank() && filter is PickerFilter.All) {
-                    item(key = "restore") {
-                        RestoreRow(label = restoreLabel, onClick = onRestore)
-                    }
+            if (restoreLabel != null && onRestore != null && query.isBlank() && filter is PickerFilter.All) {
+                item(key = "restore") {
+                    RestoreRow(label = restoreLabel, onClick = onRestore)
                 }
-                grouped.forEach { (cat, pids) ->
-                    stickyHeader(key = "cat-${cat.name}") {
-                        CategoryHeader(
-                            title = SensorPickerReadings.categoryLabel(cat),
-                            readable = pids.count { readings[it.id]?.isReadable == true },
-                            total = pids.size,
-                        )
-                    }
-                    items(pids, key = { it.id }) { pid ->
-                        val reading = readings[pid.id] ?: SensorPickerReading(SensorReadKind.WAITING)
-                        SensorPickerRow(
-                            pid = pid,
-                            reading = reading,
-                            onClick = { onPick(pid) },
-                        )
-                    }
+            }
+            grouped.forEach { (cat, pids) ->
+                item(key = "cat-${cat.name}") {
+                    CategoryHeader(
+                        title = SensorPickerReadings.categoryLabel(cat),
+                        readable = pids.count { displayReadings[it.id]?.isReadable == true },
+                        total = pids.size,
+                    )
+                }
+                items(pids, key = { it.id }) { pid ->
+                    val reading = displayReadings[pid.id] ?: SensorPickerReading(SensorReadKind.WAITING)
+                    SensorPickerRow(
+                        pid = pid,
+                        reading = reading,
+                        onClick = { onPick(pid) },
+                    )
                 }
             }
         }

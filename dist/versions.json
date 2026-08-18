@@ -1,9 +1,9 @@
 {
   "latest": {
-    "versionCode": 50,
-    "versionName": "0.1.29",
+    "versionCode": 57,
+    "versionName": "0.1.36",
     "apkUrl": "https://raw.githubusercontent.com/iumer/FB2-OBD-app/latest/dist/FB2-Diag-debug.apk",
-    "notes": "Red Orbit side wheels smooth circular scroll"
+    "notes": "Picker Refresh + Torque-style one-PID scan; log upload shows GitHub error"
   },
   "releases": [
     {
@@ -95,6 +95,48 @@
       "versionName": "0.1.29",
       "apkUrl": "https://raw.githubusercontent.com/iumer/FB2-OBD-app/latest/dist/archive/FB2-Diag-0.1.29.apk",
       "notes": "Red Orbit side wheels smooth circular scroll"
+    },
+    {
+      "versionCode": 51,
+      "versionName": "0.1.30",
+      "apkUrl": "https://raw.githubusercontent.com/iumer/FB2-OBD-app/latest/dist/archive/FB2-Diag-0.1.30.apk",
+      "notes": "Picker keeps MAP/live PIDs readable (Torque-style, no Mode 01 pause)"
+    },
+    {
+      "versionCode": 52,
+      "versionName": "0.1.31",
+      "apkUrl": "https://raw.githubusercontent.com/iumer/FB2-OBD-app/latest/dist/archive/FB2-Diag-0.1.31.apk",
+      "notes": "Select sensor chrome scrolls with the list (not sticky)"
+    },
+    {
+      "versionCode": 53,
+      "versionName": "0.1.32",
+      "apkUrl": "https://raw.githubusercontent.com/iumer/FB2-OBD-app/latest/dist/archive/FB2-Diag-0.1.32.apk",
+      "notes": "Probe all Mode 01 PIDs Torque shows as readable"
+    },
+    {
+      "versionCode": 54,
+      "versionName": "0.1.33",
+      "apkUrl": "https://raw.githubusercontent.com/iumer/FB2-OBD-app/latest/dist/archive/FB2-Diag-0.1.33.apk",
+      "notes": "Red Orbit wheels continuous smooth scroll"
+    },
+    {
+      "versionCode": 55,
+      "versionName": "0.1.34",
+      "apkUrl": "https://raw.githubusercontent.com/iumer/FB2-OBD-app/latest/dist/archive/FB2-Diag-0.1.34.apk",
+      "notes": "Picker Readable latch: no MAP/Coolant/any PID flicker off green"
+    },
+    {
+      "versionCode": 56,
+      "versionName": "0.1.35",
+      "apkUrl": "https://raw.githubusercontent.com/iumer/FB2-OBD-app/latest/dist/archive/FB2-Diag-0.1.35.apk",
+      "notes": "Settings Simulation: short line + Off/On radios only"
+    },
+    {
+      "versionCode": 57,
+      "versionName": "0.1.36",
+      "apkUrl": "https://raw.githubusercontent.com/iumer/FB2-OBD-app/latest/dist/archive/FB2-Diag-0.1.36.apk",
+      "notes": "Picker Refresh + Torque-style one-PID scan; log upload shows GitHub error"
     }
   ]
 }

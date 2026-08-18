@@ -172,6 +172,7 @@ fun DashboardScreen(
     pickerScanning: Boolean = false,
     onPickerOpen: () -> Unit = {},
     onPickerClose: () -> Unit = {},
+    onPickerRefresh: () -> Unit = {},
     onSetExtraPid: (slot: Int, pid: PidDefinition) -> Unit = { _, _ -> },
     onSetTileOverride: (baseLabel: String, pid: PidDefinition) -> Unit = { _, _ -> },
     onClearTileOverride: (baseLabel: String) -> Unit = {},
@@ -475,6 +476,7 @@ fun DashboardScreen(
             onDismiss = { pickerTarget = null },
             onOpen = onPickerOpen,
             onClose = onPickerClose,
+            onRefresh = onPickerRefresh,
         )
     }
 

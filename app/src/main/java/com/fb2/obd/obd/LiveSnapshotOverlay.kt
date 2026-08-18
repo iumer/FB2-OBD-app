@@ -87,7 +87,11 @@ object LiveSnapshotOverlay {
             "n/s"
         }
         r.pid.request.equals("0103", true) -> {
-            FuelSystemDecoder.fromRawByte(r.sample) ?: "UNKNOWN"
+            val rawText = r.raw?.trim().orEmpty()
+            when {
+                rawText.contains("CLOSED", true) || rawText.contains("OPEN", true) -> rawText
+                else -> FuelSystemDecoder.fromRawByte(r.sample) ?: "UNKNOWN"
+            }
         }
         r.sample != null -> "%.2f %s".format(r.sample, r.pid.unit).trim()
         else -> "ok"

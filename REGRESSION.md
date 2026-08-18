@@ -106,6 +106,14 @@ Keep these fixed. If a change might touch one of these areas, re-verify it.
 | I84 | Classic Dash hero (RPM/Speed/Gear) sticky while tiles scroll | Fixed | Hero is first row inside Dash `LazyVerticalGrid` — scrolls off with tiles |
 | I83 | No way to stop Demo values from Settings | Fixed | Settings → Simulation: **STOP** while Demo is running; **Demo / simulated data** toggle persists `allowDemo` |
 | I84 | After live OBD connect, chip still said CONNECT and opened the picker | Fixed | Live ELM → red **DISCONNECT** on Classic + OptA/B/C (visible chip + ☰ menu). Demo stays CONNECT |
+| I85 | Select sensor: MAP (and other secondaries) appear then vanish from Readable | Fixed | Live snapshot beats 0100 bitmask; latch last-good; picker does not pause Mode 01 (MAP TTL ~2.5s vs always-polled MAF) |
+| I86 | Select sensor title/search/chips sticky — landscape list almost unusable | Fixed | Chrome is a normal `LazyColumn` item (same unsticky rule as Classic hero) |
+| I87 | Picker missed Torque-readable Mode 01 PIDs (APP D/E, baro, abs load, rel throttle, O2 current) | Fixed | Probe every unique Mode 01 request, not only bitmask hits; `0124I` sibling decode |
+| I88 | Red Orbit side wheels not smooth (22 dp snap + `AnimatedContent`) | Fixed | Pixel-follow `OrbitWheelPhysics` + spring settle to slot |
+| I89 | Select sensor: any readable PID (MAP, Coolant, Intake, …) flickers off Readable | Fixed | SideEffect latch same frame; never downgrade supported probe; bitmask→Waiting while scan runs |
+| I90 | Settings Simulation still two verbose tiles | Fixed | One short line + **Off / On** radio row (no card, no subtitles) |
+| I91 | Picker scan blanks Dash / Readable shrinks; reconnect restores PIDs | Fixed | Torque-style: Mode 01 only (skip Mode 22 + bitmask burst), one PID then yield 350/700 ms; never store probe misses; **Refresh** re-probes |
+| I92 | Settings Upload said Failed 1 with no reason | Fixed | Show GitHub HTTP detail; gzip large CSVs; 5 min PUT timeout; PUT `main` `logs/car-uploads/` |
 
 When the user reports a **new** bug, add a new `Ixx` row here (Status: Open → Fixed)
 and add a matching automated or manual check in sections 2–3.
@@ -182,7 +190,11 @@ curl -fsSL "https://api.github.com/repos/iumer/FB2-OBD-app/contents/dist/version
 | `AppUpdateCheckerTest` | versions.json catalog parse; newerThan lists 0.1.16–0.1.20 then only 0.1.19+ after installing 0.1.18 |
 | `PublishCatalogGuardTest` | publish script ships both JSON catalogs + archive; dist matches BuildConfig; no `lumer` typo; archive APKs on disk |
 | `DashExtraPidStoreTest` | **+** extras survive process death (`dash_extra_pids.json`) |
-| `SensorPickerReadingsTest` | Green/live vs waiting vs ECU-unsupported; SAE support bitmask parse; **ATRV battery live even if 0142 unsupported**; 2026-07-24 FB2 Dash PIDs stay LIVE |
+| `SensorPickerReadingsTest` | Live beats bitmask (MAP/Coolant/Intake); latch same-frame; merge never downgrades; bitmask→Waiting while scanning |
+| `TorqueReadablePidCoverageTest` | Catalog includes every Mode 01 PID Torque showed readable in the 2026-08-18 recording |
+| `PickerScanPlannerTest` | FB2 picker scan skips Mode 22 + bitmask PIDs; advertised first; yield longer after miss |
+| `LogUploadErrorsTest` | GitHub 401/403 wording; Failed 1 includes HTTP detail |
+| `LogUploadPayloadTest` | Large CSVs gzip before GitHub Contents PUT |
 | `ChromeCollapseTest` | Classic Dash chrome hides on scroll-up and returns at list top |
 | `FreshnessLedTest` | Shared blink: bright on fetch, dim when stale |
 | `KeepAlivePolicyTest` / `LastElmStoreTest` | Reconnect after HU process death unless user disconnected |
@@ -197,7 +209,7 @@ Do these on a phone with the new `dist/FB2-Diag-debug.apk` whenever the change
 touches ELM, Dash health, deep search, logging, or share:
 
 1. **Demo smoke** — open app → Demo feed moves; swipe all Dash pages for the active profile (Generic has no Trans).
-1a. **Stop simulation** — Settings → Simulation → **STOP** (or turn off Demo / simulated data). Dash goes `--` / disconnected. Toggle off survives process death; Connect → Demo or toggle on starts it again.
+1a. **Stop simulation** — Settings → Simulation → **Off** radio. Dash goes `--` / disconnected. **On** survives process death; Connect → Demo or **On** starts it again.
 1b. **Vehicle profile** — Settings → select Generic OBD2 → Trans + Honda DIAG gone; picker SAE-only; badge `OBD2`. Switch back to FB2 → Trans + Honda modules return.
 1c. **Faults** — Read shows Stored / Pending / Permanent (Mode 0A); Clear refreshes lists.
 2. **Connect live ELM** — chip goes red **DISCONNECT**; Battery shows volts (ATRV); MAF at idle ~3–5 g/s and **not** CRITICAL. Tap DISCONNECT → adapter drops, chip returns to CONNECT.

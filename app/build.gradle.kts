@@ -15,8 +15,8 @@ android {
         // Visible line: … → 0.1.22 deep-search heroes-live + blink LEDs → 0.1.23 Classic hero scrolls with Dash.
         // versionCode is an Android install counter only (must rise so this
         // APK can replace the mis-named 0.1.36/0.1.37 builds). Not shown in UI.
-        versionCode = 50
-        versionName = "0.1.29"
+        versionCode = 57
+        versionName = "0.1.36"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
