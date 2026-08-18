@@ -1,9 +1,9 @@
 {
   "latest": {
-    "versionCode": 55,
-    "versionName": "0.1.34",
+    "versionCode": 56,
+    "versionName": "0.1.35",
     "apkUrl": "https://raw.githubusercontent.com/iumer/FB2-OBD-app/latest/dist/FB2-Diag-debug.apk",
-    "notes": "Picker Readable latch: no MAP/Coolant/any PID flicker off green"
+    "notes": "Settings Simulation: short line + Off/On radios only"
   },
   "releases": [
     {
@@ -125,6 +125,12 @@
       "versionName": "0.1.34",
       "apkUrl": "https://raw.githubusercontent.com/iumer/FB2-OBD-app/latest/dist/archive/FB2-Diag-0.1.34.apk",
       "notes": "Picker Readable latch: no MAP/Coolant/any PID flicker off green"
+    },
+    {
+      "versionCode": 56,
+      "versionName": "0.1.35",
+      "apkUrl": "https://raw.githubusercontent.com/iumer/FB2-OBD-app/latest/dist/archive/FB2-Diag-0.1.35.apk",
+      "notes": "Settings Simulation: short line + Off/On radios only"
     }
   ]
 }

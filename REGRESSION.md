@@ -111,6 +111,7 @@ Keep these fixed. If a change might touch one of these areas, re-verify it.
 | I87 | Picker missed Torque-readable Mode 01 PIDs (APP D/E, baro, abs load, rel throttle, O2 current) | Fixed | Probe every unique Mode 01 request, not only bitmask hits; `0124I` sibling decode |
 | I88 | Red Orbit side wheels not smooth (22 dp snap + `AnimatedContent`) | Fixed | Pixel-follow `OrbitWheelPhysics` + spring settle to slot |
 | I89 | Select sensor: any readable PID (MAP, Coolant, Intake, …) flickers off Readable | Fixed | SideEffect latch same frame; never downgrade supported probe; bitmask→Waiting while scan runs |
+| I90 | Settings Simulation still two verbose tiles | Fixed | One short line + **Off / On** radio row (no card, no subtitles) |
 
 When the user reports a **new** bug, add a new `Ixx` row here (Status: Open → Fixed)
 and add a matching automated or manual check in sections 2–3.
@@ -204,7 +205,7 @@ Do these on a phone with the new `dist/FB2-Diag-debug.apk` whenever the change
 touches ELM, Dash health, deep search, logging, or share:
 
 1. **Demo smoke** — open app → Demo feed moves; swipe all Dash pages for the active profile (Generic has no Trans).
-1a. **Stop simulation** — Settings → Simulation → **STOP** (or turn off Demo / simulated data). Dash goes `--` / disconnected. Toggle off survives process death; Connect → Demo or toggle on starts it again.
+1a. **Stop simulation** — Settings → Simulation → **Off** radio. Dash goes `--` / disconnected. **On** survives process death; Connect → Demo or **On** starts it again.
 1b. **Vehicle profile** — Settings → select Generic OBD2 → Trans + Honda DIAG gone; picker SAE-only; badge `OBD2`. Switch back to FB2 → Trans + Honda modules return.
 1c. **Faults** — Read shows Stored / Pending / Permanent (Mode 0A); Clear refreshes lists.
 2. **Connect live ELM** — chip goes red **DISCONNECT**; Battery shows volts (ATRV); MAF at idle ~3–5 g/s and **not** CRITICAL. Tap DISCONNECT → adapter drops, chip returns to CONNECT.
