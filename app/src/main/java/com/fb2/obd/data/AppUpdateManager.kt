@@ -160,11 +160,21 @@ class AppUpdateManager(private val appContext: Context) {
     }
 
     private fun httpGetText(url: String): String {
-        val conn = (URL(url).openConnection() as HttpURLConnection).apply {
+        val fetchUrl = if (url.contains("version.json")) {
+            // Raw GitHub CDN can serve stale version.json — bust cache on every check.
+            val sep = if (url.contains('?')) "&" else "?"
+            "$url${sep}t=${System.currentTimeMillis()}"
+        } else {
+            url
+        }
+        val conn = (URL(fetchUrl).openConnection() as HttpURLConnection).apply {
             connectTimeout = 12_000
             readTimeout = 12_000
             instanceFollowRedirects = true
             requestMethod = "GET"
+            useCaches = false
+            setRequestProperty("Cache-Control", "no-cache")
+            setRequestProperty("Pragma", "no-cache")
         }
         try {
             val code = conn.responseCode
