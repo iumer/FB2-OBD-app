@@ -1,7 +1,6 @@
 package com.fb2.obd
 
 import com.fb2.obd.data.AiReportStore
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -38,22 +37,6 @@ class AiReportStoreTest {
         assertTrue(text.contains("# dashboard_snapshots"))
         assertTrue(text.contains("source=live_window_5min"))
         assertTrue(text.contains("requested_window_minutes=5"))
-        assertTrue(text.contains("# vehicle=Honda Civic FB2"))
-    }
-
-    @Test
-    fun fullReportText_genericVehicleLabel() {
-        val text = AiReportStore.buildFullReportText(
-            body = "AI VEHICLE ANALYSIS REPORT",
-            sourceLabel = "live_window_5min",
-            windowMinutes = 5,
-            model = "gpt-4o-mini",
-            readingsAppendix = "rpm=800",
-            createdMs = 1_700_000_000_000L,
-            vehicleLabel = "Generic OBD2 (SAE Mode 01 / codes) — unidentified vehicle unless VIN/ECU given",
-        )
-        assertTrue(text.contains("Generic OBD2"))
-        assertFalse(text.contains("Honda Civic FB2 2013 R18"))
     }
 
     @Test

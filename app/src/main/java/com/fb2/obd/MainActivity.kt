@@ -17,7 +17,6 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
-import android.os.PowerManager
 import android.net.Uri
 import android.provider.Settings
 import android.view.WindowManager
@@ -26,7 +25,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.lifecycle.ViewModelProvider
+import androidx.activity.viewModels
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.rememberScrollState
@@ -42,7 +41,6 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -52,11 +50,8 @@ import androidx.core.content.FileProvider
 import com.fb2.obd.ui.theme.Accent
 import com.fb2.obd.ui.theme.Background
 import com.fb2.obd.ui.theme.TextPrimary
-import com.fb2.obd.data.AppUpdateManager
 import com.fb2.obd.data.DemoObdSource
-import com.fb2.obd.data.ConnectionState
 import com.fb2.obd.data.Elm327BluetoothSource
-import com.fb2.obd.data.CrashReporter
 import com.fb2.obd.data.LogExportHelper
 import com.fb2.obd.data.ObdLogger
 import com.fb2.obd.data.SavedLogFile
@@ -84,7 +79,6 @@ import com.fb2.obd.ui.theme.FB2Theme
 import com.fb2.obd.ui.theme.ThemePalette
 import java.io.File
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 
 private enum class Screen {
     DASHBOARD, SETTINGS, DIAG_HUB, FAULTS, DEBUG_LOG, VALUE_LOG,
@@ -93,15 +87,11 @@ private enum class Screen {
 
 class MainActivity : ComponentActivity() {
 
-    private val viewModel: DashboardViewModel by lazy {
-        ViewModelProvider(application as Fb2App)[DashboardViewModel::class.java]
-    }
-    private var batteryPrompted = false
+    private val viewModel: DashboardViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-        maybePromptCrashReport()
 
         setContent {
             val settings by viewModel.settings.collectAsState()
@@ -124,7 +114,6 @@ class MainActivity : ComponentActivity() {
                 val dashExtraPidIds by viewModel.dashExtraPidIds.collectAsState()
                 val dashExtraValues by viewModel.dashExtraValues.collectAsState()
                 val dashTileOverrides by viewModel.dashTileOverrides.collectAsState()
-                val pickerScan by viewModel.pickerScan.collectAsState()
                 val savedLogs by viewModel.savedLogs.collectAsState()
                 val uploadStatus by viewModel.uploadStatus.collectAsState()
                 val deepSearch by viewModel.deepSearch.collectAsState()
@@ -144,38 +133,11 @@ class MainActivity : ComponentActivity() {
                 // the whole Dash ~16 Hz even when G-force page is not visible.
                 val lastAccelUiMs = remember { java.util.concurrent.atomic.AtomicLong(0L) }
 
-                val updateScope = rememberCoroutineScope()
-                val appUpdateManager = remember { AppUpdateManager(applicationContext) }
-                val appUpdateUi by appUpdateManager.state.collectAsState()
-                val updateBusy = appUpdateUi is AppUpdateManager.UiState.Checking ||
-                    appUpdateUi is AppUpdateManager.UiState.Downloading
-                val updateStatusText = when (val s = appUpdateUi) {
-                    is AppUpdateManager.UiState.Idle -> ""
-                    is AppUpdateManager.UiState.Checking -> "Checking for update…"
-                    is AppUpdateManager.UiState.UpToDate -> s.message
-                    is AppUpdateManager.UiState.Available -> s.message
-                    is AppUpdateManager.UiState.Downloading -> "Downloading… ${s.percent}%"
-                    is AppUpdateManager.UiState.ReadyToInstall -> "Ready to install v${s.remoteName}"
-                    is AppUpdateManager.UiState.Error -> s.message
-                }
-                val updateActionLabel = when (appUpdateUi) {
-                    is AppUpdateManager.UiState.Available -> "DOWNLOAD"
-                    is AppUpdateManager.UiState.ReadyToInstall -> "INSTALL"
-                    is AppUpdateManager.UiState.Checking,
-                    is AppUpdateManager.UiState.Downloading -> "…"
-                    else -> "CHECK"
-                }
-
                 var tick by remember { mutableIntStateOf(0) }
                 LaunchedEffect(screen) {
                     while (screen == Screen.DEBUG_LOG || screen == Screen.VALUE_LOG) {
                         delay(1000L)
                         tick++
-                    }
-                }
-                LaunchedEffect(state.connection, state.sourceIsLive) {
-                    if (state.sourceIsLive && state.connection == ConnectionState.CONNECTED) {
-                        maybeRequestUnrestrictedBattery()
                     }
                 }
 
@@ -334,10 +296,6 @@ class MainActivity : ComponentActivity() {
                         extraPidIds = dashExtraPidIds,
                         extraValues = dashExtraValues,
                         tileOverrides = dashTileOverrides,
-                        pickerProbe = pickerScan.results,
-                        pickerScanning = pickerScan.running,
-                        onPickerOpen = viewModel::startSensorPickerScan,
-                        onPickerClose = viewModel::stopSensorPickerScan,
                         onSetExtraPid = viewModel::setDashExtraPid,
                         onSetTileOverride = viewModel::setDashTileOverride,
                         onClearTileOverride = viewModel::clearDashTileOverride,
@@ -389,15 +347,11 @@ class MainActivity : ComponentActivity() {
                             onVehicleProfileChange = viewModel::setVehicleProfile,
                             onDashThemeChange = viewModel::setDashTheme,
                             onToggleEstimatedGear = viewModel::setShowEstimatedGear,
-                            onToggleAllowDemo = viewModel::setAllowDemo,
                             onToggleVoiceAlerts = viewModel::setVoiceAlerts,
                             onToggleDuckMedia = viewModel::setDuckMediaDuringAlerts,
                             onCheckSoundAlert = {
                                 viewModel.testSoundAlert()
                                 toast("Playing test alarm — CarPlay volume should stay up afterward")
-                            },
-                            onKeepAliveBattery = {
-                                maybeRequestUnrestrictedBattery(force = true)
                             },
                             uploadStatus = uploadStatus,
                             githubToken = viewModel.githubUploadToken(),
@@ -408,27 +362,6 @@ class MainActivity : ComponentActivity() {
                             },
                             openAiApiKey = viewModel.openAiApiKey(),
                             onOpenAiApiKeyChange = viewModel::setOpenAiApiKey,
-                            appVersionLabel = appUpdateManager.localLabel,
-                            updateStatusText = updateStatusText,
-                            updateActionLabel = updateActionLabel,
-                            updateBusy = updateBusy,
-                            onAppUpdateAction = {
-                                when (val s = appUpdateUi) {
-                                    is AppUpdateManager.UiState.Available -> {
-                                        updateScope.launch { appUpdateManager.downloadUpdate() }
-                                    }
-                                    is AppUpdateManager.UiState.ReadyToInstall -> {
-                                        if (!appUpdateManager.installApk(this@MainActivity, s.apk)) {
-                                            toast("Allow installs from FB2 Diag, then tap INSTALL again")
-                                        }
-                                    }
-                                    is AppUpdateManager.UiState.Checking,
-                                    is AppUpdateManager.UiState.Downloading -> Unit
-                                    else -> {
-                                        updateScope.launch { appUpdateManager.checkForUpdate() }
-                                    }
-                                }
-                            },
                             nav = settingsNav,
                             onBack = { screen = Screen.DASHBOARD },
                             modifier = Modifier.fillMaxSize(),
@@ -461,7 +394,6 @@ class MainActivity : ComponentActivity() {
                             onBack = { screen = Screen.DIAG_HUB },
                             modifier = Modifier.fillMaxSize(),
                             liveSourceIsDemo = !state.sourceIsLive,
-                            vehicleProfile = settings.vehicleProfile,
                         )
                     }
 
@@ -579,16 +511,8 @@ class MainActivity : ComponentActivity() {
                     ConnectDialog(
                         devices = devices,
                         onPickDevice = { connectTo(it); showConnect = false },
-                        onPickDemo = {
-                            if (settings.allowDemo && !state.sourceIsLive) {
-                                viewModel.useSource(DemoObdSource())
-                                showConnect = false
-                            } else {
-                                toast("Turn on Demo in Settings first (or disconnect live ELM)")
-                            }
-                        },
+                        onPickDemo = { viewModel.useSource(DemoObdSource()); showConnect = false },
                         onDismiss = { showConnect = false },
-                        showDemo = settings.allowDemo && !state.sourceIsLive,
                     )
                 }
 
@@ -811,7 +735,8 @@ class MainActivity : ComponentActivity() {
                 ContextCompat.RECEIVER_NOT_EXPORTED,
             )
             FloatingDashOverlayService.startOverlay(this)
-            // Only background once the overlay confirms attach (ACTION_READY).
+            // Fallback if READY is missed (service already running / OEM quirk).
+            mainHandler.postDelayed({ finishMinimize() }, 900L)
         } catch (e: Exception) {
             runCatching { unregisterReceiver(receiver) }
             toast("Bubble failed: ${e.message ?: "overlay error"}")
@@ -844,68 +769,19 @@ class MainActivity : ComponentActivity() {
     }
 
     @SuppressLint("MissingPermission")
-    private fun loadBondedDevices(): List<BtDeviceUi> = runCatching {
-        val adapter = bluetoothAdapter() ?: return@runCatching emptyList()
-        if (!adapter.isEnabled) return@runCatching emptyList()
-        adapter.bondedDevices
+    private fun loadBondedDevices(): List<BtDeviceUi> {
+        val adapter = bluetoothAdapter() ?: return emptyList()
+        if (!adapter.isEnabled) return emptyList()
+        return adapter.bondedDevices
             ?.map { BtDeviceUi(runCatching { it.name }.getOrNull().orEmpty(), it.address) }
             ?.sortedBy { it.name }
             ?: emptyList()
-    }.getOrElse { e ->
-        // `bondedDevices` throws SecurityException on the UI thread if
-        // BLUETOOTH_CONNECT was revoked after the permission gate ran.
-        ObdLogger.logDebug(ObdLogger.Dir.INFO, "loadBondedDevices failed: ${e.message}")
-        emptyList()
-    }
-
-    @SuppressLint("BatteryLife")
-    private fun maybeRequestUnrestrictedBattery(force: Boolean = false) {
-        if (batteryPrompted && !force) return
-        val pm = getSystemService(PowerManager::class.java) ?: return
-        if (pm.isIgnoringBatteryOptimizations(packageName)) return
-        batteryPrompted = true
-        runCatching {
-            startActivity(
-                Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
-                    data = Uri.parse("package:$packageName")
-                },
-            )
-        }
     }
 
     @SuppressLint("MissingPermission")
     private fun connectTo(device: BtDeviceUi) {
-        // Revoking Bluetooth mid-session makes these adapter calls throw
-        // SecurityException straight onto the UI thread.
-        runCatching {
-            val adapter = bluetoothAdapter() ?: return
-            val remote = adapter.getRemoteDevice(device.address)
-            viewModel.useSource(Elm327BluetoothSource(remote))
-        }.onFailure { e ->
-            ObdLogger.logDebug(ObdLogger.Dir.INFO, "connectTo failed: ${e.message}")
-            toast("Could not open that adapter: ${e.message}")
-        }
-    }
-
-    /**
-     * The app has crashed on the car where no logcat is available, so surface the
-     * saved stack trace on the next launch and let the user send it out.
-     */
-    private fun maybePromptCrashReport() {
-        val report = runCatching { CrashReporter.latestReport(this) }.getOrNull() ?: return
-        val preview = runCatching { report.readText() }.getOrDefault("").lineSequence()
-            .take(12)
-            .joinToString("\n")
-        runCatching {
-            android.app.AlertDialog.Builder(this)
-                .setTitle("FB2 Diag crashed last time")
-                .setMessage("$preview\n\nSave the full report so it can be sent to the developer?")
-                .setPositiveButton("Save report") { _, _ ->
-                    shareOrExportFile(report, report.name, "text/plain", "FB2 Diag crash report")
-                    CrashReporter.clearReports(this)
-                }
-                .setNegativeButton("Dismiss") { _, _ -> CrashReporter.clearReports(this) }
-                .show()
-        }
+        val adapter = bluetoothAdapter() ?: return
+        val remote = adapter.getRemoteDevice(device.address)
+        viewModel.useSource(Elm327BluetoothSource(remote))
     }
 }

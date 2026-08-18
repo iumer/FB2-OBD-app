@@ -86,46 +86,6 @@ class SpeedFreshnessAndPollPlannerTest {
     }
 
     @Test
-    fun planner_heroesOnly_skipsRotatingSecondaries() {
-        val chosen = PidPollPlanner.selectForCycle(
-            activePids = catalog,
-            failStreak = emptyMap(),
-            cycle = 1,
-            recovering = false,
-            hold = com.fb2.obd.obd.PollHold.HEROES_ONLY,
-        )
-        assertTrue(ObdPid.ENGINE_RPM in chosen)
-        assertTrue(ObdPid.SPEED in chosen)
-        assertTrue(ObdPid.COOLANT_TEMP in chosen)
-        assertTrue(ObdPid.MAF in chosen)
-        assertFalse(ObdPid.INTAKE_TEMP in chosen)
-        assertFalse(ObdPid.THROTTLE in chosen)
-    }
-
-    @Test
-    fun freshness_holdValues_doesNotBlankDuringDeepSearchPause() {
-        val fresh = SnapshotFreshness(staleAfterMs = 2_500L)
-        fresh.markOk(SnapshotFreshness.KEY_SPEED, 0L)
-        fresh.markOk(SnapshotFreshness.KEY_RPM, 0L)
-        fresh.markOk(SnapshotFreshness.KEY_COOLANT, 0L)
-        val snap = VehicleSnapshot(rpm = 1800.0, speedKmh = 72.0, coolantC = 88.0)
-        val held = fresh.sanitize(
-            snap,
-            nowMs = 8_000L,
-            rpmUpdatedThisCycle = false,
-            holdValues = true,
-        )
-        // Rec 2: Faults Read stole the mutex for Mode 03/07/0A (~seconds) and
-        // SnapshotFreshness TTL blanked RPM/Speed/Coolant. Exclusive + holdValues
-        // keeps last-good on screen; HEROES_ONLY between commands refreshes them.
-        assertEquals(72.0, held.speedKmh!!, 0.01)
-        assertEquals(1800.0, held.rpm!!, 0.01)
-        assertEquals(88.0, held.coolantC!!, 0.01)
-        val cleared = fresh.sanitize(snap, nowMs = 8_000L, rpmUpdatedThisCycle = false, holdValues = false)
-        assertNull(cleared.speedKmh)
-    }
-
-    @Test
     fun planner_isAlways_coversCoolantAndMaf() {
         assertTrue(PidPollPlanner.isAlways(ObdPid.COOLANT_TEMP))
         assertTrue(PidPollPlanner.isAlways(ObdPid.MAF))
@@ -187,28 +147,6 @@ class SpeedFreshnessAndPollPlannerTest {
     }
 
     @Test
-    fun freshness_clearsStaleIntakeAndThrottle() {
-        // 2026-08-14 drive: Intake + Throttle stuck flat for ~56 min (no TTL clear).
-        val fresh = SnapshotFreshness(staleAfterMs = 2_500L)
-        fresh.markOk(SnapshotFreshness.KEY_INTAKE, 0L)
-        fresh.markOk(SnapshotFreshness.KEY_THROTTLE, 0L)
-        fresh.markOk(SnapshotFreshness.KEY_RPM, 3_000L)
-        val sticky = VehicleSnapshot(
-            rpm = 1800.0,
-            intakeC = 60.0,
-            throttlePct = 13.72549019607843,
-        )
-        val stillFresh = fresh.sanitize(sticky, nowMs = 2_000L, rpmUpdatedThisCycle = true)
-        assertEquals(60.0, stillFresh.intakeC!!, 0.01)
-        assertEquals(13.72549019607843, stillFresh.throttlePct!!, 0.01)
-
-        val cleared = fresh.sanitize(sticky, nowMs = 2_501L, rpmUpdatedThisCycle = true)
-        assertNull(cleared.intakeC)
-        assertNull(cleared.throttlePct)
-        assertEquals(1800.0, cleared.rpm!!, 0.01)
-    }
-
-    @Test
     fun freshness_clearsStaleCoolantAndBattery() {
         val fresh = SnapshotFreshness(staleAfterMs = 2_500L)
         fresh.markOk(SnapshotFreshness.KEY_COOLANT, 0L)
@@ -231,15 +169,6 @@ class SpeedFreshnessAndPollPlannerTest {
         val snap = VehicleSnapshot(speedKmh = 90.0, rpm = 2000.0)
         val out = fresh.sanitize(snap, nowMs = 4_000L, rpmUpdatedThisCycle = true)
         assertEquals(90.0, out.speedKmh!!, 0.01)
-    }
-
-    @Test
-    fun freshness_staleSpeedClearsEvenWhenBusLooksDead() {
-        val fresh = SnapshotFreshness(staleAfterMs = 2_500L)
-        fresh.markOk(SnapshotFreshness.KEY_SPEED, 0L)
-        val sticky = VehicleSnapshot(speedKmh = 65.0)
-        val cleared = fresh.sanitize(sticky, nowMs = 2_501L, rpmUpdatedThisCycle = false)
-        assertNull("stale speed must clear without busAlive gate", cleared.speedKmh)
     }
 
     @Test

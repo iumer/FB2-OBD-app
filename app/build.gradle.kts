@@ -13,8 +13,12 @@ android {
         minSdk = 26
         targetSdk = 34
         // Bump on each sideload APK so HU package installer treats it as an update.
-        versionCode = 34
-        versionName = "0.1.34"
+        // Code is an exact revert to the 0.1.15 tree. Only the version number is
+        // raised: Android refuses to install a lower versionCode over the
+        // installed 0.1.34, so 15 would require an uninstall (losing settings
+        // and saved logs) before it could be sideloaded.
+        versionCode = 35
+        versionName = "0.1.15-revert"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -54,7 +58,6 @@ android {
 
     buildFeatures {
         compose = true
-        buildConfig = true
     }
 
     composeOptions {
@@ -69,7 +72,6 @@ android {
 
     testOptions {
         unitTests.isReturnDefaultValues = true
-        unitTests.isIncludeAndroidResources = true
     }
 }
 
@@ -98,8 +100,4 @@ dependencies {
 
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.8.1")
-    // Android-runtime tests on the JVM (no emulator / no /dev/kvm in cloud VM).
-    // Pure-Kotlin tests cannot catch ViewModel + foreground-service connect crashes.
-    testImplementation("org.robolectric:robolectric:4.12.2")
-    testImplementation("androidx.test:core:1.5.0")
 }

@@ -4,13 +4,18 @@ package com.fb2.obd.ui.dash
 
 import android.graphics.Paint
 import android.graphics.Typeface
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.exponentialDecay
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -26,7 +31,6 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -39,7 +43,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -59,11 +63,8 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.util.VelocityTracker
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.text.PlatformTextStyle
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
@@ -83,22 +84,10 @@ import com.fb2.obd.ui.color
 import com.fb2.obd.ui.theme.ThemePalette
 import kotlin.math.absoluteValue
 import kotlin.math.cos
-import kotlin.math.floor
 import kotlin.math.roundToInt
 import kotlin.math.sin
 
 private val DigitFace = FontFamily.SansSerif
-
-/** Avoid Android font padding clipping bottoms of bold labels in short theme stacks. */
-private fun tightLabelStyle(size: androidx.compose.ui.unit.TextUnit) = TextStyle(
-    fontSize = size,
-    lineHeight = size * 1.15f,
-    platformStyle = PlatformTextStyle(includeFontPadding = false),
-    lineHeightStyle = LineHeightStyle(
-        alignment = LineHeightStyle.Alignment.Center,
-        trim = LineHeightStyle.Trim.Both,
-    ),
-)
 
 @Composable
 fun OptAThemeDash(
@@ -407,74 +396,45 @@ fun OptBThemeDash(
                         onEditThresholds = { onEditThresholds(EditableMetric.RPM) },
                     ),
             )
-            BoxWithConstraints(
+            Column(
                 modifier = Modifier
-                    .width(86.dp)
-                    .fillMaxHeight(0.88f)
+                    .width(92.dp)
+                    .fillMaxHeight(0.74f)
+                    .clip(RoundedCornerShape(20.dp))
+                    .background(
+                        Brush.verticalGradient(listOf(Color(0xFF152030), palette.surface)),
+                    )
+                    .border(1.5.dp, palette.accent.copy(alpha = 0.65f), RoundedCornerShape(20.dp))
+                    .padding(vertical = 10.dp)
                     .themeMetricGestures(
                         onRemap = { onRemapBase("Gear") },
                         onDeepSearch = { onDeepSearch("Gear", null) },
                     ),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.SpaceEvenly,
             ) {
-                val gearSp = (maxHeight.value * 0.26f).coerceIn(28f, 44f).sp
-                val labelSp = (maxHeight.value * 0.055f).coerceIn(9f, 11f).sp
-                val badgeSp = (maxHeight.value * 0.05f).coerceIn(9f, 11f).sp
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .clip(RoundedCornerShape(20.dp))
-                        .background(
-                            Brush.verticalGradient(listOf(Color(0xFF152030), palette.surface)),
-                        )
-                        .border(1.5.dp, palette.accent.copy(alpha = 0.65f), RoundedCornerShape(20.dp)),
+                Text("GEAR", color = palette.textMuted, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp)
+                Box(modifier = Modifier.width(32.dp).height(2.dp).background(palette.accent))
+                Text(
+                    text = if (gearSource == GearSource.NONE) "–" else (snapshot.gear?.toString() ?: "–"),
+                    color = palette.textPrimary,
+                    fontSize = 56.sp,
+                    fontWeight = FontWeight.Black,
+                    fontFamily = DigitFace,
                 )
-                Column(
+                Text(
+                    text = when (gearSource) {
+                        GearSource.ECU -> "ECU"
+                        GearSource.ESTIMATED -> "EST"
+                        GearSource.NONE -> "—"
+                    },
+                    color = palette.accent,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
                     modifier = Modifier
-                        .fillMaxSize()
-                        .padding(horizontal = 6.dp, vertical = 12.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.SpaceBetween,
-                ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(
-                            "GEAR",
-                            color = palette.textMuted,
-                            fontSize = labelSp,
-                            fontWeight = FontWeight.Bold,
-                            letterSpacing = 1.5.sp,
-                            maxLines = 1,
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Box(
-                            modifier = Modifier
-                                .width(28.dp)
-                                .height(2.dp)
-                                .background(palette.accent),
-                        )
-                    }
-                    Text(
-                        text = if (gearSource == GearSource.NONE) "–" else (snapshot.gear?.toString() ?: "–"),
-                        color = palette.textPrimary,
-                        fontSize = gearSp,
-                        fontWeight = FontWeight.Black,
-                        fontFamily = DigitFace,
-                        maxLines = 1,
-                    )
-                    Text(
-                        text = when (gearSource) {
-                            GearSource.ECU -> "ECU"
-                            GearSource.ESTIMATED -> "EST"
-                            GearSource.NONE -> "—"
-                        },
-                        color = palette.accent,
-                        fontWeight = FontWeight.Bold,
-                        maxLines = 1,
-                        style = tightLabelStyle(badgeSp),
-                        modifier = Modifier
-                            .border(1.dp, palette.accent, RoundedCornerShape(6.dp))
-                            .padding(horizontal = 8.dp, vertical = 4.dp),
-                    )
-                }
+                        .border(1.dp, palette.accent, RoundedCornerShape(6.dp))
+                        .padding(horizontal = 8.dp, vertical = 2.dp),
+                )
             }
             RealisticNeedleGauge(
                 valueText = snapshot.speedKmh?.roundToInt()?.toString() ?: "--",
@@ -568,7 +528,7 @@ fun OptCThemeDash(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .weight(0.48f)
+                .weight(0.52f)
                 .clip(RoundedCornerShape(26.dp))
                 .background(
                     Brush.radialGradient(
@@ -577,7 +537,7 @@ fun OptCThemeDash(
                     ),
                 )
                 .border(1.dp, palette.accent.copy(alpha = 0.28f), RoundedCornerShape(26.dp))
-                .padding(start = 10.dp, end = 10.dp, top = 8.dp, bottom = 18.dp),
+                .padding(8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             BoxWithConstraints(
@@ -640,7 +600,7 @@ fun OptCThemeDash(
                 }
             }
 
-            BoxWithConstraints(
+            Box(
                 modifier = Modifier
                     .weight(0.28f)
                     .fillMaxHeight()
@@ -650,12 +610,10 @@ fun OptCThemeDash(
                     ),
                 contentAlignment = Alignment.Center,
             ) {
-                val gearSp = (maxHeight.value * 0.34f).coerceIn(28f, 44f).sp
-                val badgeSp = (maxHeight.value * 0.07f).coerceIn(9f, 11f).sp
-                Canvas(modifier = Modifier.fillMaxSize(0.72f)) {
+                Canvas(modifier = Modifier.fillMaxSize(0.85f)) {
                     val cx = size.width / 2f
                     val cy = size.height / 2f
-                    val r = size.minDimension * 0.40f
+                    val r = size.minDimension * 0.42f
                     drawArc(
                         color = palette.accent.copy(alpha = 0.95f),
                         startAngle = 100f,
@@ -690,28 +648,14 @@ fun OptCThemeDash(
                         )
                     }
                 }
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.SpaceBetween,
-                    modifier = Modifier
-                        .fillMaxHeight()
-                        .padding(top = 4.dp, bottom = 2.dp),
-                ) {
-                    Text(
-                        "GEAR",
-                        color = palette.accent,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 2.sp,
-                        maxLines = 1,
-                    )
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text("GEAR", color = palette.accent, fontSize = 12.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
                     Text(
                         text = if (gearSource == GearSource.NONE) "–" else (snapshot.gear?.toString() ?: "–"),
                         color = palette.textPrimary,
-                        fontSize = gearSp,
+                        fontSize = 56.sp,
                         fontWeight = FontWeight.Black,
                         fontFamily = DigitFace,
-                        maxLines = 1,
                     )
                     Text(
                         text = when (gearSource) {
@@ -720,12 +664,11 @@ fun OptCThemeDash(
                             GearSource.NONE -> "—"
                         },
                         color = palette.accent,
+                        fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,
-                        maxLines = 1,
-                        style = tightLabelStyle(badgeSp),
                         modifier = Modifier
                             .border(1.dp, palette.accent, RoundedCornerShape(6.dp))
-                            .padding(horizontal = 8.dp, vertical = 4.dp),
+                            .padding(horizontal = 8.dp, vertical = 2.dp),
                     )
                 }
             }
@@ -734,13 +677,12 @@ fun OptCThemeDash(
                 modifier = Modifier
                     .weight(0.34f)
                     .fillMaxHeight()
-                    .padding(top = 4.dp, bottom = 2.dp)
                     .themeMetricGestures(
                         onRemap = { onRemapBase("Speed") },
                         onDeepSearch = { onDeepSearch("Speed", "010D") },
                     ),
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.SpaceBetween,
+                verticalArrangement = Arrangement.Center,
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     FreshnessHeartbeat(
@@ -751,10 +693,7 @@ fun OptCThemeDash(
                 }
                 Box(
                     contentAlignment = Alignment.Center,
-                    modifier = Modifier
-                        .weight(1f, fill = true)
-                        .fillMaxWidth()
-                        .padding(vertical = 2.dp),
+                    modifier = Modifier.height(72.dp).fillMaxWidth(),
                 ) {
                     Canvas(modifier = Modifier.matchParentSize()) {
                         for (i in 0..6) {
@@ -769,20 +708,13 @@ fun OptCThemeDash(
                     Text(
                         text = snapshot.speedKmh?.roundToInt()?.toString() ?: "--",
                         color = palette.textPrimary,
-                        fontSize = 36.sp,
+                        fontSize = 52.sp,
                         fontWeight = FontWeight.Black,
                         fontFamily = DigitFace,
                         maxLines = 1,
                     )
                 }
-                Text(
-                    "km/h",
-                    color = palette.accentSoft,
-                    fontWeight = FontWeight.SemiBold,
-                    maxLines = 1,
-                    style = tightLabelStyle(12.sp),
-                    modifier = Modifier.padding(bottom = 2.dp),
-                )
+                Text("km/h", color = palette.accentSoft, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
             }
         }
 
@@ -790,7 +722,7 @@ fun OptCThemeDash(
 
         LazyVerticalGrid(
             columns = GridCells.Fixed(3),
-            modifier = Modifier.fillMaxWidth().weight(0.52f),
+            modifier = Modifier.fillMaxWidth().weight(0.48f),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
@@ -876,13 +808,7 @@ private fun OrbitValuePanel(
     }
 }
 
-/**
- * Dialer-style vertical picker.
- *
- * Continuous fractional scroll (phone NumberPicker feel): drag updates index
- * position synchronously (no per-delta coroutine queue — that felt sticky),
- * fling uses decay, then spring-snaps to the nearest slot.
- */
+/** Dialer-style vertical picker — steps mid-drag like a phone wheel, not sticky snap-on-release. */
 @Composable
 private fun OrbitWheel(
     metrics: List<DashThemeMetric>,
@@ -893,14 +819,21 @@ private fun OrbitWheel(
     modifier: Modifier = Modifier,
 ) {
     val pages = metrics.ifEmpty { listOf(DashThemeMetric("–", "--", "")) }
-    val pageCount = pages.size.coerceAtLeast(1)
-    val initial = 1f.coerceAtMost((pageCount - 1).toFloat().coerceAtLeast(0f))
-    val pageKey = pages.map { it.label }
-    var dragPos by remember(pageKey) { mutableFloatStateOf(initial) }
-    val settleAnim = remember(pageKey) { Animatable(initial) }
-    var settling by remember(pageKey) { mutableStateOf(false) }
+    var centerIndex by remember(pages.map { it.label }) {
+        mutableIntStateOf((1).coerceAtMost(pages.lastIndex.coerceAtLeast(0)))
+    }
+    val safeCenter = centerIndex.floorMod(pages.size.coerceAtLeast(1))
     val scope = rememberCoroutineScope()
-    val displayPos = if (settling) settleAnim.value else dragPos
+    val dragPx = remember { Animatable(0f) }
+    val density = LocalDensity.current
+    val stepPx = with(density) { 36.dp.toPx() }
+
+    fun idx(delta: Int): Int {
+        if (pages.isEmpty()) return 0
+        var i = (safeCenter + delta) % pages.size
+        if (i < 0) i += pages.size
+        return i
+    }
 
     Column(
         modifier = modifier
@@ -911,6 +844,71 @@ private fun OrbitWheel(
                 ),
             )
             .border(2.dp, palette.accent.copy(alpha = 0.8f), RoundedCornerShape(999.dp))
+            .pointerInput(pages.size, stepPx) {
+                val tracker = VelocityTracker()
+                var carry = 0f
+                detectVerticalDragGestures(
+                    onDragStart = {
+                        tracker.resetTracking()
+                        carry = 0f
+                        scope.launch { dragPx.stop(); dragPx.snapTo(0f) }
+                    },
+                    onDragEnd = {
+                        val vy = tracker.calculateVelocity().y
+                        scope.launch {
+                            val flingSteps = when {
+                                vy.absoluteValue > 3500f -> 2
+                                vy.absoluteValue > 1800f -> 1
+                                else -> 0
+                            }
+                            val dir = if (vy > 0f) -1 else 1
+                            if (flingSteps > 0 && vy.absoluteValue > 1800f) {
+                                repeat(flingSteps) {
+                                    centerIndex = (centerIndex + dir).floorMod(pages.size)
+                                }
+                            }
+                            dragPx.animateTo(
+                                0f,
+                                spring(
+                                    dampingRatio = Spring.DampingRatioNoBouncy,
+                                    stiffness = Spring.StiffnessMediumLow,
+                                ),
+                            )
+                            carry = 0f
+                        }
+                    },
+                    onDragCancel = {
+                        scope.launch {
+                            dragPx.animateTo(0f, spring(stiffness = Spring.StiffnessMedium))
+                            carry = 0f
+                        }
+                    },
+                    onVerticalDrag = { change, amount ->
+                        change.consume()
+                        tracker.addPosition(change.uptimeMillis, change.position)
+                        carry += amount
+                        // Step as soon as the finger crosses a slot — dialer, not sticky release-snap.
+                        var stepped = false
+                        while (carry > stepPx && pages.isNotEmpty()) {
+                            centerIndex = (centerIndex - 1).floorMod(pages.size)
+                            carry -= stepPx
+                            stepped = true
+                        }
+                        while (carry < -stepPx && pages.isNotEmpty()) {
+                            centerIndex = (centerIndex + 1).floorMod(pages.size)
+                            carry += stepPx
+                            stepped = true
+                        }
+                        scope.launch {
+                            if (stepped) {
+                                dragPx.snapTo(carry.coerceIn(-stepPx * 0.45f, stepPx * 0.45f))
+                            } else {
+                                dragPx.snapTo(carry.coerceIn(-stepPx, stepPx))
+                            }
+                        }
+                    },
+                )
+            }
             .padding(vertical = 4.dp, horizontal = 2.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
@@ -922,104 +920,39 @@ private fun OrbitWheel(
                 .padding(horizontal = 2.dp),
         ) {
             val slotH = maxHeight / 3
-            val slotPx = with(LocalDensity.current) { slotH.toPx() }
-            val decay = remember {
-                exponentialDecay<Float>(frictionMultiplier = 1.35f)
-            }
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .pointerInput(pageCount, slotPx) {
-                        val tracker = VelocityTracker()
-                        detectVerticalDragGestures(
-                            onDragStart = {
-                                tracker.resetTracking()
-                                // Animatable.value is readable without suspend — take over mid-fling.
-                                if (settling) {
-                                    dragPos = settleAnim.value
-                                    settling = false
-                                }
-                                scope.launch { settleAnim.stop() }
-                            },
-                            onDragEnd = {
-                                val vy = tracker.calculateVelocity().y
-                                // px/s → index/s (finger down increases y → lower index).
-                                val velIndex = if (slotPx > 0.5f) -vy / slotPx else 0f
-                                scope.launch {
-                                    settling = true
-                                    settleAnim.snapTo(dragPos)
-                                    if (velIndex.absoluteValue > 0.4f) {
-                                        settleAnim.animateDecay(
-                                            initialVelocity = velIndex,
-                                            animationSpec = decay,
-                                        )
-                                    }
-                                    val target = settleAnim.value.roundToInt().toFloat()
-                                    settleAnim.animateTo(
-                                        target,
-                                        spring(
-                                            dampingRatio = 0.92f,
-                                            stiffness = Spring.StiffnessMedium,
-                                        ),
-                                    )
-                                    // Keep unbounded scroll math; wrap only for display.
-                                    dragPos = settleAnim.value
-                                    settling = false
-                                }
-                            },
-                            onDragCancel = {
-                                scope.launch {
-                                    settling = true
-                                    settleAnim.snapTo(dragPos)
-                                    val target = dragPos.roundToInt().toFloat()
-                                    settleAnim.animateTo(
-                                        target,
-                                        spring(stiffness = Spring.StiffnessMedium),
-                                    )
-                                    dragPos = settleAnim.value
-                                    settling = false
-                                }
-                            },
-                            onVerticalDrag = { change, amount ->
-                                change.consume()
-                                tracker.addPosition(change.uptimeMillis, change.position)
-                                if (slotPx > 0.5f) {
-                                    // Sync update — never queue a coroutine per frame.
-                                    dragPos -= amount / slotPx
-                                }
-                            },
-                        )
-                    },
-            ) {
-                val base = floor(displayPos.toDouble()).toInt()
-                val frac = (displayPos - base).toFloat()
+            Box(modifier = Modifier.fillMaxSize()) {
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
-                        .offset {
-                            IntOffset(0, (-frac * slotPx).roundToInt())
-                        },
+                        .offset { IntOffset(0, dragPx.value.roundToInt()) },
                 ) {
-                    // Four slots so the next item is already painted while scrolling.
-                    val focusedIndex = displayPos.roundToInt().floorMod(pageCount)
-                    for (delta in -1..2) {
-                        val index = (base + delta).floorMod(pageCount)
-                        val metric = pages[index]
-                        val focused = index == focusedIndex
+                    listOf(-1, 0, 1).forEach { delta ->
+                        val focused = delta == 0
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(slotH),
                             contentAlignment = Alignment.Center,
                         ) {
-                            OrbitWheelItem(
-                                metric = metric,
-                                focused = focused,
-                                palette = palette,
-                                onRemapBase = onRemapBase,
-                                onDeepSearch = onDeepSearch,
-                                onEditThresholds = onEditThresholds,
-                            )
+                            AnimatedContent(
+                                targetState = pages[idx(delta)],
+                                transitionSpec = {
+                                    (slideInVertically { h -> h / 5 } + fadeIn(tween(90))) togetherWith
+                                        (slideOutVertically { h -> -h / 5 } + fadeOut(tween(90)))
+                                },
+                                label = "orbit-slot-$delta",
+                                contentKey = { it.label },
+                                modifier = Modifier.fillMaxSize(),
+                            ) { metric ->
+                                OrbitWheelItem(
+                                    metric = metric,
+                                    focused = focused,
+                                    palette = palette,
+                                    onRemapBase = onRemapBase,
+                                    onDeepSearch = onDeepSearch,
+                                    onEditThresholds = onEditThresholds,
+                                )
+                            }
                         }
                     }
                 }
@@ -1117,165 +1050,151 @@ private fun RealisticNeedleGauge(
     palette: ThemePalette,
     modifier: Modifier = Modifier,
 ) {
-    Column(
-        modifier = modifier.fillMaxHeight(),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
-    ) {
-        BoxWithConstraints(
-            modifier = Modifier
-                .weight(1f, fill = true)
-                .fillMaxWidth(),
-            contentAlignment = Alignment.Center,
-        ) {
-            val side = minOf(maxWidth, maxHeight)
-            Canvas(modifier = Modifier.size(side * 0.98f)) {
-                val cx = size.width / 2f
-                val cy = size.height / 2f
-                val r = size.minDimension * 0.40f
-                val start = 135f
-                val sweep = 270f
+    Box(modifier = modifier.fillMaxHeight(), contentAlignment = Alignment.Center) {
+        Canvas(modifier = Modifier.size(210.dp)) {
+            val cx = size.width / 2f
+            val cy = size.height / 2f
+            val r = size.minDimension * 0.40f
+            val start = 135f
+            val sweep = 270f
 
-                drawCircle(
-                    brush = Brush.radialGradient(
-                        colors = listOf(Color(0xFF1A2838), Color(0xFF0A1018)),
-                        center = Offset(cx, cy),
-                        radius = r + 28f,
-                    ),
-                    radius = r + 26f,
+            // Dial depth rings
+            drawCircle(
+                brush = Brush.radialGradient(
+                    colors = listOf(Color(0xFF1A2838), Color(0xFF0A1018)),
                     center = Offset(cx, cy),
-                )
-                drawCircle(
-                    color = Color(0xFF243040),
-                    radius = r + 22f,
-                    center = Offset(cx, cy),
-                    style = Stroke(width = 8f),
-                )
-                drawCircle(
-                    color = arcColor.copy(alpha = 0.25f),
-                    radius = r + 18f,
-                    center = Offset(cx, cy),
-                    style = Stroke(width = 2f),
-                )
+                    radius = r + 28f,
+                ),
+                radius = r + 26f,
+                center = Offset(cx, cy),
+            )
+            drawCircle(
+                color = Color(0xFF243040),
+                radius = r + 22f,
+                center = Offset(cx, cy),
+                style = Stroke(width = 8f),
+            )
+            drawCircle(
+                color = arcColor.copy(alpha = 0.25f),
+                radius = r + 18f,
+                center = Offset(cx, cy),
+                style = Stroke(width = 2f),
+            )
 
-                val track = Stroke(width = 14f, cap = StrokeCap.Round)
+            val track = Stroke(width = 14f, cap = StrokeCap.Round)
+            drawArc(
+                color = palette.track,
+                startAngle = start,
+                sweepAngle = sweep,
+                useCenter = false,
+                topLeft = Offset(cx - r, cy - r),
+                size = Size(r * 2, r * 2),
+                style = track,
+            )
+            val f = fraction.coerceIn(0f, 1f)
+            val goodEnd = f.coerceAtMost(redlineFrom.coerceAtMost(1f))
+            drawArc(
+                brush = Brush.sweepGradient(
+                    colors = listOf(arcColor.copy(alpha = 0.55f), arcColor),
+                    center = Offset(cx, cy),
+                ),
+                startAngle = start,
+                sweepAngle = sweep * goodEnd,
+                useCenter = false,
+                topLeft = Offset(cx - r, cy - r),
+                size = Size(r * 2, r * 2),
+                style = track,
+            )
+            if (f > redlineFrom && redlineFrom < 1f) {
                 drawArc(
-                    color = palette.track,
-                    startAngle = start,
-                    sweepAngle = sweep,
+                    color = palette.critical,
+                    startAngle = start + sweep * redlineFrom,
+                    sweepAngle = sweep * (f - redlineFrom),
                     useCenter = false,
                     topLeft = Offset(cx - r, cy - r),
                     size = Size(r * 2, r * 2),
                     style = track,
                 )
-                val f = fraction.coerceIn(0f, 1f)
-                val goodEnd = f.coerceAtMost(redlineFrom.coerceAtMost(1f))
-                drawArc(
-                    brush = Brush.sweepGradient(
-                        colors = listOf(arcColor.copy(alpha = 0.55f), arcColor),
-                        center = Offset(cx, cy),
-                    ),
-                    startAngle = start,
-                    sweepAngle = sweep * goodEnd,
-                    useCenter = false,
-                    topLeft = Offset(cx - r, cy - r),
-                    size = Size(r * 2, r * 2),
-                    style = track,
-                )
-                if (f > redlineFrom && redlineFrom < 1f) {
-                    drawArc(
-                        color = palette.critical,
-                        startAngle = start + sweep * redlineFrom,
-                        sweepAngle = sweep * (f - redlineFrom),
-                        useCenter = false,
-                        topLeft = Offset(cx - r, cy - r),
-                        size = Size(r * 2, r * 2),
-                        style = track,
-                    )
-                }
+            }
 
-                val labelPaint = Paint().apply {
-                    color = palette.textMuted.toArgb()
-                    textAlign = Paint.Align.CENTER
-                    textSize = (size.minDimension * 0.065f).coerceIn(14f, 20f)
-                    isAntiAlias = true
-                    typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-                }
+            val labelPaint = Paint().apply {
+                color = palette.textMuted.toArgb()
+                textAlign = Paint.Align.CENTER
+                textSize = 18f
+                isAntiAlias = true
+                typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            }
 
-                for (i in 0..majorTicks) {
-                    val a = Math.toRadians((start + sweep * i / majorTicks).toDouble())
-                    val outer = r + 6f
-                    val inner = r - (if (i % 2 == 0) 16f else 10f)
-                    drawLine(
-                        color = if (i >= (redlineFrom * majorTicks).toInt() && redlineFrom < 1f) {
-                            palette.critical.copy(alpha = 0.9f)
-                        } else {
-                            palette.textPrimary.copy(alpha = 0.75f)
-                        },
-                        start = Offset(cx + outer * cos(a).toFloat(), cy + outer * sin(a).toFloat()),
-                        end = Offset(cx + inner * cos(a).toFloat(), cy + inner * sin(a).toFloat()),
-                        strokeWidth = if (i % 2 == 0) 3.5f else 2f,
-                        cap = StrokeCap.Round,
-                    )
-                    val label = tickLabels.getOrNull(i)
-                    if (label != null) {
-                        val lr = r - 28f
-                        val lx = cx + lr * cos(a).toFloat()
-                        val ly = cy + lr * sin(a).toFloat() + 6f
-                        drawContext.canvas.nativeCanvas.drawText(label, lx, ly, labelPaint)
-                    }
-                }
-
-                val na = Math.toRadians((start + sweep * f).toDouble())
-                val tip = Offset(cx + (r - 6f) * cos(na).toFloat(), cy + (r - 6f) * sin(na).toFloat())
-                val back = Offset(cx - 22f * cos(na).toFloat(), cy - 22f * sin(na).toFloat())
-                val perp = na + Math.PI / 2
-                fun needlePath(halfW: Float) = Path().apply {
-                    moveTo(tip.x, tip.y)
-                    lineTo((back.x + halfW * cos(perp)).toFloat(), (back.y + halfW * sin(perp)).toFloat())
-                    lineTo((back.x - halfW * cos(perp)).toFloat(), (back.y - halfW * sin(perp)).toFloat())
-                    close()
-                }
-                drawPath(needlePath(10f), color = arcColor.copy(alpha = 0.18f))
-                drawPath(needlePath(7f), color = arcColor.copy(alpha = 0.35f))
-                drawPath(needlePath(4.5f), color = arcColor)
+            for (i in 0..majorTicks) {
+                val a = Math.toRadians((start + sweep * i / majorTicks).toDouble())
+                val outer = r + 6f
+                val inner = r - (if (i % 2 == 0) 16f else 10f)
                 drawLine(
-                    color = Color.White.copy(alpha = 0.55f),
-                    start = Offset((back.x + tip.x) / 2f, (back.y + tip.y) / 2f),
-                    end = tip,
-                    strokeWidth = 1.5f,
+                    color = if (i >= (redlineFrom * majorTicks).toInt() && redlineFrom < 1f) {
+                        palette.critical.copy(alpha = 0.9f)
+                    } else {
+                        palette.textPrimary.copy(alpha = 0.75f)
+                    },
+                    start = Offset(cx + outer * cos(a).toFloat(), cy + outer * sin(a).toFloat()),
+                    end = Offset(cx + inner * cos(a).toFloat(), cy + inner * sin(a).toFloat()),
+                    strokeWidth = if (i % 2 == 0) 3.5f else 2f,
                     cap = StrokeCap.Round,
                 )
-                drawCircle(color = Color(0xFF0A1018), radius = 16f, center = Offset(cx, cy))
-                drawCircle(color = arcColor.copy(alpha = 0.45f), radius = 13f, center = Offset(cx, cy))
-                drawCircle(color = arcColor, radius = 9f, center = Offset(cx, cy))
-                drawCircle(color = Color.White.copy(alpha = 0.95f), radius = 3.2f, center = Offset(cx, cy))
+                val label = tickLabels.getOrNull(i)
+                if (label != null) {
+                    val lr = r - 28f
+                    val lx = cx + lr * cos(a).toFloat()
+                    val ly = cy + lr * sin(a).toFloat() + 6f
+                    drawContext.canvas.nativeCanvas.drawText(label, lx, ly, labelPaint)
+                }
             }
-        }
-        // Digits live under the dial — never compete with the bottom arc / parent clip.
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(top = 2.dp),
-        ) {
-            FreshnessHeartbeat(lastOkMs = freshAtMs, size = 6.dp)
-            Spacer(modifier = Modifier.width(4.dp))
-            Text(
-                text = valueText,
-                color = arcColor,
-                fontWeight = FontWeight.Black,
-                fontFamily = DigitFace,
-                maxLines = 1,
-                style = tightLabelStyle(22.sp),
+
+            // Glow needle + tapered body
+            val na = Math.toRadians((start + sweep * f).toDouble())
+            val tip = Offset(cx + (r - 6f) * cos(na).toFloat(), cy + (r - 6f) * sin(na).toFloat())
+            val back = Offset(cx - 22f * cos(na).toFloat(), cy - 22f * sin(na).toFloat())
+            val perp = na + Math.PI / 2
+            fun needlePath(halfW: Float) = Path().apply {
+                moveTo(tip.x, tip.y)
+                lineTo((back.x + halfW * cos(perp)).toFloat(), (back.y + halfW * sin(perp)).toFloat())
+                lineTo((back.x - halfW * cos(perp)).toFloat(), (back.y - halfW * sin(perp)).toFloat())
+                close()
+            }
+            drawPath(needlePath(10f), color = arcColor.copy(alpha = 0.18f))
+            drawPath(needlePath(7f), color = arcColor.copy(alpha = 0.35f))
+            drawPath(needlePath(4.5f), color = arcColor)
+            drawLine(
+                color = Color.White.copy(alpha = 0.55f),
+                start = Offset(
+                    (back.x + tip.x) / 2f,
+                    (back.y + tip.y) / 2f,
+                ),
+                end = tip,
+                strokeWidth = 1.5f,
+                cap = StrokeCap.Round,
             )
+            drawCircle(color = Color(0xFF0A1018), radius = 16f, center = Offset(cx, cy))
+            drawCircle(color = arcColor.copy(alpha = 0.45f), radius = 13f, center = Offset(cx, cy))
+            drawCircle(color = arcColor, radius = 9f, center = Offset(cx, cy))
+            drawCircle(color = Color.White.copy(alpha = 0.95f), radius = 3.2f, center = Offset(cx, cy))
         }
-        Text(
-            unit,
-            color = palette.textMuted,
-            fontWeight = FontWeight.Bold,
-            maxLines = 1,
-            style = tightLabelStyle(11.sp),
-            modifier = Modifier.padding(bottom = 2.dp),
-        )
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.padding(top = 78.dp),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                FreshnessHeartbeat(lastOkMs = freshAtMs, size = 7.dp)
+                Spacer(modifier = Modifier.width(4.dp))
+                Text(
+                    text = valueText,
+                    color = arcColor,
+                    fontSize = 24.sp,
+                    fontWeight = FontWeight.Black,
+                    fontFamily = DigitFace,
+                )
+            }
+            Text(unit, color = palette.textMuted, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+        }
     }
 }
 

@@ -11,7 +11,6 @@ import com.fb2.obd.obd.GearEstimator
 import com.fb2.obd.obd.GearSource
 import com.fb2.obd.obd.HealthThresholds
 import com.fb2.obd.obd.HondaPidCatalog
-import com.fb2.obd.obd.KeepAlivePolicy
 import com.fb2.obd.obd.SnapshotFreshness
 import com.fb2.obd.obd.StandardPidCatalog
 import com.fb2.obd.obd.VehicleProfile
@@ -251,35 +250,6 @@ class RegressionGateTest {
         val battery = DeepSearchKnowledgeBase.strategiesFor(null, "Battery", "0142")
         assertTrue(battery.any { it.setup.any { s -> s.equals("ATSP0", true) || s.startsWith("ATSP") } })
         assertTrue(battery.any { it.request.equals("ATRV", true) })
-    }
-
-    @Test
-    fun freshness_holdValues_keepsDashDuringExclusiveLink() {
-        val freshness = SnapshotFreshness()
-        val now = 20_000L
-        freshness.markOk(SnapshotFreshness.KEY_RPM, 0L)
-        freshness.markOk(SnapshotFreshness.KEY_SPEED, 0L)
-        freshness.markOk(SnapshotFreshness.KEY_COOLANT, 0L)
-        val snap = drivingSnap()
-        val held = freshness.sanitize(snap, nowMs = now, rpmUpdatedThisCycle = false, holdValues = true)
-        assertEquals(snap.speedKmh, held.speedKmh)
-        assertEquals(snap.coolantC, held.coolantC)
-    }
-
-    @Test
-    fun picker_liveBeatsUnsupportedBitmask_forAtrvBattery() {
-        val battery = StandardPidCatalog.all.first { it.request.equals("0142", true) }
-        val snap = VehicleSnapshot(batteryVolts = 13.8, unsupportedPids = setOf(0x42))
-        assertEquals(
-            com.fb2.obd.obd.SensorReadKind.LIVE,
-            com.fb2.obd.obd.SensorPickerReadings.resolve(battery, snap, emptyMap()).kind,
-        )
-    }
-
-    @Test
-    fun keepAlive_reconnectsUnlessUserDisconnected() {
-        assertTrue(KeepAlivePolicy.shouldReconnectAfterDeath("00:11:22:33:44:55", false))
-        assertFalse(KeepAlivePolicy.shouldReconnectAfterDeath("00:11:22:33:44:55", true))
     }
 
     @Test

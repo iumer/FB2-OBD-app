@@ -65,14 +65,10 @@ class SnapshotFreshness(
         snapshot: VehicleSnapshot,
         nowMs: Long,
         rpmUpdatedThisCycle: Boolean,
-        holdValues: Boolean = false,
     ): VehicleSnapshot {
-        if (holdValues) {
-            // Deep search / exclusive ATSH: keep last-good numbers on screen.
-            // Do not remake timestamps — freshness LEDs go dim until heroes resume.
-            return snapshot.copy(freshAtMs = snapshotMap())
-        }
         var out = snapshot
+        val busAlive = rpmUpdatedThisCycle || snapshot.rpm != null ||
+            snapshot.batteryVolts != null || snapshot.mafGps != null
 
         fun isStale(key: String, ttl: Long = staleAfterMs): Boolean {
             val okAt = lastOkMs[key] ?: return false
@@ -83,9 +79,8 @@ class SnapshotFreshness(
             lastOkMs.remove(key)
         }
 
-        // Speed: clear when stale even if the rest of the bus looks dead —
-        // otherwise a lone frozen km/h can linger after a full Mode 01 drop.
-        if (isStale(KEY_SPEED)) {
+        // Speed: clear when stale and bus otherwise alive (matches 65-vs-98 freeze).
+        if (isStale(KEY_SPEED) && busAlive) {
             clearKey(KEY_SPEED)
             out = out.copy(
                 speedKmh = null,
@@ -124,18 +119,6 @@ class SnapshotFreshness(
         if (isStale(KEY_MAP)) {
             clearKey(KEY_MAP)
             out = out.copy(mapKpa = null)
-        }
-
-        // Intake / Throttle rotate as secondaries. Without TTL they freeze forever
-        // after one decode (2026-08-14 drive: Intake=60°C and Throttle=13.7% flat
-        // for ~56 min while RPM/Speed/MAF moved). Clear like MAP.
-        if (isStale(KEY_INTAKE)) {
-            clearKey(KEY_INTAKE)
-            out = out.copy(intakeC = null)
-        }
-        if (isStale(KEY_THROTTLE)) {
-            clearKey(KEY_THROTTLE)
-            out = out.copy(throttlePct = null)
         }
 
         // Gear estimate needs both RPM and Speed fresh in this window.

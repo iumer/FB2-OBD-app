@@ -1,5 +1,16 @@
 # FB2 Diag — Regression checklist
 
+> ## ⚠️ App code is reverted to 0.1.15
+>
+> On 2026-08-18 the user asked to revert to 0.1.15 after 0.1.27 broke live data
+> and 0.1.28–0.1.34 crashed on Connect. `app/` and `scripts/` are an exact copy of
+> commit `d3790be` (0.1.15); only `versionCode` was raised to 35 so it can install
+> over 0.1.34.
+>
+> **Rows below marked Fixed for 0.1.16+ are NOT in the current build.** See
+> [`CHANGELOG-0.1.15-to-0.1.34.md`](CHANGELOG-0.1.15-to-0.1.34.md) for exactly what
+> was reverted. The 0.1.34 tree is preserved on `cursor/obd-connect-crash-c3be`.
+
 **Mandatory for every code change.** After any non-trivial edit, run the full
 automated suite below and tick the relevant manual items before calling the
 work done. Update this file when the user reports a new issue or a new test is

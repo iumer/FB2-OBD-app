@@ -4,8 +4,6 @@
     <!-- Network for log upload to GitHub when the HU is online -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
-    <!-- In-app sideload update from always-latest APK -->
-    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
     <!-- Bluetooth Classic (ELM327 SPP) - Android 12+ -->
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
@@ -30,7 +28,6 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
-    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
     <!-- Floating dash bubble over CarPlay / other apps (Dellson HU) -->
@@ -64,7 +61,6 @@
         android:required="false" />
 
     <application
-        android:name=".Fb2App"
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
@@ -108,14 +104,12 @@
         <service
             android:name=".service.ObdMonitorForegroundService"
             android:exported="false"
-            android:stopWithTask="false"
             android:foregroundServiceType="connectedDevice" />
 
-        <!-- Draggable floating Dash bubble (draw-over-apps). Survives swipe-away like ELM FGS. -->
+        <!-- Draggable floating Dash bubble (draw-over-apps). FGS so it survives MIN. -->
         <service
             android:name=".service.FloatingDashOverlayService"
             android:exported="false"
-            android:stopWithTask="false"
             android:foregroundServiceType="specialUse">
             <property
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"

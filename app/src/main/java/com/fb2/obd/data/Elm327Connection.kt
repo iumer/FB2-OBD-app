@@ -72,15 +72,12 @@ class Elm327Connection(
     }
 
     companion object {
-        /** Short enough that one hung PID doesn't freeze the Dash for long.
-         *  Raised from 650→900 so Nakamichi/cheap clones get closer to Torque patience. */
-        const val DEFAULT_TIMEOUT_MS = 900L
+        /** Short enough that one hung PID doesn't freeze the Dash for long. */
+        const val DEFAULT_TIMEOUT_MS = 650L
         /** Even shorter for one-off probe pages (idle/fuel/trans) so UI unsticks. */
         const val PROBE_TIMEOUT_MS = 450L
         /** Adapter-local AT commands (ATRV) — no ECU round-trip. */
         const val ATRV_TIMEOUT_MS = 500L
         const val INIT_TIMEOUT_MS = 1800L
-        /** Soft-recover AT cmds — keep the whole sequence under the UI stale window. */
-        const val RECOVER_TIMEOUT_MS = 450L
     }
 }
