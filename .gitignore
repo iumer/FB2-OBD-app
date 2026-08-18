@@ -10,4 +10,4 @@
 local.properties
 app/build/
 build/
-logs/car-uploads/
+app/src/main/assets/fb2-secrets.properties

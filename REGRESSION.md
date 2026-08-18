@@ -5,7 +5,7 @@
 > `app/` started as an exact copy of commit `d3790be` (0.1.15). Restored so far:
 > in-app updater (0.1.16), Nakamichi keep-alive (0.1.17), battery ALLOWED row
 > (0.1.18), Settings stop-simulation (0.1.19), live-ELM Disconnect chip (0.1.21: all themes),
-> deep-search heroes-live + blinking freshness LEDs (0.1.22).
+> deep-search heroes-live + blinking freshness LEDs (0.1.22), Classic hero scrolls with Dash (0.1.23).
 > Crash reporter, full-screen sensor picker and Robolectric tests are still **not** in this tree.
 
 **Mandatory for every code change.** After any non-trivial edit, run the full
@@ -103,6 +103,7 @@ Keep these fixed. If a change might touch one of these areas, re-verify it.
 | I81 | `loadBondedDevices` / `connectTo` could throw `SecurityException` on the UI thread if BT permission is revoked after the gate | Fixed | Both wrapped; connect surfaces a toast instead of dying |
 | I82 | Show every newer version in a list, not only “latest”; after installing 0.1.18 the next check shows 0.1.19+ | Fixed | `AppUpdateChecker.newerThan`; Settings list GET/INSTALL per row; `versions.json` catalog |
 | I83 | Settings → App update HTTP 404 on `version.json` / `versions.json` | Fixed | `publish-latest-apk.sh` ships catalog + archive; `verify-latest-catalog.sh` post-push; `PublishCatalogGuardTest` |
+| I84 | Classic Dash hero (RPM/Speed/Gear) sticky while tiles scroll | Fixed | Hero is first row inside Dash `LazyVerticalGrid` — scrolls off with tiles |
 | I83 | No way to stop Demo values from Settings | Fixed | Settings → Simulation: **STOP** while Demo is running; **Demo / simulated data** toggle persists `allowDemo` |
 | I84 | After live OBD connect, chip still said CONNECT and opened the picker | Fixed | Live ELM → red **DISCONNECT** on Classic + OptA/B/C (visible chip + ☰ menu). Demo stays CONNECT |
 

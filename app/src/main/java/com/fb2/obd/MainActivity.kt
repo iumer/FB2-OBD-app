@@ -70,7 +70,6 @@ import com.fb2.obd.ui.ConnectDialog
 import com.fb2.obd.ui.CustomSensorsScreen
 import com.fb2.obd.ui.DashboardScreen
 import com.fb2.obd.ui.DebugLogScreen
-import com.fb2.obd.ui.DeepSearchDialogs
 import com.fb2.obd.ui.DiagnosticsDepthScreen
 import com.fb2.obd.ui.AiAnalyzeScreen
 import java.util.concurrent.atomic.AtomicBoolean
@@ -128,7 +127,7 @@ class MainActivity : ComponentActivity() {
                 val dashTileOverrides by viewModel.dashTileOverrides.collectAsState()
                 val savedLogs by viewModel.savedLogs.collectAsState()
                 val uploadStatus by viewModel.uploadStatus.collectAsState()
-                val deepSearch by viewModel.deepSearch.collectAsState()
+                val pickerScan by viewModel.pickerScan.collectAsState()
                 val deepFoundValues by viewModel.deepFoundValues.collectAsState()
                 val healthThresholds by viewModel.healthThresholds.collectAsState()
 
@@ -365,6 +364,10 @@ class MainActivity : ComponentActivity() {
                         extraPidIds = dashExtraPidIds,
                         extraValues = dashExtraValues,
                         tileOverrides = dashTileOverrides,
+                        pickerProbe = pickerScan.results,
+                        pickerScanning = pickerScan.running,
+                        onPickerOpen = viewModel::startSensorPickerScan,
+                        onPickerClose = viewModel::stopSensorPickerScan,
                         onSetExtraPid = viewModel::setDashExtraPid,
                         onSetTileOverride = viewModel::setDashTileOverride,
                         onClearTileOverride = viewModel::clearDashTileOverride,
@@ -650,12 +653,6 @@ class MainActivity : ComponentActivity() {
                         containerColor = MaterialTheme.colorScheme.background,
                     )
                 }
-
-                DeepSearchDialogs(
-                    state = deepSearch,
-                    onConfirm = viewModel::confirmDeepSearch,
-                    onDismiss = viewModel::cancelDeepSearch,
-                )
             }
         }
     }

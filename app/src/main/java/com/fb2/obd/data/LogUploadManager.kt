@@ -65,7 +65,10 @@ class LogUploadManager(
         set(value) = prefs.edit().putString(KEY_REPO, value.trim()).apply()
 
     var githubToken: String
-        get() = prefs.getString(KEY_TOKEN, "") ?: ""
+        get() {
+            val stored = prefs.getString(KEY_TOKEN, null)?.trim().orEmpty()
+            return stored.ifBlank { AppCredentialDefaults.githubPat(app) }
+        }
         set(value) = prefs.edit().putString(KEY_TOKEN, value.trim()).apply()
 
     private val callback = object : ConnectivityManager.NetworkCallback() {
