@@ -90,6 +90,9 @@ Keep these fixed. If a change might touch one of these areas, re-verify it.
 | I76 | One-shot DIAG jobs (Faults/Fuel/Trans/Honda/Mode 09/deep scan) had no exception handling — `viewModelScope` has no handler, so a throw killed the process | Fixed | `launchDiag()` catches, logs, and clears the page spinner; `throwingFaultsProbe_doesNotCrash_andClearsSpinner` |
 | I77 | Bubble drag called `updateViewLayout` unguarded — `BadTokenException` if dragged during teardown | Fixed | `runCatching` in `applyDrag`; detaches and stops the service on failure |
 | I78 | REGRESSION/AGENTS quoted stale constants (650 ms, cap 3, 34sp, 400dp) | Fixed | Corrected to 900/450 ms, cap 5 (8 on ATRV), hero 30sp, bubble 340dp |
+| I79 | **Still crashing on connect at 0.1.33.** `startForeground()` failure was swallowed, so the service never reached foreground and Android killed the process with `ForegroundServiceDidNotStartInTime` ~5 s later — thrown on the main looper where no `runCatching` can reach it | Fixed | Both services now `stopSelf()` when promotion fails |
+| I80 | No stack trace available for on-car crashes (no logcat in the car) | Fixed | `CrashReporter` persists trace + device + **recent ELM log**; prompts to save on next launch; `CrashReporterTest` |
+| I81 | `loadBondedDevices` / `connectTo` could throw `SecurityException` on the UI thread if BT permission is revoked after the gate | Fixed | Both wrapped; connect surfaces a toast instead of dying |
 
 When the user reports a **new** bug, add a new `Ixx` row here (Status: Open → Fixed)
 and add a matching automated or manual check in sections 2–3.

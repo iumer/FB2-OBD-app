@@ -56,6 +56,7 @@ import com.fb2.obd.data.AppUpdateManager
 import com.fb2.obd.data.DemoObdSource
 import com.fb2.obd.data.ConnectionState
 import com.fb2.obd.data.Elm327BluetoothSource
+import com.fb2.obd.data.CrashReporter
 import com.fb2.obd.data.LogExportHelper
 import com.fb2.obd.data.ObdLogger
 import com.fb2.obd.data.SavedLogFile
@@ -100,6 +101,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        maybePromptCrashReport()
 
         setContent {
             val settings by viewModel.settings.collectAsState()
@@ -842,13 +844,18 @@ class MainActivity : ComponentActivity() {
     }
 
     @SuppressLint("MissingPermission")
-    private fun loadBondedDevices(): List<BtDeviceUi> {
-        val adapter = bluetoothAdapter() ?: return emptyList()
-        if (!adapter.isEnabled) return emptyList()
-        return adapter.bondedDevices
+    private fun loadBondedDevices(): List<BtDeviceUi> = runCatching {
+        val adapter = bluetoothAdapter() ?: return@runCatching emptyList()
+        if (!adapter.isEnabled) return@runCatching emptyList()
+        adapter.bondedDevices
             ?.map { BtDeviceUi(runCatching { it.name }.getOrNull().orEmpty(), it.address) }
             ?.sortedBy { it.name }
             ?: emptyList()
+    }.getOrElse { e ->
+        // `bondedDevices` throws SecurityException on the UI thread if
+        // BLUETOOTH_CONNECT was revoked after the permission gate ran.
+        ObdLogger.logDebug(ObdLogger.Dir.INFO, "loadBondedDevices failed: ${e.message}")
+        emptyList()
     }
 
     @SuppressLint("BatteryLife")
@@ -868,8 +875,37 @@ class MainActivity : ComponentActivity() {
 
     @SuppressLint("MissingPermission")
     private fun connectTo(device: BtDeviceUi) {
-        val adapter = bluetoothAdapter() ?: return
-        val remote = adapter.getRemoteDevice(device.address)
-        viewModel.useSource(Elm327BluetoothSource(remote))
+        // Revoking Bluetooth mid-session makes these adapter calls throw
+        // SecurityException straight onto the UI thread.
+        runCatching {
+            val adapter = bluetoothAdapter() ?: return
+            val remote = adapter.getRemoteDevice(device.address)
+            viewModel.useSource(Elm327BluetoothSource(remote))
+        }.onFailure { e ->
+            ObdLogger.logDebug(ObdLogger.Dir.INFO, "connectTo failed: ${e.message}")
+            toast("Could not open that adapter: ${e.message}")
+        }
+    }
+
+    /**
+     * The app has crashed on the car where no logcat is available, so surface the
+     * saved stack trace on the next launch and let the user send it out.
+     */
+    private fun maybePromptCrashReport() {
+        val report = runCatching { CrashReporter.latestReport(this) }.getOrNull() ?: return
+        val preview = runCatching { report.readText() }.getOrDefault("").lineSequence()
+            .take(12)
+            .joinToString("\n")
+        runCatching {
+            android.app.AlertDialog.Builder(this)
+                .setTitle("FB2 Diag crashed last time")
+                .setMessage("$preview\n\nSave the full report so it can be sent to the developer?")
+                .setPositiveButton("Save report") { _, _ ->
+                    shareOrExportFile(report, report.name, "text/plain", "FB2 Diag crash report")
+                    CrashReporter.clearReports(this)
+                }
+                .setNegativeButton("Dismiss") { _, _ -> CrashReporter.clearReports(this) }
+                .show()
+        }
     }
 }
