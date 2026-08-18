@@ -44,8 +44,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.ViewModelProvider
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
@@ -127,6 +130,18 @@ class MainActivity : ComponentActivity() {
                 val deepSearch by viewModel.deepSearch.collectAsState()
                 val deepFoundValues by viewModel.deepFoundValues.collectAsState()
                 val healthThresholds by viewModel.healthThresholds.collectAsState()
+
+                var batteryUnrestricted by remember { mutableStateOf(isBatteryUnrestricted()) }
+                val lifecycleOwner = LocalLifecycleOwner.current
+                DisposableEffect(lifecycleOwner) {
+                    val observer = LifecycleEventObserver { _, event ->
+                        if (event == Lifecycle.Event.ON_RESUME) {
+                            batteryUnrestricted = isBatteryUnrestricted()
+                        }
+                    }
+                    lifecycleOwner.lifecycle.addObserver(observer)
+                    onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+                }
 
                 val appUpdateManager = remember { AppUpdateManager(applicationContext) }
                 val appUpdateUi by appUpdateManager.state.collectAsState()
@@ -400,6 +415,7 @@ class MainActivity : ComponentActivity() {
                             onKeepAliveBattery = {
                                 maybeRequestUnrestrictedBattery(force = true)
                             },
+                            batteryUnrestricted = batteryUnrestricted,
                             uploadStatus = uploadStatus,
                             githubToken = viewModel.githubUploadToken(),
                             onGithubTokenChange = viewModel::setGithubUploadToken,
@@ -842,6 +858,11 @@ class MainActivity : ComponentActivity() {
             ?.map { BtDeviceUi(runCatching { it.name }.getOrNull().orEmpty(), it.address) }
             ?.sortedBy { it.name }
             ?: emptyList()
+    }
+
+    private fun isBatteryUnrestricted(): Boolean {
+        val pm = getSystemService(PowerManager::class.java) ?: return false
+        return pm.isIgnoringBatteryOptimizations(packageName)
     }
 
     @SuppressLint("BatteryLife")
