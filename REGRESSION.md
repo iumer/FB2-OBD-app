@@ -85,6 +85,7 @@ Keep these fixed. If a change might touch one of these areas, re-verify it.
 | I71 | Check for updates stuck on stale 0.1.27/0.1.28 (raw CDN cache) | Fixed | GitHub Contents API primary fetch; raw CDN fallback with cache-bust |
 | I72 | Shipped APK was v2-only debug (11 MB) — violates documented HU requirement | Fixed | Ship via `scripts/package-hu-apk.sh`: v1+v2 signed, release classpath, 7.3 MB |
 | I73 | Whole suite was pure-JVM, so I69/I70 shipped green while the app crashed | Fixed | Robolectric `ElmConnectRuntimeTest` drives the real `DashboardViewModel` on a real Android context |
+| I74 | Unguarded FGS restart in both services' `onTaskRemoved` — swiping app from recents could crash on API 31+ | Fixed | `runCatching` around both restarts (matching the already-guarded call sites); `ForegroundServiceRuntimeTest` |
 
 When the user reports a **new** bug, add a new `Ixx` row here (Status: Open → Fixed)
 and add a matching automated or manual check in sections 2–3.
@@ -149,6 +150,7 @@ curl -fsSL "https://api.github.com/repos/iumer/FB2-OBD-app/contents/dist/version
 | `ElmPollHoldRecoverTest` | HEROES_ONLY→NONE must not arm recover; `mergeLastGood` keeps heroes on partial frames |
 | `ElmConnectTransitionTest` | Fresh ELM connect clears Demo prev; mid-session partial merge keeps heroes |
 | `ElmConnectRuntimeTest` | **Android runtime (Robolectric).** Real `DashboardViewModel` on a real `Application`: construct, Demo→live ELM connect without crashing, no Demo leak into first live frame, ATRV-only frame keeps heroes, disconnect clears state |
+| `ForegroundServiceRuntimeTest` | **Android runtime (Robolectric).** Neither service propagates an exception out of `onTaskRemoved` (app swiped from recents) or `startOverlay` |
 | `DashboardSnapshotTest` / `ScreensSnapshotTest` / `ConnectSheetSnapshotTest` | Paparazzi UI snapshots |
 | `AppUpdateCheckerTest` | version.json parse + local/remote versionCode compare |
 | `DashExtraPidStoreTest` | **+** extras survive process death (`dash_extra_pids.json`) |

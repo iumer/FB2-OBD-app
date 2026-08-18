@@ -149,7 +149,16 @@ class FloatingDashOverlayService : Service() {
         if (FloatingDashPrefs.isEnabled(this)) {
             ObdLogger.logDebug(ObdLogger.Dir.INFO, "Floating dash onTaskRemoved — restarting overlay")
             val restart = Intent(applicationContext, FloatingDashOverlayService::class.java)
-            ContextCompat.startForegroundService(applicationContext, restart)
+            // Same background-start restriction as ObdMonitorForegroundService:
+            // the bubble disappearing is recoverable, a crash is not.
+            runCatching {
+                ContextCompat.startForegroundService(applicationContext, restart)
+            }.onFailure { e ->
+                ObdLogger.logDebug(
+                    ObdLogger.Dir.INFO,
+                    "Floating dash onTaskRemoved restart refused: ${e.message}",
+                )
+            }
         }
         super.onTaskRemoved(rootIntent)
     }
