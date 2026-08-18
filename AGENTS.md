@@ -34,8 +34,10 @@ non-obvious cloud specifics.
   (also copy to `dist/FB2-Diag-debug.apk` for sideload).
 - **Always-latest sideload URL (do not invent branch-specific raw links for the user):**
   https://raw.githubusercontent.com/iumer/FB2-OBD-app/latest/dist/FB2-Diag-debug.apk  
-  **Only one APK** — publish `dist/FB2-Diag-debug.apk` alone to branch `latest`
-  via `scripts/publish-latest-apk.sh`. Never create a second sideload APK/link.
+  **Only one sideload APK URL** — publish `dist/FB2-Diag-debug.apk` to branch `latest`
+  via `scripts/publish-latest-apk.sh` (also copies `version.json`, `versions.json`,
+  and `dist/archive/*.apk`; runs `verify-latest-catalog.sh` so updater never 404s).
+  Never create a second sideload APK/link.
   Tell the user that same URL — never a `cursor/...` branch raw link unless they
   ask for a specific PR build.
 

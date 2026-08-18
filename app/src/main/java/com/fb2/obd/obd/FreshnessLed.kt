@@ -1,0 +1,29 @@
+package com.fb2.obd.obd
+
+/**
+ * Torque-style green heartbeat brightness. Pure Kotlin so JVM tests lock blink rules.
+ *
+ * One shared blink clock in the UI toggles [blinkOn] (~1.8 Hz). Tiles must not
+ * each run their own Animatable (that stuttered car HUs).
+ */
+object FreshnessLed {
+
+    fun alpha(lastOkMs: Long?, nowMs: Long, blinkOn: Boolean): Float {
+        if (lastOkMs == null) return DIM
+        val age = nowMs - lastOkMs
+        if (age >= SnapshotFreshness.LED_ACTIVE_MS) return DIM
+        return if (blinkOn) BRIGHT else PULSE_OFF
+    }
+
+    fun isLive(lastOkMs: Long?, nowMs: Long): Boolean {
+        if (lastOkMs == null) return false
+        return nowMs - lastOkMs < SnapshotFreshness.LED_ACTIVE_MS
+    }
+
+    const val BRIGHT = 1f
+    const val PULSE_OFF = 0.22f
+    const val DIM = 0.14f
+
+    /** Half-period for the shared UI clock. */
+    const val BLINK_HALF_MS = 280L
+}

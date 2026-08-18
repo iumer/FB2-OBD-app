@@ -4,9 +4,9 @@
 >
 > `app/` started as an exact copy of commit `d3790be` (0.1.15). Restored so far:
 > in-app updater (0.1.16), Nakamichi keep-alive (0.1.17), battery ALLOWED row
-> (0.1.18), Settings stop-simulation (0.1.19), live-ELM Disconnect chip (0.1.21: all themes).
-> Crash reporter, full-screen sensor picker, freshness LEDs, poll holds and
-> Robolectric tests are still **not** in this tree.
+> (0.1.18), Settings stop-simulation (0.1.19), live-ELM Disconnect chip (0.1.21: all themes),
+> deep-search heroes-live + blinking freshness LEDs (0.1.22).
+> Crash reporter, full-screen sensor picker and Robolectric tests are still **not** in this tree.
 
 **Mandatory for every code change.** After any non-trivial edit, run the full
 automated suite below and tick the relevant manual items before calling the
@@ -102,6 +102,7 @@ Keep these fixed. If a change might touch one of these areas, re-verify it.
 | I80 | No stack trace available for on-car crashes (no logcat in the car) | Fixed | `CrashReporter` persists trace + device + **recent ELM log**; prompts to save on next launch; `CrashReporterTest` |
 | I81 | `loadBondedDevices` / `connectTo` could throw `SecurityException` on the UI thread if BT permission is revoked after the gate | Fixed | Both wrapped; connect surfaces a toast instead of dying |
 | I82 | Show every newer version in a list, not only “latest”; after installing 0.1.18 the next check shows 0.1.19+ | Fixed | `AppUpdateChecker.newerThan`; Settings list GET/INSTALL per row; `versions.json` catalog |
+| I83 | Settings → App update HTTP 404 on `version.json` / `versions.json` | Fixed | `publish-latest-apk.sh` ships catalog + archive; `verify-latest-catalog.sh` post-push; `PublishCatalogGuardTest` |
 | I83 | No way to stop Demo values from Settings | Fixed | Settings → Simulation: **STOP** while Demo is running; **Demo / simulated data** toggle persists `allowDemo` |
 | I84 | After live OBD connect, chip still said CONNECT and opened the picker | Fixed | Live ELM → red **DISCONNECT** on Classic + OptA/B/C (visible chip + ☰ menu). Demo stays CONNECT |
 
@@ -123,8 +124,11 @@ Run from repo root (`/workspace`):
 bash scripts/package-hu-apk.sh   # writes dist/FB2-Diag-debug.apk
 # Also copy to dist/archive/FB2-Diag-<versionName>.apk and add a row to
 # dist/versions.json so older installs can pick this build from the list.
-# Then publish to branch `latest` so the stable sideload URL stays current:
+# Then publish to branch `latest` (script copies APK + version.json + versions.json + archive):
+bash scripts/publish-latest-apk.sh   # auto-runs verify-latest-catalog.sh (must pass)
 #   https://raw.githubusercontent.com/iumer/FB2-OBD-app/latest/dist/FB2-Diag-debug.apk
+# Or re-check catalog any time:
+bash scripts/verify-latest-catalog.sh
 ```
 
 All tasks must pass. Verify the shipped APK before publishing:
@@ -175,6 +179,7 @@ curl -fsSL "https://api.github.com/repos/iumer/FB2-OBD-app/contents/dist/version
 | `DemoAllowPolicyTest` | Settings stop-simulation: off while Demo disconnects; on while idle starts Demo; live ELM left running |
 | `ConnectActionPolicyTest` | Live ELM → DISCONNECT; Demo/idle → CONNECT; RETRY/ERROR not disconnect |
 | `AppUpdateCheckerTest` | versions.json catalog parse; newerThan lists 0.1.16–0.1.20 then only 0.1.19+ after installing 0.1.18 |
+| `PublishCatalogGuardTest` | publish script ships both JSON catalogs + archive; dist matches BuildConfig; no `lumer` typo; archive APKs on disk |
 | `DashExtraPidStoreTest` | **+** extras survive process death (`dash_extra_pids.json`) |
 | `SensorPickerReadingsTest` | Green/live vs waiting vs ECU-unsupported; SAE support bitmask parse; **ATRV battery live even if 0142 unsupported**; 2026-07-24 FB2 Dash PIDs stay LIVE |
 | `ChromeCollapseTest` | Classic Dash chrome hides on scroll-up and returns at list top |
