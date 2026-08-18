@@ -50,11 +50,8 @@ object SensorPickerReadings {
         probeById: Map<String, PidProbeResult>,
         extraValues: Map<String, String> = emptyMap(),
     ): SensorPickerReading {
-        val mode01 = pid.mode01Number
-        if (mode01 != null && mode01 in snapshot.unsupportedPids) {
-            return SensorPickerReading(SensorReadKind.NONE)
-        }
-
+        // Torque-style: a PID that already answered stays readable. Honda / clone
+        // Mode 01 support bitmasks often omit MAP (010B) even while 010B is live.
         liveText(pid, snapshot)?.let { text ->
             return SensorPickerReading(SensorReadKind.LIVE, text)
         }
@@ -81,7 +78,23 @@ object SensorPickerReadings {
             return SensorPickerReading(SensorReadKind.NONE)
         }
 
+        val mode01 = pid.mode01Number
+        if (mode01 != null && mode01 in snapshot.unsupportedPids) {
+            return SensorPickerReading(SensorReadKind.NONE)
+        }
+
         return SensorPickerReading(SensorReadKind.WAITING)
+    }
+
+    /**
+     * Once a row is LIVE, keep the last good value for this picker session.
+     * Scan / TTL / bitmask must not yank MAP off Readable after the ECU answered.
+     */
+    fun latch(previous: SensorPickerReading?, next: SensorPickerReading): SensorPickerReading {
+        if (previous?.kind == SensorReadKind.LIVE && next.kind != SensorReadKind.LIVE) {
+            return previous
+        }
+        return next
     }
 
     fun matchesQuery(pid: PidDefinition, query: String): Boolean {

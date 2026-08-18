@@ -23,6 +23,7 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -130,27 +131,34 @@ fun SensorPickerContent(
             pid.id to SensorPickerReadings.resolve(pid, snapshot, probeById, extraValues)
         }
     }
-    val liveCount = readings.values.count { it.isReadable }
+    var latched by remember { mutableStateOf<Map<String, SensorPickerReading>>(emptyMap()) }
+    val displayReadings = remember(readings, latched) {
+        readings.mapValues { (id, row) -> SensorPickerReadings.latch(latched[id], row) }
+    }
+    LaunchedEffect(displayReadings) {
+        if (displayReadings != latched) latched = displayReadings
+    }
+    val liveCount = displayReadings.values.count { it.isReadable }
 
-    val filtered = remember(catalog, readings, query, filter) {
+    val filtered = remember(catalog, displayReadings, query, filter) {
         catalog.filter { pid ->
             if (!SensorPickerReadings.matchesQuery(pid, query)) return@filter false
             when (val f = filter) {
                 PickerFilter.All -> true
-                PickerFilter.Readable -> readings[pid.id]?.isReadable == true
+                PickerFilter.Readable -> displayReadings[pid.id]?.isReadable == true
                 is PickerFilter.Category -> pid.category == f.cat
             }
         }
     }
 
-    val grouped = remember(filtered, readings) {
+    val grouped = remember(filtered, displayReadings) {
         filtered
             .groupBy { it.category }
             .toSortedMap(compareBy { SensorPickerReadings.categoryLabel(it) })
             .mapValues { (_, pids) ->
                 pids.sortedWith(
                     compareBy<PidDefinition> { pid ->
-                        when (readings[pid.id]?.kind) {
+                        when (displayReadings[pid.id]?.kind) {
                             SensorReadKind.LIVE -> 0
                             SensorReadKind.WAITING -> 1
                             SensorReadKind.NONE -> 2
@@ -260,12 +268,12 @@ fun SensorPickerContent(
                     stickyHeader(key = "cat-${cat.name}") {
                         CategoryHeader(
                             title = SensorPickerReadings.categoryLabel(cat),
-                            readable = pids.count { readings[it.id]?.isReadable == true },
+                            readable = pids.count { displayReadings[it.id]?.isReadable == true },
                             total = pids.size,
                         )
                     }
                     items(pids, key = { it.id }) { pid ->
-                        val reading = readings[pid.id] ?: SensorPickerReading(SensorReadKind.WAITING)
+                        val reading = displayReadings[pid.id] ?: SensorPickerReading(SensorReadKind.WAITING)
                         SensorPickerRow(
                             pid = pid,
                             reading = reading,
