@@ -190,7 +190,7 @@ fun SettingsScreen(
                     isReady -> "Downloaded — tap Install"
                     isDownloading -> "Downloading…"
                     remote.notes.isNotBlank() -> remote.notes
-                    else -> "versionCode ${remote.versionCode}"
+                    else -> "Tap GET to download"
                 }
                 ActionRow(
                     title = title,
