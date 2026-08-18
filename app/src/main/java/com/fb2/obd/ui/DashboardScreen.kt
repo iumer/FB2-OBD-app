@@ -168,6 +168,10 @@ fun DashboardScreen(
     extraPidIds: List<String> = emptyList(),
     extraValues: Map<String, String> = emptyMap(),
     tileOverrides: Map<String, String> = emptyMap(),
+    pickerProbe: Map<String, com.fb2.obd.obd.PidProbeResult> = emptyMap(),
+    pickerScanning: Boolean = false,
+    onPickerOpen: () -> Unit = {},
+    onPickerClose: () -> Unit = {},
     onSetExtraPid: (slot: Int, pid: PidDefinition) -> Unit = { _, _ -> },
     onSetTileOverride: (baseLabel: String, pid: PidDefinition) -> Unit = { _, _ -> },
     onClearTileOverride: (baseLabel: String) -> Unit = {},
@@ -451,6 +455,10 @@ fun DashboardScreen(
     if (target != null) {
         SensorPickerDialog(
             catalog = catalog,
+            snapshot = state.snapshot,
+            probeById = pickerProbe,
+            scanning = pickerScanning,
+            extraValues = extraValues,
             restoreLabel = (target as? PickerTarget.RemapBase)?.label
                 ?.takeIf { tileOverrides.containsKey(it) },
             onPick = { pid ->
@@ -465,6 +473,8 @@ fun DashboardScreen(
                 pickerTarget = null
             },
             onDismiss = { pickerTarget = null },
+            onOpen = onPickerOpen,
+            onClose = onPickerClose,
         )
     }
 
@@ -1291,240 +1301,9 @@ private fun EmptyTile(modifier: Modifier = Modifier, onClick: () -> Unit) {
     }
 }
 
-private fun PidCategory.displayName(): String = when (this) {
-    PidCategory.ENGINE -> "Engine"
-    PidCategory.FUEL -> "Fuel"
-    PidCategory.TEMPS -> "Temperatures"
-    PidCategory.AIR -> "Air / Intake"
-    PidCategory.ELECTRICAL -> "Electrical"
-    PidCategory.EMISSIONS -> "Emissions"
-    PidCategory.TRANSMISSION -> "Transmission"
-    PidCategory.ABS -> "ABS / Brakes"
-    PidCategory.EPS -> "Steering (EPS)"
-    PidCategory.SRS -> "SRS / Airbags"
-    PidCategory.BODY -> "Body"
-    PidCategory.CLIMATE -> "HVAC / Climate"
-    PidCategory.TPMS -> "Tire pressure"
-    PidCategory.OTHER -> "Other"
-}
-
-private fun profileDisplayName(profile: String): String = when {
-    profile.equals("SAE", ignoreCase = true) -> "Standard OBD (Mode 01)"
-    profile.contains("tcm", ignoreCase = true) -> "Honda Transmission"
-    profile.contains("engine", ignoreCase = true) -> "Honda Engine"
-    profile.contains("abs", ignoreCase = true) -> "Honda ABS"
-    profile.contains("eps", ignoreCase = true) -> "Honda EPS"
-    profile.contains("srs", ignoreCase = true) -> "Honda SRS"
-    profile.contains("body", ignoreCase = true) -> "Honda Body"
-    profile.contains("climate", ignoreCase = true) -> "Honda HVAC"
-    profile.contains("tpms", ignoreCase = true) -> "Honda TPMS"
-    else -> profile
-}
-
-/**
- * In-dialog drill-down: Categories → Subcategories (profile packs) → Sensors.
- * Type in the search box to jump straight to matching sensors.
- */
-@Composable
-private fun SensorPickerDialog(
-    catalog: List<PidDefinition>,
-    onPick: (PidDefinition) -> Unit,
-    onDismiss: () -> Unit,
-    restoreLabel: String? = null,
-    onRestore: (() -> Unit)? = null,
-) {
-    var category by remember { mutableStateOf<PidCategory?>(null) }
-    var subProfile by remember { mutableStateOf<String?>(null) }
-    var query by remember { mutableStateOf("") }
-    val q = query.trim()
-    val searching = q.length >= 2
-
-    val title = when {
-        searching -> "Search sensors"
-        category == null -> "Add sensor — pick category"
-        subProfile == null -> category!!.displayName()
-        else -> "${category!!.displayName()} › ${profileDisplayName(subProfile!!)}"
-    }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(title, color = TextPrimary, fontSize = 15.sp, fontWeight = FontWeight.Bold) },
-        text = {
-            Column(modifier = Modifier.fillMaxHeight(0.82f)) {
-                OutlinedTextField(
-                    value = query,
-                    onValueChange = { query = it },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(bottom = 8.dp),
-                    singleLine = true,
-                    placeholder = {
-                        Text("Type to search (e.g. gear, MAF, 01A4)", color = TextMuted, fontSize = 12.sp)
-                    },
-                    textStyle = TextStyle(color = TextPrimary, fontSize = 14.sp),
-                )
-                Column(modifier = Modifier.weight(1f).verticalScroll(rememberScrollState())) {
-                    if (restoreLabel != null && onRestore != null && !searching) {
-                        PickerRow(
-                            title = "Restore default",
-                            subtitle = restoreLabel,
-                            trailing = "↺",
-                            onClick = onRestore,
-                        )
-                    }
-                    if (searching) {
-                        val hits = catalog.filter { pid ->
-                            pid.label.contains(q, true) ||
-                                pid.request.contains(q, true) ||
-                                pid.id.contains(q, true) ||
-                                pid.unit.contains(q, true) ||
-                                pid.category.displayName().contains(q, true) ||
-                                profileDisplayName(pid.profile).contains(q, true)
-                        }.sortedBy { it.label }.take(60)
-                        if (hits.isEmpty()) {
-                            Text(
-                                text = "No sensors match \"$q\"",
-                                color = TextMuted,
-                                fontSize = 12.sp,
-                                modifier = Modifier.padding(vertical = 8.dp),
-                            )
-                        } else {
-                            hits.forEach { pid ->
-                                PickerRow(
-                                    title = pid.label,
-                                    subtitle = listOfNotNull(
-                                        pid.request,
-                                        pid.unit.takeIf { it.isNotBlank() },
-                                        pid.category.displayName(),
-                                    ).joinToString(" · "),
-                                    trailing = "+",
-                                    onClick = { onPick(pid) },
-                                )
-                            }
-                        }
-                    } else {
-                        Text(
-                            text = "Scroll categories, or type above to search",
-                            color = TextMuted,
-                            fontSize = 11.sp,
-                            modifier = Modifier.padding(bottom = 6.dp),
-                        )
-                        if (category != null) {
-                            Text(
-                                text = if (subProfile != null) "← Subcategories" else "← Categories",
-                                color = MaterialTheme.colorScheme.primary,
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable {
-                                        if (subProfile != null) {
-                                            subProfile = null
-                                        } else {
-                                            category = null
-                                        }
-                                    }
-                                    .padding(vertical = 6.dp),
-                            )
-                        }
-
-                        when {
-                            category == null -> {
-                                val cats = catalog
-                                    .groupBy { it.category }
-                                    .entries
-                                    .sortedBy { it.key.displayName() }
-                                cats.forEach { (cat, pids) ->
-                                    PickerRow(
-                                        title = cat.displayName(),
-                                        subtitle = "${pids.size} sensors",
-                                        trailing = "›",
-                                        onClick = {
-                                            category = cat
-                                            subProfile = null
-                                        },
-                                    )
-                                }
-                            }
-
-                            subProfile == null -> {
-                                val inCat = catalog.filter { it.category == category }
-                                val groups = inCat.groupBy { it.profile }.entries.sortedBy { profileDisplayName(it.key) }
-                                if (groups.size <= 1) {
-                                    inCat.sortedBy { it.label }.forEach { pid ->
-                                        PickerRow(
-                                            title = pid.label,
-                                            subtitle = pid.request + if (pid.unit.isNotBlank()) " · ${pid.unit}" else "",
-                                            trailing = "+",
-                                            onClick = { onPick(pid) },
-                                        )
-                                    }
-                                } else {
-                                    groups.forEach { (profile, pids) ->
-                                        PickerRow(
-                                            title = profileDisplayName(profile),
-                                            subtitle = "${pids.size} sensors",
-                                            trailing = "›",
-                                            onClick = { subProfile = profile },
-                                        )
-                                    }
-                                }
-                            }
-
-                            else -> {
-                                catalog
-                                    .filter { it.category == category && it.profile == subProfile }
-                                    .sortedBy { it.label }
-                                    .forEach { pid ->
-                                        PickerRow(
-                                            title = pid.label,
-                                            subtitle = pid.request + if (pid.unit.isNotBlank()) " · ${pid.unit}" else "",
-                                            trailing = "+",
-                                            onClick = { onPick(pid) },
-                                        )
-                                    }
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = onDismiss) { Text("Cancel", color = MaterialTheme.colorScheme.primary) }
-        },
-        containerColor = MaterialTheme.colorScheme.background,
-    )
-}
-
 private sealed class PickerTarget {
     data class ExtraSlot(val index: Int) : PickerTarget()
     data class RemapBase(val label: String) : PickerTarget()
-}
-
-@Composable
-private fun PickerRow(
-    title: String,
-    subtitle: String,
-    trailing: String,
-    onClick: () -> Unit,
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(bottom = 4.dp)
-            .clip(RoundedCornerShape(8.dp))
-            .clickable(onClick = onClick)
-            .background(MaterialTheme.colorScheme.surface)
-            .padding(horizontal = 10.dp, vertical = 6.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(title, color = TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(subtitle, color = TextMuted, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        }
-        Text(trailing, color = MaterialTheme.colorScheme.primary, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-    }
 }
 
 @Composable

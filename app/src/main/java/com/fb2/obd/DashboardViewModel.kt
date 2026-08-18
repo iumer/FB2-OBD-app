@@ -53,6 +53,9 @@ import com.fb2.obd.obd.LiveSnapshotOverlay
 import com.fb2.obd.obd.MetricStatus
 import com.fb2.obd.obd.Mode06Result
 import com.fb2.obd.obd.ModuleScanResult
+import com.fb2.obd.obd.ObdResponseParser
+import com.fb2.obd.obd.PollHold
+import com.fb2.obd.obd.SensorPickerReadings
 import com.fb2.obd.obd.O2TestResult
 import com.fb2.obd.obd.PidCategory
 import com.fb2.obd.obd.PidDefinition
@@ -189,6 +192,12 @@ data class DeepSearchUiState(
     val report: DeepSearchReport? = null,
 )
 
+/** Live ECU probe results while the full-screen sensor picker is open. */
+data class SensorPickerScanState(
+    val running: Boolean = false,
+    val results: Map<String, PidProbeResult> = emptyMap(),
+)
+
 /**
  * Collects snapshots from the active [ObdSource] and exposes them as UI state.
  */
@@ -301,6 +310,10 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
     private val _deepSearch = MutableStateFlow(DeepSearchUiState())
     val deepSearch: StateFlow<DeepSearchUiState> = _deepSearch.asStateFlow()
 
+    private val _pickerScan = MutableStateFlow(SensorPickerScanState())
+    val pickerScan: StateFlow<SensorPickerScanState> = _pickerScan.asStateFlow()
+    private var pickerScanJob: Job? = null
+
     /** Values recovered by deep search, keyed by tile label / pid id. */
     private val _deepFoundValues = MutableStateFlow<Map<String, String>>(emptyMap())
     val deepFoundValues: StateFlow<Map<String, String>> = _deepFoundValues.asStateFlow()
@@ -400,6 +413,88 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
         _dashExtraValues.update { it - pidId }
         extraPidStore.save(_dashExtraPidIds.value)
         publishCarDash()
+    }
+
+    fun startSensorPickerScan() {
+        if (pickerScanJob?.isActive == true) return
+        val source = currentSource
+        val catalog = pidCatalog
+        val snap = _uiState.value.snapshot
+        val seeded = LinkedHashMap<String, PidProbeResult>()
+        catalog.forEach { pid ->
+            val n = pid.mode01Number
+            if (n != null && n in snap.unsupportedPids) {
+                seeded[pid.id] = PidProbeResult(pid, supported = false, sample = null, raw = "UNSUPPORTED")
+            }
+        }
+        _pickerScan.value = SensorPickerScanState(running = source != null, results = HashMap(seeded))
+        if (source == null) return
+        pickerScanJob = viewModelScope.launch {
+            source.setPollHold(PollHold.HEROES_ONLY)
+            try {
+                val supportScan = probeSaeSupportBitmask(source)
+                if (supportScan != null) {
+                    val (support, coveredBases) = supportScan
+                    catalog.forEach { pid ->
+                        val n = pid.mode01Number ?: return@forEach
+                        if (SensorPickerReadings.pidInCoveredSupportBlock(n, coveredBases) &&
+                            n !in support &&
+                            pid.id !in _pickerScan.value.results
+                        ) {
+                            seeded[pid.id] = PidProbeResult(
+                                pid,
+                                supported = false,
+                                sample = null,
+                                raw = "UNSUPPORTED",
+                            )
+                        }
+                    }
+                    _pickerScan.update { it.copy(results = HashMap(seeded)) }
+                }
+                val knownLive = catalog.filter { pid ->
+                    LiveSnapshotOverlay.liveSample(pid, snap) != null ||
+                        (pid.request.equals("0103", true) && !snap.fuelSystemStatus.isNullOrBlank())
+                }.map { it.id }.toSet()
+                val toProbe = catalog.filter { pid ->
+                    pid.id !in seeded && pid.id !in knownLive
+                }.sortedBy { pid ->
+                    if (pid.request.startsWith("01")) 0 else 1
+                }
+                for (batch in toProbe.chunked(6)) {
+                    if (!isActive) break
+                    val probed = source.probePids(batch, recoverFirst = false)
+                    _pickerScan.update { st ->
+                        st.copy(results = st.results + probed.associateBy { it.pid.id })
+                    }
+                }
+            } finally {
+                source.setPollHold(PollHold.NONE)
+                _pickerScan.update { it.copy(running = false) }
+            }
+        }
+    }
+
+    fun stopSensorPickerScan() {
+        pickerScanJob?.cancel()
+        pickerScanJob = null
+        currentSource?.setPollHold(PollHold.NONE)
+        _pickerScan.update { it.copy(running = false) }
+    }
+
+    private suspend fun probeSaeSupportBitmask(source: ObdSource): Pair<Set<Int>, Set<Int>>? {
+        val supported = HashSet<Int>()
+        val coveredBases = HashSet<Int>()
+        for (base in SensorPickerReadings.SAE_SUPPORT_BASES) {
+            val req = "01%02X".format(base)
+            val raw = source.command(req) ?: continue
+            val parsed = SensorPickerReadings.parseSaeSupport(base, raw)
+            val bytes = ObdResponseParser.rawDataBytes(req, 4, raw)
+            if (bytes != null) {
+                coveredBases += base
+                supported += parsed
+            }
+        }
+        return if (coveredBases.isNotEmpty()) supported to coveredBases else null
     }
 
     /** Replace a built-in Dash tile (e.g. Coolant 1) with any catalog sensor. */
