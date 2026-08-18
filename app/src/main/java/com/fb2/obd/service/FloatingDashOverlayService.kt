@@ -106,7 +106,9 @@ class FloatingDashOverlayService : Service() {
         // Promote BEFORE addView so OEMs don't defer / kill us as we leave the app.
         promoteToForeground()
         ObdLogger.logDebug(ObdLogger.Dir.INFO, "Floating dash overlay created")
-        attachOverlay()
+        if (!attachOverlay()) {
+            return
+        }
         collectJob = scope.launch {
             VehicleLiveStore.dash.collectLatest { state ->
                 latest = state
@@ -130,9 +132,10 @@ class FloatingDashOverlayService : Service() {
             ACTION_EXPAND -> setExpanded(true)
             else -> {
                 promoteToForeground()
-                if (!overlayAttached) {
-                    attachOverlay()
-                } else {
+                if (!overlayAttached && !attachOverlay()) {
+                    return START_STICKY
+                }
+                if (overlayAttached) {
                     ensureOnScreen()
                     render()
                 }
@@ -163,17 +166,18 @@ class FloatingDashOverlayService : Service() {
         super.onDestroy()
     }
 
+    /** @return false when overlay permission or addView failed — do not render(). */
     @SuppressLint("ClickableViewAccessibility")
-    private fun attachOverlay() {
+    private fun attachOverlay(): Boolean {
         if (overlayAttached && root != null) {
             ensureOnScreen()
             notifyReady()
-            return
+            return true
         }
         if (!android.provider.Settings.canDrawOverlays(this)) {
             ObdLogger.logDebug(ObdLogger.Dir.INFO, "Floating dash: overlay permission missing")
             stopSelf()
-            return
+            return false
         }
 
         val density = resources.displayMetrics.density
@@ -438,7 +442,7 @@ class FloatingDashOverlayService : Service() {
         if (!added) {
             stopForeground(STOP_FOREGROUND_REMOVE)
             stopSelf()
-            return
+            return false
         }
 
         overlayAttached = true
@@ -450,6 +454,7 @@ class FloatingDashOverlayService : Service() {
             ObdLogger.Dir.INFO,
             "Floating dash attached at ${lp.x},${lp.y} size ${lp.width}x${lp.height}",
         )
+        return true
     }
 
     /** Short screen edge in dp — used so the expanded ring never fills the HU. */
@@ -774,7 +779,14 @@ class FloatingDashOverlayService : Service() {
         fun startOverlay(context: Context) {
             FloatingDashPrefs.setEnabled(context, true)
             val intent = Intent(context, FloatingDashOverlayService::class.java)
-            ContextCompat.startForegroundService(context.applicationContext, intent)
+            runCatching {
+                ContextCompat.startForegroundService(context.applicationContext, intent)
+            }.onFailure { e ->
+                ObdLogger.logDebug(
+                    ObdLogger.Dir.INFO,
+                    "Floating dash startForegroundService failed: ${e.message}",
+                )
+            }
         }
 
         fun stop(context: Context) {

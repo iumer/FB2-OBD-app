@@ -170,7 +170,14 @@ class ObdMonitorForegroundService : Service() {
             val intent = Intent(context, ObdMonitorForegroundService::class.java).apply {
                 putExtra(EXTRA_STATUS, status)
             }
-            ContextCompat.startForegroundService(context.applicationContext, intent)
+            runCatching {
+                ContextCompat.startForegroundService(context.applicationContext, intent)
+            }.onFailure { e ->
+                ObdLogger.logDebug(
+                    ObdLogger.Dir.INFO,
+                    "ObdMonitor startForegroundService failed: ${e.message}",
+                )
+            }
         }
 
         fun updateStatus(context: Context, status: String) {
