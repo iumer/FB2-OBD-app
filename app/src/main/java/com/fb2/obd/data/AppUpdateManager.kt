@@ -49,8 +49,7 @@ class AppUpdateManager(private val appContext: Context) {
         _state.value = UiState.Checking
         val result = withContext(Dispatchers.IO) {
             runCatching {
-                val json = httpGetText(AppUpdateChecker.VERSION_JSON_URL)
-                val remote = AppUpdateChecker.parseVersionJson(json)
+                val remote = fetchRemoteVersion()
                 AppUpdateChecker.compare(
                     localCode = BuildConfig.VERSION_CODE,
                     localName = BuildConfig.VERSION_NAME,
@@ -159,9 +158,22 @@ class AppUpdateManager(private val appContext: Context) {
         }
     }
 
-    private fun httpGetText(url: String): String {
-        val fetchUrl = if (url.contains("version.json")) {
-            // Raw GitHub CDN can serve stale version.json — bust cache on every check.
+    private fun fetchRemoteVersion(): AppUpdateChecker.RemoteVersion {
+        runCatching {
+            val api = httpGetText(AppUpdateChecker.VERSION_JSON_API_URL)
+            return AppUpdateChecker.parseVersionJsonFromGitHubContents(api)
+        }.onFailure { first ->
+            ObdLogger.logDebug(
+                ObdLogger.Dir.INFO,
+                "Update API fetch failed (${first.message}); trying raw CDN",
+            )
+        }
+        val raw = httpGetText(AppUpdateChecker.VERSION_JSON_URL, cacheBust = true)
+        return AppUpdateChecker.parseVersionJson(raw)
+    }
+
+    private fun httpGetText(url: String, cacheBust: Boolean = false): String {
+        val fetchUrl = if (cacheBust && url.contains("version.json")) {
             val sep = if (url.contains('?')) "&" else "?"
             "$url${sep}t=${System.currentTimeMillis()}"
         } else {
