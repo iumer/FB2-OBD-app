@@ -1,9 +1,9 @@
 {
   "latest": {
-    "versionCode": 41,
-    "versionName": "0.1.20",
+    "versionCode": 42,
+    "versionName": "0.1.21",
     "apkUrl": "https://raw.githubusercontent.com/iumer/FB2-OBD-app/latest/dist/FB2-Diag-debug.apk",
-    "notes": "Live OBD: Connect chip turns red Disconnect"
+    "notes": "Disconnect chip on Classic + OptA/B/C themes"
   },
   "releases": [
     {
@@ -40,7 +40,13 @@
       "versionCode": 41,
       "versionName": "0.1.20",
       "apkUrl": "https://raw.githubusercontent.com/iumer/FB2-OBD-app/latest/dist/archive/FB2-Diag-0.1.20.apk",
-      "notes": "Live OBD: Connect chip turns red Disconnect"
+      "notes": "Live OBD: Connect chip turns red Disconnect (Classic only)"
+    },
+    {
+      "versionCode": 42,
+      "versionName": "0.1.21",
+      "apkUrl": "https://raw.githubusercontent.com/iumer/FB2-OBD-app/latest/dist/archive/FB2-Diag-0.1.21.apk",
+      "notes": "Disconnect chip on Classic + OptA/B/C themes"
     }
   ]
 }
