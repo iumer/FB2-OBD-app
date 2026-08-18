@@ -19,6 +19,7 @@ import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -50,7 +51,7 @@ class ElmConnectRuntimeTest {
     private val scope = TestScope(dispatcher)
 
     /** Stand-in for [com.fb2.obd.data.Elm327BluetoothSource] without Bluetooth hardware. */
-    private class FakeLiveSource(
+    private open class FakeLiveSource(
         private val frames: List<VehicleSnapshot>,
         override val isLive: Boolean = true,
         override val name: String = "ELM327 (Bluetooth)",
@@ -61,6 +62,13 @@ class ElmConnectRuntimeTest {
                 delay(50L)
             }
         }
+    }
+
+    /** Models a flaky clone adapter / OEM Bluetooth stack throwing mid-probe. */
+    private class ThrowingDtcSource :
+        FakeLiveSource(listOf(VehicleSnapshot(rpm = 800.0, batteryVolts = 14.0))) {
+        override suspend fun readStoredDtcs(): List<com.fb2.obd.obd.Dtc> =
+            throw IllegalStateException("adapter blew up mid-probe")
     }
 
     @Before
@@ -158,6 +166,28 @@ class ElmConnectRuntimeTest {
         assertEquals(42.0, snap.speedKmh!!, 0.001)
         assertEquals(88.0, snap.coolantC!!, 0.001)
         assertEquals(14.3, snap.batteryVolts!!, 0.001)
+        vm.disconnect()
+        step(100L)
+    }
+
+    /**
+     * A throwing DIAG probe must not reach the thread's default handler (which would
+     * kill the process) and must not leave the Faults page spinning forever.
+     */
+    @Test
+    fun throwingFaultsProbe_doesNotCrash_andClearsSpinner() {
+        val vm = newViewModel()
+        vm.useSource(ThrowingDtcSource())
+        step(300L)
+
+        vm.readFaults()
+        step(500L)
+
+        val faults = vm.faults.value
+        assertFalse("spinner must not stick after a failed probe", faults.loading)
+        assertEquals("Read failed", faults.message)
+        // Live polling must survive a failed one-shot probe.
+        assertEquals(ConnectionState.CONNECTED, vm.uiState.value.connection)
         vm.disconnect()
         step(100L)
     }

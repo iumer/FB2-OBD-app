@@ -295,7 +295,15 @@ class FloatingDashOverlayService : Service() {
             lp.x = startX + dx
             lp.y = startY + dy
             clampToScreen(lp)
-            windowManager.updateViewLayout(container, lp)
+            // Dragging while the overlay is being torn down (Exit, long-press, revoked
+            // permission, OEM kill) throws BadTokenException on the main thread.
+            // render()/ensureOnScreen() already guard this; the drag path did not.
+            runCatching { windowManager.updateViewLayout(container, lp) }
+                .onFailure { e ->
+                    ObdLogger.logDebug(ObdLogger.Dir.INFO, "Bubble drag update failed: ${e.message}")
+                    overlayAttached = false
+                    stopSelf()
+                }
         }
 
         val touchListener = View.OnTouchListener { _, event ->

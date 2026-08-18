@@ -20,11 +20,11 @@ Keep these fixed. If a change might touch one of these areas, re-verify it.
 | I05 | MAF flagged CRITICAL while Torque shows normal | Fixed | Schema 3 R18 bands; coasting = `COAST OK`; PID `0110` SAE decode unit-tested |
 | I06 | Suspicion wrong PID/protocol for other sensors | Partially | Compare vs Torque trackLog; LTFT missing in **both** apps (ECU). Re-check if new mismatches appear |
 | I07 | Rough Idle page stuck on “Probing…” | Fixed | Live Dash prefill; Mode 01 first; skip Mode 22 if bus unhealthy; shorter probe timeout |
-| I08 | App very laggy / slow | Fixed | Timeouts ~650/450 ms; core-PID-only while recovering; less ATSP thrash; **PID rotate** (heroes every cycle, ≤4 secondaries) |
+| I08 | App very laggy / slow | Fixed | Timeouts **900 ms poll / 450 ms probe+recover**; core-PID-only while recovering; less ATSP thrash; **PID rotate** (heroes every cycle, ≤4 secondaries) |
 | I34 | Speed stuck / under-reads (e.g. 65 vs ~98 km/h) while RPM moves | Fixed | `PidPollPlanner` never fail-streak-skips RPM/Speed; `SnapshotFreshness` clears Speed after 2.5s stale; unit test recreates freeze |
 | I36 | Want Torque-style green blink when a value is freshly fetched | Fixed | Shared blink clock (`FreshnessLed` + `FreshnessBlinkHost`) on Classic + OptA/B/C; bright pulse while `freshAtMs` is live, dim when stale |
 | I37 | Long-trip: LOG only in RAM until STOP (crash loses hours) | Fixed | Checkpoint CSV to disk every ~60s from LOG start; finalize on STOP |
-| I38 | Long-trip: UNABLE soft-recover loops forever (sticky Dash) | Fixed | ATRV-only ≠ healthy cycle; hard reconnect after 3 soft recovers |
+| I38 | Long-trip: UNABLE soft-recover loops forever (sticky Dash) | Fixed | ATRV-only ≠ healthy cycle; hard reconnect after **5** soft recovers (**8** while ATRV still answers) |
 | I39 | Long-trip: Coolant/Battery/MAF/RPM sticky last-good | Fixed | Sanitize clears safety fields after TTL; smoother clears on null; EST gear needs fresh RPM+Speed |
 | I40 | Deep search shows 1/N then fails; Dash goes laggy / **pauses fetching** during search | Fixed | Heroes-only poll during deep search; each ATSH strategy is `withLinkExclusive`; TTL `holdValues` so Dash does not blank |
 | I41 | Need FB2 vs Generic OBD2 profiles (no Honda junk on other cars) | Fixed | Settings → Vehicle profile; SAE-only catalog/pages/DIAG/deep search for Generic; Mode 0A permanent DTCs |
@@ -56,8 +56,8 @@ Keep these fixed. If a change might touch one of these areas, re-verify it.
 | I21 | Cannot remap built-in Dash tiles | Fixed | Double-tap tile → same sensor picker as `+`; persisted overrides |
 | I22 | Sensor picker has no text search | Fixed | Search box in `SensorPickerDialog` (label / PID / category) |
 | I23 | MIN toast shows but bubble missing on Home | Fixed | FGS + attach/READY before `moveTaskToBack`; clamp on-screen |
-| I24 | Dash text too small to read while driving on HU | Fixed | `DashType` HU scale (~34/22sp, 88dp tiles); ellipsis; fewer wider columns |
-| I25 | Floating bubble ring too small / overflow on HU | Fixed | `FloatingDashLayout`: 92/100/max400dp; shrinks on short-edge HUs |
+| I24 | Dash text too small to read while driving on HU | Fixed | `DashType` HU scale (hero **30**sp / tile **22**sp, 80dp tiles, 92dp hero); ellipsis; fewer wider columns |
+| I25 | Floating bubble ring too small / overflow on HU | Fixed | `FloatingDashLayout`: 92/100/max **340**dp (tightened by I64); shrinks on short-edge HUs |
 | I26 | Log Share shows “No apps…” / opens Bluetooth search on HU | Fixed | Always save to Downloads/FB2-Diag; ignore BT as share target |
 | I48 | Want in-app Update button (check / download / install or “up to date”) | Fixed | Settings → App update; `version.json` on `latest`; FileProvider install |
 | I49 | Soft-recover / ATRV-only frames wipe Dash mid-drive; UI RETRY blanks bubble | Fixed | ATRV-only = blank sticky; recover heartbeat + 450ms AT timeout; stale UI 12s; deep-found TTL/clear; deep search gentle restore |
@@ -86,6 +86,10 @@ Keep these fixed. If a change might touch one of these areas, re-verify it.
 | I72 | Shipped APK was v2-only debug (11 MB) — violates documented HU requirement | Fixed | Ship via `scripts/package-hu-apk.sh`: v1+v2 signed, release classpath, 7.3 MB |
 | I73 | Whole suite was pure-JVM, so I69/I70 shipped green while the app crashed | Fixed | Robolectric `ElmConnectRuntimeTest` drives the real `DashboardViewModel` on a real Android context |
 | I74 | Unguarded FGS restart in both services' `onTaskRemoved` — swiping app from recents could crash on API 31+ | Fixed | `runCatching` around both restarts (matching the already-guarded call sites); `ForegroundServiceRuntimeTest` |
+| I75 | 15 of 16 `publishCarDash()` / 2 of 3 `ensureElmMonitor()` call sites unguarded | Fixed | Both made safe **inside the function** so no caller can reintroduce the 0.1.28 crash |
+| I76 | One-shot DIAG jobs (Faults/Fuel/Trans/Honda/Mode 09/deep scan) had no exception handling — `viewModelScope` has no handler, so a throw killed the process | Fixed | `launchDiag()` catches, logs, and clears the page spinner; `throwingFaultsProbe_doesNotCrash_andClearsSpinner` |
+| I77 | Bubble drag called `updateViewLayout` unguarded — `BadTokenException` if dragged during teardown | Fixed | `runCatching` in `applyDrag`; detaches and stops the service on failure |
+| I78 | REGRESSION/AGENTS quoted stale constants (650 ms, cap 3, 34sp, 400dp) | Fixed | Corrected to 900/450 ms, cap 5 (8 on ATRV), hero 30sp, bubble 340dp |
 
 When the user reports a **new** bug, add a new `Ixx` row here (Status: Open → Fixed)
 and add a matching automated or manual check in sections 2–3.
