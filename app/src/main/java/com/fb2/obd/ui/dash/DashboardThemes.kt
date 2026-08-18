@@ -1,23 +1,14 @@
-@file:OptIn(ExperimentalFoundationApi::class)
-
 package com.fb2.obd.ui.dash
 
 import android.graphics.Paint
 import android.graphics.Typeface
-import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
-import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
@@ -44,8 +35,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -63,7 +54,6 @@ import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.util.VelocityTracker
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -71,7 +61,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import kotlinx.coroutines.launch
 import com.fb2.obd.obd.EditableMetric
 import com.fb2.obd.obd.GearSource
 import com.fb2.obd.obd.Health
@@ -83,10 +72,11 @@ import com.fb2.obd.obd.VehicleSnapshot
 import com.fb2.obd.ui.FreshnessHeartbeat
 import com.fb2.obd.ui.color
 import com.fb2.obd.ui.theme.ThemePalette
-import kotlin.math.absoluteValue
 import kotlin.math.cos
 import kotlin.math.roundToInt
 import kotlin.math.sin
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
 
 private val DigitFace = FontFamily.SansSerif
 
@@ -796,7 +786,7 @@ private fun OrbitValuePanel(
     }
 }
 
-/** Dialer-style vertical picker — steps mid-drag like a phone wheel, not sticky snap-on-release. */
+/** Continuous wheel — pixel-follows finger, then spring-settles to a slot. */
 @Composable
 private fun OrbitWheel(
     metrics: List<DashThemeMetric>,
@@ -811,9 +801,7 @@ private fun OrbitWheel(
     }
     val safeCenter = centerIndex.floorMod(pages.size.coerceAtLeast(1))
     val scope = rememberCoroutineScope()
-    val dragPx = remember { Animatable(0f) }
-    val density = LocalDensity.current
-    val stepPx = with(density) { 22.dp.toPx() }
+    var offsetPx by remember { mutableFloatStateOf(0f) }
 
     fun idx(delta: Int): Int {
         if (pages.isEmpty()) return 0
@@ -831,73 +819,7 @@ private fun OrbitWheel(
                     listOf(Color(0xFF2A1016), palette.surface, Color(0xFF1A080C)),
                 ),
             )
-            .border(2.dp, palette.accent.copy(alpha = 0.8f), RoundedCornerShape(999.dp))
-            .pointerInput(pages.size, stepPx) {
-                val tracker = VelocityTracker()
-                var carry = 0f
-                detectVerticalDragGestures(
-                    onDragStart = {
-                        tracker.resetTracking()
-                        carry = 0f
-                        scope.launch { dragPx.stop(); dragPx.snapTo(0f) }
-                    },
-                    onDragEnd = {
-                        val vy = tracker.calculateVelocity().y
-                        scope.launch {
-                            val flingSteps = when {
-                                vy.absoluteValue > 3500f -> 2
-                                vy.absoluteValue > 1800f -> 1
-                                else -> 0
-                            }
-                            val dir = if (vy > 0f) -1 else 1
-                            if (flingSteps > 0 && vy.absoluteValue > 1800f) {
-                                repeat(flingSteps) {
-                                    centerIndex = (centerIndex + dir).floorMod(pages.size)
-                                }
-                            }
-                            dragPx.animateTo(
-                                0f,
-                                spring(
-                                    dampingRatio = Spring.DampingRatioNoBouncy,
-                                    stiffness = Spring.StiffnessMediumLow,
-                                ),
-                            )
-                            carry = 0f
-                        }
-                    },
-                    onDragCancel = {
-                        scope.launch {
-                            dragPx.animateTo(0f, spring(stiffness = Spring.StiffnessMedium))
-                            carry = 0f
-                        }
-                    },
-                    onVerticalDrag = { change, amount ->
-                        change.consume()
-                        tracker.addPosition(change.uptimeMillis, change.position)
-                        carry += amount
-                        // Step as soon as the finger crosses a slot — dialer, not sticky release-snap.
-                        var stepped = false
-                        while (carry > stepPx && pages.isNotEmpty()) {
-                            centerIndex = (centerIndex - 1).floorMod(pages.size)
-                            carry -= stepPx
-                            stepped = true
-                        }
-                        while (carry < -stepPx && pages.isNotEmpty()) {
-                            centerIndex = (centerIndex + 1).floorMod(pages.size)
-                            carry += stepPx
-                            stepped = true
-                        }
-                        scope.launch {
-                            if (stepped) {
-                                dragPx.snapTo(carry.coerceIn(-stepPx * 0.45f, stepPx * 0.45f))
-                            } else {
-                                dragPx.snapTo(carry.coerceIn(-stepPx, stepPx))
-                            }
-                        }
-                    },
-                )
-            }
-            .padding(vertical = 4.dp, horizontal = 2.dp),
+            .border(2.dp, palette.accent.copy(alpha = 0.8f), RoundedCornerShape(999.dp)),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Text("▴", color = palette.accent.copy(alpha = 0.9f), fontSize = 12.sp, fontWeight = FontWeight.Bold)
@@ -905,14 +827,71 @@ private fun OrbitWheel(
             modifier = Modifier
                 .weight(1f)
                 .fillMaxWidth()
-                .padding(horizontal = 2.dp),
+                .padding(horizontal = 2.dp)
+                .pointerInput(pages.size) {
+                    val tracker = VelocityTracker()
+                    var settleJob: Job? = null
+                    detectVerticalDragGestures(
+                        onDragStart = {
+                            settleJob?.cancel()
+                            tracker.resetTracking()
+                        },
+                        onDragEnd = {
+                            val itemH = size.height / 3f
+                            val vy = tracker.calculateVelocity().y
+                            if (pages.isNotEmpty() && itemH > 1f) {
+                                val flung = OrbitWheelPhysics.applyDrag(
+                                    centerIndex,
+                                    offsetPx,
+                                    OrbitWheelPhysics.flingDeltaPx(vy, itemH),
+                                    itemH,
+                                    pages.size,
+                                )
+                                centerIndex = flung.center
+                                offsetPx = flung.offsetPx
+                            }
+                            val start = offsetPx
+                            settleJob = scope.launch {
+                                val anim = Animatable(start)
+                                anim.animateTo(
+                                    0f,
+                                    spring(
+                                        dampingRatio = Spring.DampingRatioNoBouncy,
+                                        stiffness = Spring.StiffnessMediumLow,
+                                    ),
+                                ) {
+                                    offsetPx = value
+                                }
+                            }
+                        },
+                        onDragCancel = {
+                            settleJob?.cancel()
+                            offsetPx = 0f
+                        },
+                        onVerticalDrag = { change, amount ->
+                            change.consume()
+                            tracker.addPosition(change.uptimeMillis, change.position)
+                            val itemH = size.height / 3f
+                            if (pages.isEmpty() || itemH <= 1f) return@detectVerticalDragGestures
+                            val next = OrbitWheelPhysics.applyDrag(
+                                centerIndex,
+                                offsetPx,
+                                amount,
+                                itemH,
+                                pages.size,
+                            )
+                            centerIndex = next.center
+                            offsetPx = next.offsetPx
+                        },
+                    )
+                },
         ) {
             val slotH = maxHeight / 3
             Box(modifier = Modifier.fillMaxSize()) {
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
-                        .offset { IntOffset(0, dragPx.value.roundToInt()) },
+                        .offset { IntOffset(0, offsetPx.roundToInt()) },
                 ) {
                     listOf(-1, 0, 1).forEach { delta ->
                         val focused = delta == 0
@@ -922,24 +901,13 @@ private fun OrbitWheel(
                                 .height(slotH),
                             contentAlignment = Alignment.Center,
                         ) {
-                            AnimatedContent(
-                                targetState = pages[idx(delta)],
-                                transitionSpec = {
-                                    (slideInVertically { h -> h / 5 } + fadeIn(tween(90))) togetherWith
-                                        (slideOutVertically { h -> -h / 5 } + fadeOut(tween(90)))
-                                },
-                                label = "orbit-slot-$delta",
-                                contentKey = { it.label },
-                                modifier = Modifier.fillMaxSize(),
-                            ) { metric ->
-                                OrbitWheelItem(
-                                    metric = metric,
-                                    focused = focused,
-                                    palette = palette,
-                                    onRemapBase = onRemapBase,
-                                    onEditThresholds = onEditThresholds,
-                                )
-                            }
+                            OrbitWheelItem(
+                                metric = pages[idx(delta)],
+                                focused = focused,
+                                palette = palette,
+                                onRemapBase = onRemapBase,
+                                onEditThresholds = onEditThresholds,
+                            )
                         }
                     }
                 }
