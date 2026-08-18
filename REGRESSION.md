@@ -3,8 +3,8 @@
 > ## ⚠️ Base tree is 0.1.15; updater is 0.1.16; Nakamichi keep-alive is 0.1.17
 >
 > `app/` started as an exact copy of commit `d3790be` (0.1.15). Restored so far:
-> in-app updater (0.1.16) and Nakamichi keep-alive (0.1.17: `Fb2App` process
-> ViewModel, FGS `stopWithTask=false`, last-ELM reconnect, unrestricted battery).
+> in-app updater (0.1.16), Nakamichi keep-alive (0.1.17), battery ALLOWED row
+> (0.1.18), and Settings stop-simulation (0.1.19).
 > Crash reporter, full-screen sensor picker, freshness LEDs, poll holds and
 > Robolectric tests are still **not** in this tree.
 
@@ -102,6 +102,7 @@ Keep these fixed. If a change might touch one of these areas, re-verify it.
 | I80 | No stack trace available for on-car crashes (no logcat in the car) | Fixed | `CrashReporter` persists trace + device + **recent ELM log**; prompts to save on next launch; `CrashReporterTest` |
 | I81 | `loadBondedDevices` / `connectTo` could throw `SecurityException` on the UI thread if BT permission is revoked after the gate | Fixed | Both wrapped; connect surfaces a toast instead of dying |
 | I82 | Show every newer version in a list, not only “latest”; after installing 0.1.18 the next check shows 0.1.19+ | Fixed | `AppUpdateChecker.newerThan`; Settings list GET/INSTALL per row; `versions.json` catalog |
+| I83 | No way to stop Demo values from Settings | Fixed | Settings → Simulation: **STOP** while Demo is running; **Demo / simulated data** toggle persists `allowDemo` |
 
 When the user reports a **new** bug, add a new `Ixx` row here (Status: Open → Fixed)
 and add a matching automated or manual check in sections 2–3.
@@ -170,6 +171,7 @@ curl -fsSL "https://api.github.com/repos/iumer/FB2-OBD-app/contents/dist/version
 | `ElmConnectRuntimeTest` | **Android runtime (Robolectric).** Real `DashboardViewModel` on a real `Application`: construct, Demo→live ELM connect without crashing, no Demo leak into first live frame, ATRV-only frame keeps heroes, disconnect clears state |
 | `ForegroundServiceRuntimeTest` | **Android runtime (Robolectric).** Neither service propagates an exception out of `onTaskRemoved` (app swiped from recents) or `startOverlay` |
 | `DashboardSnapshotTest` / `ScreensSnapshotTest` / `ConnectSheetSnapshotTest` | Paparazzi UI snapshots |
+| `DemoAllowPolicyTest` | Settings stop-simulation: off while Demo disconnects; on while idle starts Demo; live ELM left running |
 | `AppUpdateCheckerTest` | versions.json catalog parse; newerThan lists 0.1.16–0.1.20 then only 0.1.19+ after installing 0.1.18 |
 | `DashExtraPidStoreTest` | **+** extras survive process death (`dash_extra_pids.json`) |
 | `SensorPickerReadingsTest` | Green/live vs waiting vs ECU-unsupported; SAE support bitmask parse; **ATRV battery live even if 0142 unsupported**; 2026-07-24 FB2 Dash PIDs stay LIVE |
@@ -187,6 +189,7 @@ Do these on a phone with the new `dist/FB2-Diag-debug.apk` whenever the change
 touches ELM, Dash health, deep search, logging, or share:
 
 1. **Demo smoke** — open app → Demo feed moves; swipe all Dash pages for the active profile (Generic has no Trans).
+1a. **Stop simulation** — Settings → Simulation → **STOP** (or turn off Demo / simulated data). Dash goes `--` / disconnected. Toggle off survives process death; Connect → Demo or toggle on starts it again.
 1b. **Vehicle profile** — Settings → select Generic OBD2 → Trans + Honda DIAG gone; picker SAE-only; badge `OBD2`. Switch back to FB2 → Trans + Honda modules return.
 1c. **Faults** — Read shows Stored / Pending / Permanent (Mode 0A); Clear refreshes lists.
 2. **Connect live ELM** — chip goes `LIVE`; Battery shows volts (ATRV); MAF at idle ~3–5 g/s and **not** CRITICAL.

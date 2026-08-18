@@ -102,6 +102,7 @@ fun SettingsScreen(
     onVehicleProfileChange: (VehicleProfile) -> Unit = {},
     onDashThemeChange: (DashTheme) -> Unit = {},
     onToggleEstimatedGear: (Boolean) -> Unit,
+    onToggleAllowDemo: (Boolean) -> Unit = {},
     onToggleVoiceAlerts: (Boolean) -> Unit = {},
     onToggleDuckMedia: (Boolean) -> Unit = {},
     onCheckSoundAlert: () -> Unit = {},
@@ -127,6 +128,8 @@ fun SettingsScreen(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
     scrollState: ScrollState = rememberScrollState(),
+    /** True when Demo (not a live ELM) is currently filling the Dash. */
+    demoRunning: Boolean = false,
 ) {
     val palette = LocalThemePalette.current
     Column(
@@ -208,6 +211,28 @@ fun SettingsScreen(
                 )
             }
         }
+
+        SectionLabel("Simulation")
+        ActionRow(
+            title = "Stop simulation",
+            subtitle = if (demoRunning) {
+                "Demo values are on the Dash. Tap STOP to clear them to --."
+            } else {
+                "No simulation running. Connect an ELM for live data, or turn Demo on below / pick Demo on Connect."
+            },
+            actionLabel = if (demoRunning) "STOP" else "OFF",
+            onClick = { onToggleAllowDemo(false) },
+        )
+        ToggleRow(
+            title = "Demo / simulated data",
+            subtitle = if (settings.allowDemo) {
+                "On: with no ELM, Dash runs simulated values (DEMO badge). Turn off to stay disconnected / --."
+            } else {
+                "Off: no fake numbers. Connect an ELM327, or turn this on / pick Demo on Connect."
+            },
+            checked = settings.allowDemo,
+            onCheckedChange = onToggleAllowDemo,
+        )
 
         SectionLabel("Vehicle profile")
         Text(

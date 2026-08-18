@@ -12,11 +12,12 @@ android {
         applicationId = "com.fb2.obd"
         minSdk = 26
         targetSdk = 34
-        // Visible line: 0.1.15 revert → 0.1.16 updater → 0.1.17 Nakamichi.
+        // Visible line: 0.1.15 revert → 0.1.16 updater → 0.1.17 Nakamichi →
+        // 0.1.18 battery ALLOWED → 0.1.19 Settings stop-simulation.
         // versionCode is an Android install counter only (must rise so this
         // APK can replace the mis-named 0.1.36/0.1.37 builds). Not shown in UI.
-        versionCode = 39
-        versionName = "0.1.18"
+        versionCode = 40
+        versionName = "0.1.19"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
