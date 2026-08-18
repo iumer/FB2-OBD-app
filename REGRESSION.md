@@ -1,11 +1,12 @@
 # FB2 Diag — Regression checklist
 
-> ## ⚠️ Base tree is 0.1.15; updater restored in 0.1.36
+> ## ⚠️ Base tree is 0.1.15; updater in 0.1.36; Nakamichi keep-alive in 0.1.37
 >
-> `app/` started as an exact copy of commit `d3790be` (0.1.15). The in-app updater
-> (version list) is back as of 0.1.36. Crash reporter, full-screen sensor picker,
-> freshness LEDs, poll holds, keep-alive/auto-reconnect and Robolectric tests are
-> still **not** in this tree. See [`CHANGELOG-0.1.15-to-0.1.34.md`](CHANGELOG-0.1.15-to-0.1.34.md).
+> `app/` started as an exact copy of commit `d3790be` (0.1.15). Restored so far:
+> in-app updater (0.1.36) and Nakamichi keep-alive (0.1.37: `Fb2App` process
+> ViewModel, FGS `stopWithTask=false`, last-ELM reconnect, unrestricted battery).
+> Crash reporter, full-screen sensor picker, freshness LEDs, poll holds and
+> Robolectric tests are still **not** in this tree.
 
 **Mandatory for every code change.** After any non-trivial edit, run the full
 automated suite below and tick the relevant manual items before calling the
@@ -74,7 +75,7 @@ Keep these fixed. If a change might touch one of these areas, re-verify it.
 | I53 | Classic Dash RPM/Speed bar and Select sensor search chrome stayed pinned while scrolling | Fixed | Classic TopBar+hero collapse on scroll; picker title/search/chips scroll with the list |
 | I54 | Opening Select sensor / search blanks Dash values (appear then vanish) | Fixed | Picker no longer pauses Mode 01; 1 extra PID per poll cycle; live snapshot beats support bitmask |
 | I55 | Deep search still pauses live fetching | Fixed | Same as I40: heroes keep polling between exclusive ATSH strategies |
-| I56 | Nakamichi / phone kills app mid-drive so LOG cannot be trusted vs Torque | Fixed | Process-scoped ViewModel (`Fb2App`); FGS `stopWithTask=false` + sticky reconnect; battery unrestricted prompt |
+| I56 | Nakamichi / phone kills app mid-drive so LOG cannot be trusted vs Torque | Fixed (restored 0.1.37) | Process-scoped ViewModel (`Fb2App`); FGS `stopWithTask=false` + sticky reconnect; battery unrestricted prompt |
 | I57 | Green freshness dots static / missing on some themes | Fixed | Shared blink on Classic + OptA/B/C; dim when that field is not freshly fetched |
 | I58 | DIAG Faults Read blanks Dash heroes (`--`) while CONNECTED | Fixed | Mode 03/07/0A/09/probes use `withLinkExclusive` + `withDashKeptAlive` (heroes keep polling between commands; TTL `holdValues` mid-cycle) |
 | I59 | Floating bubble blanks on RETRY while phone Dash keeps values | Fixed | `showingLiveValues` sticky during CONNECTING; amber RETRY rim; `publishCarDash` every snapshot frame |

@@ -57,6 +57,11 @@ class Elm327BluetoothSource(
     override val name: String = "ELM327 (Bluetooth)"
     override val isLive: Boolean = true
 
+    val deviceAddress: String get() = device.address
+
+    @get:SuppressLint("MissingPermission")
+    val deviceName: String? get() = runCatching { device.name }.getOrNull()
+
     @Volatile
     private var connection: Elm327Connection? = null
 

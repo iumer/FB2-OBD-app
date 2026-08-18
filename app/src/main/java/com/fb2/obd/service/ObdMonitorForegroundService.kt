@@ -9,10 +9,16 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 import android.os.PowerManager
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.ViewModelStoreOwner
+import com.fb2.obd.DashboardViewModel
+import com.fb2.obd.Fb2App
 import com.fb2.obd.MainActivity
 import com.fb2.obd.R
 import com.fb2.obd.data.ObdLogger
@@ -23,7 +29,8 @@ import com.fb2.obd.data.ObdLogger
  * can still speak with the screen off / app backgrounded.
  *
  * Does **not** own the OBD poll loop — [com.fb2.obd.DashboardViewModel] continues
- * collecting snapshots; this service only holds the FGS notification + wake lock.
+ * collecting snapshots; this service holds the FGS notification + wake lock and
+ * reconnects after OEM process death (Nakamichi RAM reclaim).
  */
 class ObdMonitorForegroundService : Service() {
 
@@ -39,7 +46,33 @@ class ObdMonitorForegroundService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val status = intent?.getStringExtra(EXTRA_STATUS) ?: STATUS_CONNECTED
         promoteToForeground(status)
+        val reconnect = intent == null || intent.getBooleanExtra(EXTRA_RECONNECT, false)
+        if (reconnect) {
+            Handler(Looper.getMainLooper()).post {
+                (application as? Fb2App)?.let { app ->
+                    ViewModelProvider(app as ViewModelStoreOwner)[DashboardViewModel::class.java]
+                        .reconnectLastElmIfIdle()
+                }
+            }
+        }
         return START_STICKY
+    }
+
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        ObdLogger.logDebug(ObdLogger.Dir.INFO, "ObdMonitor FGS onTaskRemoved — restarting keep-alive")
+        val restart = Intent(applicationContext, ObdMonitorForegroundService::class.java).apply {
+            putExtra(EXTRA_STATUS, STATUS_LIVE)
+            putExtra(EXTRA_RECONNECT, true)
+        }
+        runCatching {
+            ContextCompat.startForegroundService(applicationContext, restart)
+        }.onFailure { e ->
+            ObdLogger.logDebug(
+                ObdLogger.Dir.INFO,
+                "ObdMonitor onTaskRemoved restart refused: ${e.message}",
+            )
+        }
+        super.onTaskRemoved(rootIntent)
     }
 
     override fun onDestroy() {
@@ -52,14 +85,22 @@ class ObdMonitorForegroundService : Service() {
 
     private fun promoteToForeground(status: String) {
         val notification = buildNotification(status)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            startForeground(
-                NOTIFICATION_ID,
-                notification,
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE,
+        runCatching {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                startForeground(
+                    NOTIFICATION_ID,
+                    notification,
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE,
+                )
+            } else {
+                startForeground(NOTIFICATION_ID, notification)
+            }
+        }.onFailure { e ->
+            ObdLogger.logDebug(
+                ObdLogger.Dir.INFO,
+                "ObdMonitor FGS start failed: ${e.message}",
             )
-        } else {
-            startForeground(NOTIFICATION_ID, notification)
+            stopSelf()
         }
     }
 
@@ -123,6 +164,7 @@ class ObdMonitorForegroundService : Service() {
         private const val NOTIFICATION_ID = 1001
 
         const val EXTRA_STATUS = "status"
+        const val EXTRA_RECONNECT = "reconnect"
 
         const val STATUS_CONNECTED = "ELM connected"
         const val STATUS_LIVE = "LIVE"
@@ -132,7 +174,14 @@ class ObdMonitorForegroundService : Service() {
             val intent = Intent(context, ObdMonitorForegroundService::class.java).apply {
                 putExtra(EXTRA_STATUS, status)
             }
-            ContextCompat.startForegroundService(context.applicationContext, intent)
+            runCatching {
+                ContextCompat.startForegroundService(context.applicationContext, intent)
+            }.onFailure { e ->
+                ObdLogger.logDebug(
+                    ObdLogger.Dir.INFO,
+                    "ObdMonitor startForegroundService failed: ${e.message}",
+                )
+            }
         }
 
         fun updateStatus(context: Context, status: String) {
