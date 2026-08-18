@@ -406,6 +406,7 @@ class MainActivity : ComponentActivity() {
                             onVehicleProfileChange = viewModel::setVehicleProfile,
                             onDashThemeChange = viewModel::setDashTheme,
                             onToggleEstimatedGear = viewModel::setShowEstimatedGear,
+                            onToggleAllowDemo = viewModel::setAllowDemo,
                             onToggleVoiceAlerts = viewModel::setVoiceAlerts,
                             onToggleDuckMedia = viewModel::setDuckMediaDuringAlerts,
                             onCheckSoundAlert = {
@@ -448,6 +449,8 @@ class MainActivity : ComponentActivity() {
                             onBack = { screen = Screen.DASHBOARD },
                             modifier = Modifier.fillMaxSize(),
                             scrollState = settingsScrollState,
+                            demoRunning = state.connection == ConnectionState.CONNECTED &&
+                                !state.sourceIsLive,
                         )
                     }
 
@@ -593,7 +596,11 @@ class MainActivity : ComponentActivity() {
                     ConnectDialog(
                         devices = devices,
                         onPickDevice = { connectTo(it); showConnect = false },
-                        onPickDemo = { viewModel.useSource(DemoObdSource()); showConnect = false },
+                        onPickDemo = {
+                            viewModel.setAllowDemo(true)
+                            viewModel.useSource(DemoObdSource())
+                            showConnect = false
+                        },
                         onDismiss = { showConnect = false },
                     )
                 }
