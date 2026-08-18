@@ -1,9 +1,9 @@
 {
   "latest": {
-    "versionCode": 43,
-    "versionName": "0.1.22",
+    "versionCode": 44,
+    "versionName": "0.1.23",
     "apkUrl": "https://raw.githubusercontent.com/iumer/FB2-OBD-app/latest/dist/FB2-Diag-debug.apk",
-    "notes": "Deep search keeps Dash heroes live; Torque-style blinking green freshness LEDs on all themes"
+    "notes": "Classic theme: RPM/Speed/Gear hero scrolls with Dash tiles (not sticky)"
   },
   "releases": [
     {
@@ -53,6 +53,12 @@
       "versionName": "0.1.22",
       "apkUrl": "https://raw.githubusercontent.com/iumer/FB2-OBD-app/latest/dist/archive/FB2-Diag-0.1.22.apk",
       "notes": "Deep search keeps Dash heroes live; blinking green freshness LEDs on all themes"
+    },
+    {
+      "versionCode": 44,
+      "versionName": "0.1.23",
+      "apkUrl": "https://raw.githubusercontent.com/iumer/FB2-OBD-app/latest/dist/archive/FB2-Diag-0.1.23.apk",
+      "notes": "Classic theme: RPM/Speed/Gear hero scrolls with Dash tiles (not sticky)"
     }
   ]
 }

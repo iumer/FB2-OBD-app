@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.pager.HorizontalPager
@@ -321,18 +322,6 @@ fun DashboardScreen(
                 onMinimizeClick = onMinimizeClick,
             )
 
-            CompactHeroStrip(
-                rpm = s.rpm,
-                speedKmh = s.speedKmh,
-                gear = s.gear,
-                gearSource = gearSrc,
-                gearConfidencePct = s.gearConfidencePct,
-                thresholds = healthThresholds,
-                rpmFreshAtMs = s.freshAtMs[SnapshotFreshness.KEY_RPM],
-                speedFreshAtMs = s.freshAtMs[SnapshotFreshness.KEY_SPEED],
-                onEditRpm = { editMetric = EditableMetric.RPM },
-            )
-
             PageTabs(
                 titles = titles,
                 current = pagerState.currentPage,
@@ -353,6 +342,9 @@ fun DashboardScreen(
                             snapshot = s,
                             healthSnapshot = healthSnap,
                             latchHealth = onLatchHealth,
+                            gear = s.gear,
+                            gearSource = gearSrc,
+                            gearConfidencePct = s.gearConfidencePct,
                             extraPidIds = extraPidIds,
                             extraValues = extraValues,
                             tileOverrides = tileOverrides,
@@ -366,6 +358,7 @@ fun DashboardScreen(
                             onRemapExtra = { index -> pickerTarget = PickerTarget.ExtraSlot(index) },
                             onDeepSearch = onDeepSearch,
                             onEditThresholds = { editMetric = it },
+                            onEditRpm = { editMetric = EditableMetric.RPM },
                         )
                         "Custom" -> DenseSensorGridPage(
                             title = "Custom sensors",
@@ -684,6 +677,9 @@ private fun MetricsPage(
     snapshot: VehicleSnapshot,
     healthSnapshot: VehicleSnapshot = snapshot,
     latchHealth: (String, MetricStatus) -> MetricStatus = { _, status -> status },
+    gear: Int?,
+    gearSource: GearSource,
+    gearConfidencePct: Int? = null,
     extraPidIds: List<String>,
     extraValues: Map<String, String>,
     tileOverrides: Map<String, String>,
@@ -697,6 +693,7 @@ private fun MetricsPage(
     onRemapExtra: (index: Int) -> Unit,
     onDeepSearch: (label: String, pidId: String?) -> Unit,
     onEditThresholds: (EditableMetric) -> Unit,
+    onEditRpm: () -> Unit = {},
 ) {
     val hs = healthSnapshot
     val engineRunning = (hs.rpm ?: snapshot.rpm ?: 0.0) > 0.0
@@ -806,6 +803,19 @@ private fun MetricsPage(
             verticalArrangement = Arrangement.spacedBy(DashType.tileGap),
             contentPadding = PaddingValues(bottom = 4.dp),
         ) {
+        item(span = { GridItemSpan(maxLineSpan) }) {
+            CompactHeroStrip(
+                rpm = snapshot.rpm,
+                speedKmh = snapshot.speedKmh,
+                gear = gear,
+                gearSource = gearSource,
+                gearConfidencePct = gearConfidencePct,
+                thresholds = thresholds,
+                rpmFreshAtMs = snapshot.freshAtMs[SnapshotFreshness.KEY_RPM],
+                speedFreshAtMs = snapshot.freshAtMs[SnapshotFreshness.KEY_SPEED],
+                onEditRpm = onEditRpm,
+            )
+        }
         items(baseTiles, key = { it.label }) { t ->
             val overrideId = tileOverrides[t.label]
             val overridePid = overrideId?.let { id -> catalog.find { it.id.equals(id, true) } }
