@@ -4,9 +4,9 @@
 >
 > `app/` started as an exact copy of commit `d3790be` (0.1.15). Restored so far:
 > in-app updater (0.1.16), Nakamichi keep-alive (0.1.17), battery ALLOWED row
-> (0.1.18), Settings stop-simulation (0.1.19), live-ELM Disconnect chip (0.1.21: all themes).
-> Crash reporter, full-screen sensor picker, freshness LEDs, poll holds and
-> Robolectric tests are still **not** in this tree.
+> (0.1.18), Settings stop-simulation (0.1.19), live-ELM Disconnect chip (0.1.21: all themes),
+> deep-search heroes-live + blinking freshness LEDs (0.1.22).
+> Crash reporter, full-screen sensor picker and Robolectric tests are still **not** in this tree.
 
 **Mandatory for every code change.** After any non-trivial edit, run the full
 automated suite below and tick the relevant manual items before calling the

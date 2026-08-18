@@ -7,6 +7,7 @@ import com.fb2.obd.obd.ModuleScanResult
 import com.fb2.obd.obd.O2TestResult
 import com.fb2.obd.obd.PidDefinition
 import com.fb2.obd.obd.PidProbeResult
+import com.fb2.obd.obd.PollHold
 import com.fb2.obd.obd.ReadinessStatus
 import com.fb2.obd.obd.VehicleInfo
 import com.fb2.obd.obd.VehicleSnapshot
@@ -37,11 +38,22 @@ interface ObdSource {
     suspend fun readMode05(): List<O2TestResult> = emptyList()
     suspend fun readMode06(): List<Mode06Result> = emptyList()
 
-    /** Pause continuous Mode 01 polling (e.g. during deep search). No-op for Demo. */
-    fun pausePolling() {}
+    /** Pause continuous Mode 01 polling — prefer [setPollHold]. Maps to [PollHold.FULL_PAUSE]. */
+    fun pausePolling() {
+        setPollHold(PollHold.FULL_PAUSE)
+    }
 
-    /** Resume continuous Mode 01 polling after [pausePolling]. */
-    fun resumePolling() {}
+    /** Resume continuous Mode 01 polling after [pausePolling] / [setPollHold]. */
+    fun resumePolling() {
+        setPollHold(PollHold.NONE)
+    }
+
+    fun setPollHold(hold: PollHold) {}
+
+    fun pollHold(): PollHold = PollHold.NONE
+
+    /** Run [block] without the poll loop sending bytes (one ATSH strategy). */
+    suspend fun <T> withLinkExclusive(block: suspend () -> T): T = block()
 
     /** Probe a list of PIDs; returns support + sample value when possible. */
     suspend fun probePids(

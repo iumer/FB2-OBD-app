@@ -15,8 +15,8 @@ android {
         // Visible line: … → 0.1.19 stop-simulation → 0.1.20/0.1.21 Disconnect chip (all themes).
         // versionCode is an Android install counter only (must rise so this
         // APK can replace the mis-named 0.1.36/0.1.37 builds). Not shown in UI.
-        versionCode = 42
-        versionName = "0.1.21"
+        versionCode = 43
+        versionName = "0.1.22"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
