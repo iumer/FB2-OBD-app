@@ -37,27 +37,6 @@ class ScreensSnapshotTest {
     }
 
     @Test
-    fun settings_demoRunning_screen() {
-        paparazzi.snapshot {
-            FB2Theme {
-                SettingsScreen(
-                    settings = SettingsState(
-                        showEstimatedGear = true,
-                        voiceAlerts = true,
-                        allowDemo = true,
-                    ),
-                    onToggleEstimatedGear = {},
-                    onToggleVoiceAlerts = {},
-                    onCheckSoundAlert = {},
-                    nav = com.fb2.obd.ui.SettingsNav(),
-                    onBack = {},
-                    demoRunning = true,
-                )
-            }
-        }
-    }
-
-    @Test
     fun settings_updateList_screen() {
         paparazzi.snapshot {
             FB2Theme {

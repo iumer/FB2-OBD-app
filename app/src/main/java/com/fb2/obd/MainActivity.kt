@@ -462,8 +462,6 @@ class MainActivity : ComponentActivity() {
                             onBack = { screen = Screen.DASHBOARD },
                             modifier = Modifier.fillMaxSize(),
                             scrollState = settingsScrollState,
-                            demoRunning = state.connection == ConnectionState.CONNECTED &&
-                                !state.sourceIsLive,
                         )
                     }
 

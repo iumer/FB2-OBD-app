@@ -130,8 +130,6 @@ fun SettingsScreen(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
     scrollState: ScrollState = rememberScrollState(),
-    /** True when Demo (not a live ELM) is currently filling the Dash. */
-    demoRunning: Boolean = false,
 ) {
     val palette = LocalThemePalette.current
     Column(
@@ -216,27 +214,23 @@ fun SettingsScreen(
 
         SectionLabel("Simulation")
         Text(
-            text = "Demo / simulated driving values when no ELM adapter is connected.",
+            text = "Simulated Dash when no ELM adapter is connected.",
             color = TextMuted,
             fontSize = 12.sp,
             modifier = Modifier.padding(bottom = 8.dp),
         )
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(12.dp))
-                .background(MaterialTheme.colorScheme.surface)
-                .padding(horizontal = 14.dp, vertical = 8.dp),
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(24.dp),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            SimulationRadioRow(
-                title = "Simulation OFF",
-                subtitle = "No fake numbers — connect ELM327 for live data, or pick Demo on Connect.",
+            SimulationOnOffOption(
+                label = "Off",
                 selected = !settings.allowDemo,
                 onSelect = { onToggleAllowDemo(false) },
             )
-            SimulationRadioRow(
-                title = "Simulation ON",
-                subtitle = "Dash runs simulated values (DEMO badge) when no adapter is linked.",
+            SimulationOnOffOption(
+                label = "On",
                 selected = settings.allowDemo,
                 onSelect = { onToggleAllowDemo(true) },
             )
@@ -585,19 +579,17 @@ private fun ToggleRow(
 }
 
 @Composable
-private fun SimulationRadioRow(
-    title: String,
-    subtitle: String,
+private fun SimulationOnOffOption(
+    label: String,
     selected: Boolean,
     onSelect: () -> Unit,
 ) {
     val palette = LocalThemePalette.current
     Row(
         modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(10.dp))
+            .clip(RoundedCornerShape(8.dp))
             .clickable(onClick = onSelect)
-            .padding(vertical = 6.dp),
+            .padding(vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         RadioButton(
@@ -608,10 +600,7 @@ private fun SimulationRadioRow(
                 unselectedColor = TextMuted,
             ),
         )
-        Column(modifier = Modifier.weight(1f)) {
-            Text(title, color = TextPrimary, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
-            Text(subtitle, color = TextMuted, fontSize = 12.sp)
-        }
+        Text(label, color = TextPrimary, fontSize = 15.sp)
     }
 }
 

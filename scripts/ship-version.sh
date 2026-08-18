@@ -30,6 +30,7 @@ notes = {
     "0.1.32": "Probe all Mode 01 PIDs Torque shows as readable",
     "0.1.33": "Red Orbit wheels continuous smooth scroll",
     "0.1.34": "Picker Readable latch: no MAP/Coolant/any PID flicker off green",
+    "0.1.35": "Settings Simulation: short line + Off/On radios only",
 }.get(vn, catalog["latest"].get("notes", ""))
 catalog["latest"] = {
     "versionCode": vc,
