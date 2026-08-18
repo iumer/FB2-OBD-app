@@ -372,41 +372,34 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
             // Do not pause Mode 01 (I54). Heroes-only hold lets MAP TTL-expire in ~2.5s
             // while MAF (always-polled) stays — that is the MAP flicker in the recording.
             try {
+                var advertised: Set<Int> = emptySet()
                 val supportScan = probeSaeSupportBitmask(source)
                 if (supportScan != null) {
-                    val (support, coveredBases) = supportScan
-                    catalog.forEach { pid ->
-                        val n = pid.mode01Number ?: return@forEach
-                        if (SensorPickerReadings.pidInCoveredSupportBlock(n, coveredBases) &&
-                            n !in support &&
-                            pid.id !in seeded
-                        ) {
-                            seeded[pid.id] = PidProbeResult(
-                                pid,
-                                supported = false,
-                                sample = null,
-                                raw = "UNSUPPORTED",
-                            )
-                        }
-                    }
-                    _pickerScan.update { it.copy(results = HashMap(seeded)) }
+                    advertised = supportScan.first
                 }
+                // Torque does not hide a PID just because 0100 omitted it — probe it.
                 val toProbe = catalog.filter { pid ->
                     pid.id !in seeded
-                }.sortedBy { pid ->
-                    if (pid.request.startsWith("01")) 0 else 1
+                }.distinctBy { it.request.uppercase() }.sortedBy { pid ->
+                    val n = pid.mode01Number
+                    when {
+                        n != null && n in advertised -> 0
+                        pid.request.startsWith("01") -> 1
+                        else -> 2
+                    }
                 }
                 for (batch in toProbe.chunked(6)) {
                     if (!isActive) break
                     val probed = source.probePids(batch, recoverFirst = false)
+                    val expanded = SensorPickerReadings.expandProbeHits(catalog, probed)
                     _pickerScan.update { st ->
                         val merged = st.results.toMutableMap()
-                        probed.forEach { hit ->
-                            val prev = merged[hit.pid.id]
+                        expanded.forEach { (id, hit) ->
+                            val prev = merged[id]
                             if (prev?.supported == true && prev.sample != null && !hit.supported) {
                                 return@forEach
                             }
-                            merged[hit.pid.id] = hit
+                            merged[id] = hit
                         }
                         st.copy(results = merged)
                     }
@@ -433,8 +426,8 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
             val parsed = SensorPickerReadings.parseSaeSupport(base, raw)
             val bytes = ObdResponseParser.rawDataBytes(req, 4, raw)
             if (bytes != null) {
-                coveredBases += base
-                supported += parsed
+                coveredBases.add(base)
+                supported.addAll(parsed)
             }
         }
         return if (coveredBases.isNotEmpty()) supported to coveredBases else null

@@ -106,6 +106,17 @@ class SensorPickerReadingsTest {
     }
 
     @Test
+    fun expandProbeHits_decodesO2CurrentFromSame0124Frame() {
+        val lambda = StandardPidCatalog.all.first { it.id.equals("0124", true) }
+        val current = StandardPidCatalog.all.first { it.id.equals("0124I", true) }
+        val hit = PidProbeResult(lambda, supported = true, sample = 1.99, raw = "41 24 FF FF 80 01")
+        val expanded = SensorPickerReadings.expandProbeHits(listOf(lambda, current), listOf(hit))
+        assertTrue(expanded.containsKey("0124"))
+        assertTrue(expanded.containsKey("0124I"))
+        assertEquals(SensorReadKind.LIVE, SensorPickerReadings.resolve(current, VehicleSnapshot.EMPTY, expanded).kind)
+    }
+
+    @Test
     fun pidInCoveredSupportBlock_onlyMarksDecodedRange() {
         assertTrue(SensorPickerReadings.pidInCoveredSupportBlock(0x0C, setOf(0x00)))
         assertFalse(SensorPickerReadings.pidInCoveredSupportBlock(0x42, setOf(0x00)))
