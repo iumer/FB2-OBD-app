@@ -129,6 +129,7 @@ then update the `latest` branch APK (same path) so the bookmarkable download lin
 | `CarDashBuilderTest` | Android Auto dash model |
 | `FloatingDashMetricsTest` | Radial order, RPM redline, RETRY sticky values, OFF on ERROR, n/s grey health |
 | `ElmPollHoldRecoverTest` | HEROES_ONLY→NONE must not arm recover; `mergeLastGood` keeps heroes on partial frames |
+| `ElmConnectTransitionTest` | Fresh ELM connect clears Demo prev; mid-session partial merge keeps heroes |
 | `DashboardSnapshotTest` / `ScreensSnapshotTest` / `ConnectSheetSnapshotTest` | Paparazzi UI snapshots |
 | `AppUpdateCheckerTest` | version.json parse + local/remote versionCode compare |
 | `DashExtraPidStoreTest` | **+** extras survive process death (`dash_extra_pids.json`) |
