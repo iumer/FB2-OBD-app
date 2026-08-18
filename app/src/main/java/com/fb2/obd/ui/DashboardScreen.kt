@@ -247,15 +247,12 @@ fun DashboardScreen(
     }
     val density = LocalDensity.current
 
+    // Secondary tabs refresh only via their on-screen Probe / Refresh buttons —
+    // auto-probing on swipe starved the ELM and blanked the live Dash.
+    @Suppress("UNUSED_PARAMETER")
     LaunchedEffect(pagerState.currentPage, titles, immersive) {
         if (immersive) return@LaunchedEffect
-        when (titles.getOrNull(pagerState.currentPage)) {
-            "Custom" -> onRefreshCustom()
-            "Idle" -> onRefreshIdle()
-            "Fuel" -> onRefreshFuel()
-            "Trans" -> onRefreshTrans()
-            "Health" -> onRefreshHealth()
-        }
+        // Intentionally no-op: was onRefreshCustom/Idle/Fuel/Trans on page change.
     }
 
     val gearSrc = if (!showEstimatedGear && s.gearSource == GearSource.ESTIMATED) {

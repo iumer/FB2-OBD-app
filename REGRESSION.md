@@ -70,6 +70,17 @@ Keep these fixed. If a change might touch one of these areas, re-verify it.
 | I56 | Nakamichi / phone kills app mid-drive so LOG cannot be trusted vs Torque | Fixed | Process-scoped ViewModel (`Fb2App`); FGS `stopWithTask=false` + sticky reconnect; battery unrestricted prompt |
 | I57 | Green freshness dots static / missing on some themes | Fixed | Shared blink on Classic + OptA/B/C; dim when that field is not freshly fetched |
 | I58 | DIAG Faults Read blanks Dash heroes (`--`) while CONNECTED | Fixed | Mode 03/07/0A/09/probes use `withLinkExclusive` + `withDashKeptAlive` (heroes keep polling between commands; TTL `holdValues` mid-cycle) |
+| I59 | Floating bubble blanks on RETRY while phone Dash keeps values | Fixed | `showingLiveValues` sticky during CONNECTING; amber RETRY rim; `publishCarDash` every snapshot frame |
+| I60 | Bubble collapsed chip missing LIVE / RETRY / DEMO tag | Fixed | `bubbleLinkTag` on center text (LIVE · COOL · 91°C) |
+| I61 | Bubble n/s tiles showed cyan accent ring | Fixed | Unknown health → grey rim; Load/Throttle display-only (null health) |
+| I62 | Bubble not restored after HU process death / ELM reconnect | Fixed | `FloatingDashPrefs`; `stopWithTask=false`; START_STICKY + onTaskRemoved restart; `maybeRestoreFloatingBubble()` |
+| I63 | Bubble ~1 Hz updates felt frozen vs phone Dash | Fixed | `publishCarDash()` on every live snapshot, not only 1 Hz heavy UI tick |
+| I64 | Expanded bubble ring too large on phone / short-edge HU | Fixed | `FloatingDashLayout`: max 340dp, 72dp edge margin |
+| I65 | MIN 900 ms fallback backgrounded before overlay READY | Fixed | Removed timeout — only `ACTION_READY` triggers `moveTaskToBack` |
+| I66 | Swiping Fuel/Trip/Trans auto-probe starved ELM and blanked Dash | Fixed | Tab `LaunchedEffect` no-op; Probe/Refresh buttons only |
+| I67 | Dual FGS notifications felt noisy | Fixed | Shared group `fb2_diag_session`; bubble channel IMPORTANCE_MIN |
+| I68 | Sensor picker “N readable” confused vs main Dash heroes | Fixed | Subtitle clarifies catalog scan vs heroes-always-live |
+| I69 | 0.1.27 only battery/ATRV live — heroes n/s everywhere (FB2 + Generic) | Fixed | `shouldRecoverAfterResume` only after `FULL_PAUSE`; field `mergeLastGood`; batch Mode 01 picker scan; Demo reconnect guard |
 
 When the user reports a **new** bug, add a new `Ixx` row here (Status: Open → Fixed)
 and add a matching automated or manual check in sections 2–3.
@@ -115,6 +126,8 @@ then update the `latest` branch APK (same path) so the bookmarkable download lin
 | `ObdLoggerTest` | Debug buffer, lean CSV, LOG toggle |
 | `SessionLogStoreTest` | Saved session naming |
 | `CarDashBuilderTest` | Android Auto dash model |
+| `FloatingDashMetricsTest` | Radial order, RPM redline, RETRY sticky values, OFF on ERROR, n/s grey health |
+| `ElmPollHoldRecoverTest` | HEROES_ONLY→NONE must not arm recover; `mergeLastGood` keeps heroes on partial frames |
 | `DashboardSnapshotTest` / `ScreensSnapshotTest` / `ConnectSheetSnapshotTest` | Paparazzi UI snapshots |
 | `AppUpdateCheckerTest` | version.json parse + local/remote versionCode compare |
 | `DashExtraPidStoreTest` | **+** extras survive process death (`dash_extra_pids.json`) |
@@ -143,7 +156,7 @@ touches ELM, Dash health, deep search, logging, or share:
 7. **Value LOG Save** — same Save flow for current buffer or listed sessions.
 8. **Screen off alerts** — real ELM connected → sticky notification present; with voice alerts on, a critical condition still beeps + speaks after screen off.
 9. **Check sound alert** — Settings → **Check sound alert** must play beep + “Battery critical” on phone and (when BT audio is up) in the car.
-9. **Floating bubble (MIN)** — grant overlay permission → MIN → collapsed circle appears; drag works; tap expands **radial ring** (up to 5 live values around center); vertical swipe pages; **tap a satellite** pins that value as the collapsed blob; idle ~6s auto-collapses; tap center collapses; hold opens app. **Back → Exit & disconnect** must remove the bubble entirely. (On Dellson: verify over CarPlay if used.)
+9. **Floating bubble (MIN)** — grant overlay permission → MIN → collapsed circle shows **LIVE** tag; drag works; tap expands radial ring; on ELM drop bubble keeps last-good with **RETRY** amber rim (matches phone); vertical swipe pages; tap satellite pins; idle ~6s auto-collapses; hold opens app; Exit removes bubble. After HU kill + ELM reconnect, bubble restores if MIN was active.
 10. **Car HU layout (automated)** — Paparazzi at 1024×600, 1280×720, 1920×720 in `CarHuSnapshotTest` / `CarHuBubbleSnapshotTest` (collapsed + radial expanded). Adaptive column counts for Dash/dense pages.
 11. **Android Auto** — phone UI / DHU only unless installed via Play Internal testing.
 12. **Morning regression trio** — Battery volts via ATRV (not n/s); Idle page shows values (not stuck Probing); MAF idle ~3–5 g/s = IDLE OK not CRITICAL.

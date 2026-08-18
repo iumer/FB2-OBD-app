@@ -809,8 +809,7 @@ class MainActivity : ComponentActivity() {
                 ContextCompat.RECEIVER_NOT_EXPORTED,
             )
             FloatingDashOverlayService.startOverlay(this)
-            // Fallback if READY is missed (service already running / OEM quirk).
-            mainHandler.postDelayed({ finishMinimize() }, 900L)
+            // Only background once the overlay confirms attach (ACTION_READY).
         } catch (e: Exception) {
             runCatching { unregisterReceiver(receiver) }
             toast("Bubble failed: ${e.message ?: "overlay error"}")
