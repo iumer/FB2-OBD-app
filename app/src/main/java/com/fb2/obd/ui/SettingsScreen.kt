@@ -15,6 +15,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.RadioButton
+import androidx.compose.material3.RadioButtonDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Switch
@@ -213,26 +215,32 @@ fun SettingsScreen(
         }
 
         SectionLabel("Simulation")
-        ActionRow(
-            title = "Stop simulation",
-            subtitle = if (demoRunning) {
-                "Demo values are on the Dash. Tap STOP to clear them to --."
-            } else {
-                "No simulation running. Connect an ELM for live data, or turn Demo on below / pick Demo on Connect."
-            },
-            actionLabel = if (demoRunning) "STOP" else "OFF",
-            onClick = { onToggleAllowDemo(false) },
+        Text(
+            text = "Demo / simulated driving values when no ELM adapter is connected.",
+            color = TextMuted,
+            fontSize = 12.sp,
+            modifier = Modifier.padding(bottom = 8.dp),
         )
-        ToggleRow(
-            title = "Demo / simulated data",
-            subtitle = if (settings.allowDemo) {
-                "On: with no ELM, Dash runs simulated values (DEMO badge). Turn off to stay disconnected / --."
-            } else {
-                "Off: no fake numbers. Connect an ELM327, or turn this on / pick Demo on Connect."
-            },
-            checked = settings.allowDemo,
-            onCheckedChange = onToggleAllowDemo,
-        )
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(12.dp))
+                .background(MaterialTheme.colorScheme.surface)
+                .padding(horizontal = 14.dp, vertical = 8.dp),
+        ) {
+            SimulationRadioRow(
+                title = "Simulation OFF",
+                subtitle = "No fake numbers — connect ELM327 for live data, or pick Demo on Connect.",
+                selected = !settings.allowDemo,
+                onSelect = { onToggleAllowDemo(false) },
+            )
+            SimulationRadioRow(
+                title = "Simulation ON",
+                subtitle = "Dash runs simulated values (DEMO badge) when no adapter is linked.",
+                selected = settings.allowDemo,
+                onSelect = { onToggleAllowDemo(true) },
+            )
+        }
 
         SectionLabel("Vehicle profile")
         Text(
@@ -573,6 +581,37 @@ private fun ToggleRow(
                 checkedTrackColor = GoodGreen,
             ),
         )
+    }
+}
+
+@Composable
+private fun SimulationRadioRow(
+    title: String,
+    subtitle: String,
+    selected: Boolean,
+    onSelect: () -> Unit,
+) {
+    val palette = LocalThemePalette.current
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(10.dp))
+            .clickable(onClick = onSelect)
+            .padding(vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        RadioButton(
+            selected = selected,
+            onClick = onSelect,
+            colors = RadioButtonDefaults.colors(
+                selectedColor = palette.accent,
+                unselectedColor = TextMuted,
+            ),
+        )
+        Column(modifier = Modifier.weight(1f)) {
+            Text(title, color = TextPrimary, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+            Text(subtitle, color = TextMuted, fontSize = 12.sp)
+        }
     }
 }
 
