@@ -63,6 +63,7 @@ import com.fb2.obd.data.LogExportHelper
 import com.fb2.obd.data.ObdLogger
 import com.fb2.obd.data.SavedLogFile
 import com.fb2.obd.obd.LiveSnapshotOverlay
+import com.fb2.obd.obd.ConnectActionPolicy
 import com.fb2.obd.service.FloatingDashOverlayService
 import com.fb2.obd.ui.BtDeviceUi
 import com.fb2.obd.ui.ConnectDialog
@@ -318,16 +319,25 @@ class MainActivity : ComponentActivity() {
                         pageTitles = viewModel.dashPageTitles,
                         profileBadge = settings.vehicleProfile.badge,
                         onConnectClick = {
-                            val needed = requiredBtPermissions().filter {
-                                ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
-                            }
-                            if (needed.isEmpty()) {
-                                openConnect(
-                                    onNeedEnable = { enableBtLauncher.launch(Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE)) },
-                                    onReady = { devices = it; showConnect = true },
+                            if (ConnectActionPolicy.isDisconnectAction(
+                                    state.connection,
+                                    state.sourceIsLive,
+                                    state.reconnecting,
                                 )
+                            ) {
+                                viewModel.disconnect()
                             } else {
-                                permLauncher.launch(needed.toTypedArray())
+                                val needed = requiredBtPermissions().filter {
+                                    ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
+                                }
+                                if (needed.isEmpty()) {
+                                    openConnect(
+                                        onNeedEnable = { enableBtLauncher.launch(Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE)) },
+                                        onReady = { devices = it; showConnect = true },
+                                    )
+                                } else {
+                                    permLauncher.launch(needed.toTypedArray())
+                                }
                             }
                         },
                         onSettingsClick = { screen = Screen.SETTINGS },

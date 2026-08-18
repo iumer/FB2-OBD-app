@@ -1,6 +1,7 @@
 package com.fb2.obd.car
 
 import com.fb2.obd.data.ConnectionState
+import com.fb2.obd.obd.ConnectActionPolicy
 import com.fb2.obd.obd.GearSource
 import com.fb2.obd.obd.HealthEvaluator
 import com.fb2.obd.obd.HealthThresholds
@@ -37,11 +38,7 @@ data class CarDashState(
     val logging: Boolean = false,
 ) {
     val connectLabel: String
-        get() = when {
-            connection == ConnectionState.CONNECTED && sourceIsLive -> "CONNECTED"
-            connection == ConnectionState.CONNECTING -> "…"
-            else -> "CONNECT"
-        }
+        get() = ConnectActionPolicy.of(connection, sourceIsLive).label
 
     val statusLine: String
         get() = when {

@@ -138,6 +138,7 @@ private fun OptAHeader(
             accent = p.accent,
             border = p.accent.copy(alpha = 0.45f),
             logging = link.logging,
+            elmLive = link.elmLive,
             onOpenSettings = onOpenSettings,
             onOpenDiag = onOpenDiag,
             onOpenMin = onOpenMin,
@@ -183,6 +184,7 @@ private fun OptBHeader(
             OverflowMenu(
                 accent = p.accent,
                 logging = link.logging,
+                elmLive = link.elmLive,
                 onOpenSettings = onOpenSettings,
                 onOpenDiag = onOpenDiag,
                 onOpenMin = onOpenMin,
@@ -239,6 +241,7 @@ private fun OptCHeader(
                 accent = p.accent,
                 border = p.accent.copy(alpha = 0.45f),
                 logging = link.logging,
+                elmLive = link.elmLive,
                 onOpenSettings = onOpenSettings,
                 onOpenDiag = onOpenDiag,
                 onOpenMin = onOpenMin,
@@ -272,6 +275,7 @@ private fun MilLamp(on: Boolean) {
 private fun OverflowMenu(
     accent: Color,
     logging: Boolean,
+    elmLive: Boolean,
     onOpenSettings: () -> Unit,
     onOpenDiag: () -> Unit,
     onOpenMin: () -> Unit,
@@ -294,6 +298,7 @@ private fun OverflowMenu(
             onDismiss = { open = false },
             accent = accent,
             logging = logging,
+            elmLive = elmLive,
             onOpenSettings = onOpenSettings,
             onOpenDiag = onOpenDiag,
             onOpenMin = onOpenMin,
@@ -308,6 +313,7 @@ private fun ThemeMenuButton(
     accent: Color,
     border: Color,
     logging: Boolean,
+    elmLive: Boolean,
     onOpenSettings: () -> Unit,
     onOpenDiag: () -> Unit,
     onOpenMin: () -> Unit,
@@ -332,6 +338,7 @@ private fun ThemeMenuButton(
             onDismiss = { open = false },
             accent = accent,
             logging = logging,
+            elmLive = elmLive,
             onOpenSettings = onOpenSettings,
             onOpenDiag = onOpenDiag,
             onOpenMin = onOpenMin,
@@ -347,6 +354,7 @@ private fun ThemeDropdown(
     onDismiss: () -> Unit,
     accent: Color,
     logging: Boolean,
+    elmLive: Boolean,
     onOpenSettings: () -> Unit,
     onOpenDiag: () -> Unit,
     onOpenMin: () -> Unit,
@@ -367,7 +375,12 @@ private fun ThemeDropdown(
             onClick = { onDismiss(); onToggleLogging() },
         )
         DropdownMenuItem(
-            text = { Text("Connect", color = accent) },
+            text = {
+                Text(
+                    if (elmLive) "Disconnect" else "Connect",
+                    color = if (elmLive) Color(0xFFFF5252) else accent,
+                )
+            },
             onClick = { onDismiss(); onConnect() },
         )
     }

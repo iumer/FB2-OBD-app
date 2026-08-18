@@ -60,6 +60,7 @@ import com.fb2.obd.PerformanceState
 import com.fb2.obd.TripState
 import com.fb2.obd.data.ConnectionState
 import com.fb2.obd.obd.DashTheme
+import com.fb2.obd.obd.ConnectActionPolicy
 import com.fb2.obd.obd.EditableMetric
 import com.fb2.obd.obd.GearSource
 import com.fb2.obd.obd.Health
@@ -1610,20 +1611,18 @@ private fun TopBar(
             TopBarChip("MIN", accent, onMinimizeClick)
             TopBarChip("DIAG", accent, onDiagnosticsClick)
             TopBarChip("SETTINGS", TextMuted, onSettingsClick)
-            // CONNECTED only for a real ELM adapter — Demo keeps CONNECT (+ yellow DEMO badge).
-            val liveConnected = state.connection == ConnectionState.CONNECTED &&
-                state.sourceIsLive && !state.reconnecting
+            val connect = ConnectActionPolicy.of(
+                state.connection,
+                state.sourceIsLive,
+                state.reconnecting,
+            )
             TopBarChip(
-                text = when {
-                    liveConnected -> "CONNECTED"
-                    state.reconnecting || state.connection == ConnectionState.CONNECTING -> "RETRY…"
-                    state.connection == ConnectionState.ERROR -> "RECONNECT"
-                    else -> "CONNECT"
-                },
-                color = when {
-                    liveConnected -> GoodGreen
-                    state.connection == ConnectionState.ERROR -> CritRed
-                    else -> accent
+                text = connect.label,
+                color = when (connect.kind) {
+                    ConnectActionPolicy.Kind.DISCONNECT,
+                    ConnectActionPolicy.Kind.RECONNECT -> CritRed
+                    ConnectActionPolicy.Kind.RETRY -> WarnAmber
+                    ConnectActionPolicy.Kind.CONNECT -> accent
                 },
                 onClick = onConnectClick,
             )

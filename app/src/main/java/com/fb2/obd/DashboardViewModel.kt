@@ -31,6 +31,7 @@ import com.fb2.obd.data.DashThemeStore
 import com.fb2.obd.data.VehicleProfileStore
 import com.fb2.obd.obd.KeepAlivePolicy
 import com.fb2.obd.obd.DashTheme
+import com.fb2.obd.obd.ConnectActionPolicy
 import com.fb2.obd.obd.DemoAllowPolicy
 import com.fb2.obd.data.VoiceAlerter
 import com.fb2.obd.obd.AiAnalysisPayloadBuilder
@@ -499,9 +500,12 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
             publishCarDash()
         }
         VehicleLiveStore.onConnectRequest = {
-            // Car cannot pick BT devices — Demo only when Settings allow it.
-            if (!_uiState.value.sourceIsLive && _settings.value.allowDemo) {
-                useSource(demoSourceForProfile())
+            val ui = _uiState.value
+            when {
+                ConnectActionPolicy.isDisconnectAction(ui.connection, ui.sourceIsLive, ui.reconnecting) ->
+                    disconnect()
+                !ui.sourceIsLive && _settings.value.allowDemo ->
+                    useSource(demoSourceForProfile())
             }
             publishCarDash()
         }
