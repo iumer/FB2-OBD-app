@@ -65,7 +65,11 @@ class SnapshotFreshness(
         snapshot: VehicleSnapshot,
         nowMs: Long,
         rpmUpdatedThisCycle: Boolean,
+        holdValues: Boolean = false,
     ): VehicleSnapshot {
+        if (holdValues) {
+            return snapshot.copy(freshAtMs = snapshotMap())
+        }
         var out = snapshot
         val busAlive = rpmUpdatedThisCycle || snapshot.rpm != null ||
             snapshot.batteryVolts != null || snapshot.mafGps != null

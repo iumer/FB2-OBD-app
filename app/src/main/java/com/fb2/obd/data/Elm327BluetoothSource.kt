@@ -19,6 +19,7 @@ import com.fb2.obd.obd.ObdPid
 import com.fb2.obd.obd.ObdResponseParser
 import com.fb2.obd.obd.PidDefinition
 import com.fb2.obd.obd.PidPollPlanner
+import com.fb2.obd.obd.PollHold
 import com.fb2.obd.obd.PidProbeResult
 import com.fb2.obd.obd.ReadinessStatus
 import com.fb2.obd.obd.SnapshotFreshness
@@ -36,6 +37,8 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import java.io.IOException
 import java.util.UUID
+import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicReference
 
 /**
  * Real ELM327 adapter over Bluetooth Classic (SPP), built on a shared
@@ -65,11 +68,10 @@ class Elm327BluetoothSource(
     @Volatile
     private var connection: Elm327Connection? = null
 
-    /** When true, the Mode 01 poll loop yields so deep search owns the serial link. */
-    @Volatile
-    private var pollingPaused: Boolean = false
+    private val pollHold = AtomicReference(PollHold.NONE)
+    private val exclusiveCount = AtomicInteger(0)
 
-    /** After deep search, force a soft recover + clear fail streaks on resume. */
+    /** After full pause ends, force a soft recover + clear fail streaks. */
     @Volatile
     private var recoverAfterResume: Boolean = false
 
@@ -77,14 +79,30 @@ class Elm327BluetoothSource(
     private val atrvWindow = ArrayDeque<Double>(3)
 
     override fun pausePolling() {
-        pollingPaused = true
-        logger.logDebug(ObdLogger.Dir.INFO, "ELM poll paused")
+        setPollHold(PollHold.FULL_PAUSE)
     }
 
     override fun resumePolling() {
-        pollingPaused = false
-        recoverAfterResume = true
-        logger.logDebug(ObdLogger.Dir.INFO, "ELM poll resumed (recover pending)")
+        setPollHold(PollHold.NONE)
+    }
+
+    override fun setPollHold(hold: PollHold) {
+        val prev = pollHold.getAndSet(hold)
+        if (shouldRecoverAfterResume(prev, hold)) {
+            recoverAfterResume = true
+        }
+        logger.logDebug(ObdLogger.Dir.INFO, "ELM poll hold $prev → $hold")
+    }
+
+    override fun pollHold(): PollHold = pollHold.get()
+
+    override suspend fun <T> withLinkExclusive(block: suspend () -> T): T {
+        exclusiveCount.incrementAndGet()
+        return try {
+            block()
+        } finally {
+            exclusiveCount.decrementAndGet()
+        }
     }
 
     private val polled = listOf(
@@ -156,10 +174,18 @@ class Elm327BluetoothSource(
                 val freshness = SnapshotFreshness()
                 var cycles = 0
                 while (isActive) {
-                    // Deep search / exclusive probes own the RFCOMM socket — do not
-                    // interleave Mode 01 polls (that caused laggy/wrong Dash values).
-                    while (pollingPaused && isActive) {
-                        delay(40L)
+                    // Exclusive ATSH (one deep-search strategy) owns the socket.
+                    // FULL_PAUSE holds last-good on screen without TTL blanking.
+                    while ((exclusiveCount.get() > 0 || pollHold.get() == PollHold.FULL_PAUSE) && isActive) {
+                        val now = System.currentTimeMillis()
+                        snapshot = freshness.sanitize(
+                            snapshot.withGear(hasEcuGear),
+                            now,
+                            rpmUpdatedThisCycle = false,
+                            holdValues = true,
+                        )
+                        trySend(snapshot)
+                        delay(80L)
                     }
                     if (!isActive) break
 
@@ -168,11 +194,8 @@ class Elm327BluetoothSource(
                         softRecover(conn)
                         failStreak.clear()
                         deadCycles = 0
-                        // Deep search paused polling — prior lastOk clocks aged out.
-                        // Remake marks for fields we still hold so sanitize does not
-                        // blank the Dash before the first post-resume poll lands.
                         freshness.remakePresent(snapshot, System.currentTimeMillis())
-                        logger.logDebug(ObdLogger.Dir.INFO, "post-deep-search soft recover + streaks cleared + freshness remade")
+                        logger.logDebug(ObdLogger.Dir.INFO, "post-hold soft recover + streaks cleared + freshness remade")
                     }
 
                     cycles++
@@ -196,15 +219,18 @@ class Elm327BluetoothSource(
                     }
 
                     val recovering = deadCycles > 0
+                    val holdNow = pollHold.get()
                     // Heroes every cycle; rotate secondaries so Speed cannot freeze behind a long PID list.
                     val cyclePids = PidPollPlanner.selectForCycle(
                         activePids = activePids,
                         failStreak = failStreak,
                         cycle = cycles,
                         recovering = recovering,
+                        hold = holdNow,
                     )
                     for (pid in cyclePids) {
                         if (busLost) break
+                        if (exclusiveCount.get() > 0) break
 
                         val streak = failStreak[pid] ?: 0
                         val raw = try {
@@ -613,5 +639,9 @@ class Elm327BluetoothSource(
         private val BAD_TOKENS = listOf("NO DATA", "UNABLE", "ERROR", "?", "STOPPED")
         /** Soft-recover loops that never reconnect leave a sticky false Dash. */
         private const val MAX_SOFT_RECOVER_BEFORE_RECONNECT = 3
+
+        /** Only arm soft-recover after a full pause — not heroes-only deep search. */
+        fun shouldRecoverAfterResume(from: PollHold, to: PollHold): Boolean =
+            from == PollHold.FULL_PAUSE && to == PollHold.NONE
     }
 }
