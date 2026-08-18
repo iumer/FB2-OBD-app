@@ -1,9 +1,9 @@
 {
   "latest": {
-    "versionCode": 48,
-    "versionName": "0.1.27",
+    "versionCode": 49,
+    "versionName": "0.1.28",
     "apkUrl": "https://raw.githubusercontent.com/iumer/FB2-OBD-app/latest/dist/FB2-Diag-debug.apk",
-    "notes": "Full-screen Torque-style sensor picker with live green rows"
+    "notes": "Remove deep search (use picker instead)"
   },
   "releases": [
     {
@@ -83,6 +83,12 @@
       "versionName": "0.1.27",
       "apkUrl": "https://raw.githubusercontent.com/iumer/FB2-OBD-app/latest/dist/archive/FB2-Diag-0.1.27.apk",
       "notes": "Full-screen Torque-style sensor picker with live green rows"
+    },
+    {
+      "versionCode": 49,
+      "versionName": "0.1.28",
+      "apkUrl": "https://raw.githubusercontent.com/iumer/FB2-OBD-app/latest/dist/archive/FB2-Diag-0.1.28.apk",
+      "notes": "Remove deep search (use picker instead)"
     }
   ]
 }

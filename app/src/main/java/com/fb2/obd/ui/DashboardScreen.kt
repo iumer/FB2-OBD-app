@@ -1148,29 +1148,31 @@ private fun DenseTile(
             .combinedClickable(
                 onClick = {
                     val now = System.currentTimeMillis()
-                    taps = if (now - lastTapMs < 520L) taps + 1 else 1
+                    val result = ThemeGestureLogic.onTap(
+                        previousTaps = taps,
+                        lastTapMs = lastTapMs,
+                        nowMs = now,
+                        hasRemap = onRemap != null,
+                    )
+                    taps = result.taps
                     lastTapMs = now
                     pendingRemap?.cancel()
-                    when {
-                        taps >= 3 -> {
-                            taps = 0
-                            onDeepSearch?.invoke()
-                        }
-                        taps == 2 && onRemap != null -> {
+                    when (result.action) {
+                        ThemeGestureLogic.TapAction.SCHEDULE_REMAP -> {
                             pendingRemap = scope.launch {
-                                delay(280)
-                                if (taps == 2) {
+                                delay(ThemeGestureLogic.REMAP_CONFIRM_DELAY_MS)
+                                if (ThemeGestureLogic.confirmRemap(taps)) {
                                     taps = 0
-                                    onRemap()
+                                    onRemap?.invoke()
                                 }
                             }
                         }
+                        ThemeGestureLogic.TapAction.NONE -> Unit
                     }
                 },
                 onLongClick = {
-                    when (ThemeGestureLogic.onHold(onDeepSearch != null, onEditThresholds != null)) {
+                    when (ThemeGestureLogic.onHold(onEditThresholds != null)) {
                         ThemeGestureLogic.HoldAction.EDIT_THRESHOLDS -> onEditThresholds?.invoke()
-                        ThemeGestureLogic.HoldAction.DEEP_SEARCH -> onDeepSearch?.invoke()
                         ThemeGestureLogic.HoldAction.NONE -> Unit
                     }
                 },

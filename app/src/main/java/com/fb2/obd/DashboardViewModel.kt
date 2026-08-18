@@ -323,78 +323,13 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
     val pidCatalog: List<PidDefinition>
         get() = VehicleProfileConfig.pidCatalog(vehicleProfile)
 
-    fun requestDeepSearch(label: String, pidId: String? = null) {
-        _deepSearch.value = DeepSearchUiState(
-            active = true,
-            confirmLabel = label,
-            confirmPidId = pidId,
-        )
-    }
+    fun requestDeepSearch(label: String, pidId: String? = null) = Unit
 
     fun cancelDeepSearch() {
         _deepSearch.value = DeepSearchUiState()
     }
 
-    fun confirmDeepSearch() {
-        val label = _deepSearch.value.confirmLabel ?: return
-        val pidId = _deepSearch.value.confirmPidId
-        val source = currentSource ?: run {
-            _deepSearch.value = DeepSearchUiState(
-                active = true,
-                report = DeepSearchReport(
-                    targetLabel = label,
-                    targetId = pidId ?: label,
-                    attempts = 0,
-                    notes = listOf("Not connected — connect an ELM327 (or Demo) first."),
-                ),
-            )
-            return
-        }
-        val pid = pidId?.let { id -> pidCatalog.find { it.id.equals(id, true) || it.request.equals(id, true) } }
-            ?: pidCatalog.find { it.label.equals(label, true) }
-        viewModelScope.launch {
-            _deepSearch.update {
-                it.copy(running = true, progress = "Starting deep search…", report = null, confirmLabel = label)
-            }
-            val report = DeepSensorSearch.run(
-                source = source,
-                label = label,
-                pid = pid,
-                requestHint = pidId,
-                profile = vehicleProfile,
-            ) { i, total, title ->
-                _deepSearch.update { st ->
-                    st.copy(progress = "Trying $i / $total — $title")
-                }
-            }
-            if (report.success) {
-                val hit = report.hit!!
-                val text = "%.2f %s".format(hit.value, hit.strategy.unit).trim()
-                val hitAt = System.currentTimeMillis()
-                _deepFoundValues.update {
-                    it + (label to text) + (report.targetId to text)
-                }
-                _deepFoundAtMs.update {
-                    it + (label to hitAt) + (report.targetId to hitAt)
-                }
-                // Feed recovered sensors into the live snapshot so Opt themes,
-                // health, voice, and CSV see them — not just Classic overlays.
-                _uiState.update { st ->
-                    val applied = applyDeepSearchHit(
-                        snapshot = st.snapshot,
-                        label = label,
-                        targetId = report.targetId,
-                        value = hit.value,
-                        nowMs = hitAt,
-                    )
-                    st.copy(snapshot = applied)
-                }
-            }
-            _deepSearch.update {
-                it.copy(running = false, progress = "", report = report, confirmLabel = null)
-            }
-        }
-    }
+    fun confirmDeepSearch() = Unit
 
     fun setDashExtraPid(slot: Int, pid: PidDefinition) {
         _dashExtraPidIds.update { cur ->
