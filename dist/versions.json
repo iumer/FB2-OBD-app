@@ -1,9 +1,9 @@
 {
   "latest": {
-    "versionCode": 53,
-    "versionName": "0.1.32",
+    "versionCode": 54,
+    "versionName": "0.1.33",
     "apkUrl": "https://raw.githubusercontent.com/iumer/FB2-OBD-app/latest/dist/FB2-Diag-debug.apk",
-    "notes": "Probe all Mode 01 PIDs Torque shows as readable"
+    "notes": "Red Orbit wheels continuous smooth scroll"
   },
   "releases": [
     {
@@ -113,6 +113,12 @@
       "versionName": "0.1.32",
       "apkUrl": "https://raw.githubusercontent.com/iumer/FB2-OBD-app/latest/dist/archive/FB2-Diag-0.1.32.apk",
       "notes": "Probe all Mode 01 PIDs Torque shows as readable"
+    },
+    {
+      "versionCode": 54,
+      "versionName": "0.1.33",
+      "apkUrl": "https://raw.githubusercontent.com/iumer/FB2-OBD-app/latest/dist/archive/FB2-Diag-0.1.33.apk",
+      "notes": "Red Orbit wheels continuous smooth scroll"
     }
   ]
 }
