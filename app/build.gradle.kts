@@ -13,12 +13,8 @@ android {
         minSdk = 26
         targetSdk = 34
         // Bump on each sideload APK so HU package installer treats it as an update.
-        // Code is an exact revert to the 0.1.15 tree. Only the version number is
-        // raised: Android refuses to install a lower versionCode over the
-        // installed 0.1.34, so 15 would require an uninstall (losing settings
-        // and saved logs) before it could be sideloaded.
-        versionCode = 35
-        versionName = "0.1.15-revert"
+        versionCode = 36
+        versionName = "0.1.36"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -58,6 +54,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 
     composeOptions {

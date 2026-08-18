@@ -37,6 +37,29 @@ class ScreensSnapshotTest {
     }
 
     @Test
+    fun settings_updateList_screen() {
+        paparazzi.snapshot {
+            FB2Theme {
+                SettingsScreen(
+                    settings = SettingsState(showEstimatedGear = true, voiceAlerts = true),
+                    onToggleEstimatedGear = {},
+                    onToggleVoiceAlerts = {},
+                    onCheckSoundAlert = {},
+                    appVersionLabel = "v0.1.15 (15)",
+                    updateStatusText = "5 updates available (v0.1.16 – v0.1.20)",
+                    availableUpdates = listOf(
+                        com.fb2.obd.obd.AppUpdateChecker.RemoteVersion(16, "0.1.16", notes = "OptA wheel"),
+                        com.fb2.obd.obd.AppUpdateChecker.RemoteVersion(18, "0.1.18", notes = "OptB/OptC clip"),
+                        com.fb2.obd.obd.AppUpdateChecker.RemoteVersion(20, "0.1.20", notes = "ELM forensics"),
+                    ),
+                    nav = com.fb2.obd.ui.SettingsNav(),
+                    onBack = {},
+                )
+            }
+        }
+    }
+
+    @Test
     fun debugLog_screen() {
         val t = 1_700_000_000_000L
         val lines = listOf(

@@ -35,6 +35,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.fb2.obd.SettingsState
 import com.fb2.obd.data.LogUploadManager
+import com.fb2.obd.obd.AppUpdateChecker
 import com.fb2.obd.obd.DashTheme
 import com.fb2.obd.obd.VehicleProfile
 import com.fb2.obd.ui.theme.Accent
@@ -109,6 +110,16 @@ fun SettingsScreen(
     onUploadLogs: () -> Unit = {},
     openAiApiKey: String = "",
     onOpenAiApiKeyChange: (String) -> Unit = {},
+    appVersionLabel: String = "",
+    updateStatusText: String = "",
+    updateBusy: Boolean = false,
+    availableUpdates: List<AppUpdateChecker.RemoteVersion> = emptyList(),
+    downloadingName: String? = null,
+    downloadPercent: Int = 0,
+    readyToInstallName: String? = null,
+    onCheckForUpdate: () -> Unit = {},
+    onDownloadVersion: (AppUpdateChecker.RemoteVersion) -> Unit = {},
+    onInstallUpdate: () -> Unit = {},
     nav: SettingsNav,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
@@ -135,6 +146,65 @@ fun SettingsScreen(
             fontSize = 12.sp,
             modifier = Modifier.padding(bottom = 8.dp),
         )
+
+        SectionLabel("App update")
+        Text(
+            text = if (appVersionLabel.isNotBlank()) {
+                "Installed: $appVersionLabel. Check lists every newer build; pick the one you want."
+            } else {
+                "Check lists every newer build on GitHub; pick the one you want to install."
+            },
+            color = TextMuted,
+            fontSize = 12.sp,
+            modifier = Modifier.padding(bottom = 8.dp),
+        )
+        ActionRow(
+            title = if (updateStatusText.isNotBlank()) updateStatusText else "Check for update",
+            subtitle = "Needs internet. Allow “install unknown apps” for FB2 Diag when prompted.",
+            actionLabel = if (updateBusy) "…" else "CHECK",
+            onClick = { if (!updateBusy) onCheckForUpdate() },
+        )
+        if (availableUpdates.isNotEmpty()) {
+            Text(
+                text = "${availableUpdates.size} newer " +
+                    if (availableUpdates.size == 1) "version" else "versions",
+                color = palette.textMuted,
+                fontSize = 12.sp,
+                modifier = Modifier.padding(top = 4.dp, bottom = 4.dp),
+            )
+            val latestCode = availableUpdates.maxOf { it.versionCode }
+            availableUpdates.forEach { remote ->
+                val isDownloading = downloadingName == remote.versionName
+                val isReady = readyToInstallName == remote.versionName
+                val label = when {
+                    isReady -> "INSTALL"
+                    isDownloading -> "${downloadPercent}%"
+                    else -> "GET"
+                }
+                val title = buildString {
+                    append("v${remote.versionName}")
+                    if (remote.versionCode == latestCode) append("  ·  latest")
+                }
+                val subtitle = when {
+                    isReady -> "Downloaded — tap Install"
+                    isDownloading -> "Downloading…"
+                    remote.notes.isNotBlank() -> remote.notes
+                    else -> "versionCode ${remote.versionCode}"
+                }
+                ActionRow(
+                    title = title,
+                    subtitle = subtitle,
+                    actionLabel = label,
+                    onClick = {
+                        when {
+                            updateBusy && !isReady -> Unit
+                            isReady -> onInstallUpdate()
+                            else -> onDownloadVersion(remote)
+                        }
+                    },
+                )
+            }
+        }
 
         SectionLabel("Vehicle profile")
         Text(
