@@ -43,3 +43,4 @@ git remote add origin "$(cd "$ROOT" && git remote get-url origin)"
 git push -f origin latest
 echo "Published APK: https://raw.githubusercontent.com/iumer/FB2-OBD-app/latest/dist/FB2-Diag-debug.apk"
 echo "Published catalog: https://raw.githubusercontent.com/iumer/FB2-OBD-app/latest/dist/versions.json"
+bash "$ROOT/scripts/verify-latest-catalog.sh"
