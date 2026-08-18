@@ -17,6 +17,7 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.os.PowerManager
 import android.net.Uri
 import android.provider.Settings
 import android.view.WindowManager
@@ -25,7 +26,6 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.activity.viewModels
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.rememberScrollState
@@ -41,15 +41,22 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.ViewModelProvider
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import com.fb2.obd.ui.theme.Accent
 import com.fb2.obd.ui.theme.Background
 import com.fb2.obd.ui.theme.TextPrimary
+import com.fb2.obd.data.AppUpdateManager
+import com.fb2.obd.data.ConnectionState
 import com.fb2.obd.data.DemoObdSource
 import com.fb2.obd.data.Elm327BluetoothSource
 import com.fb2.obd.data.LogExportHelper
@@ -79,6 +86,7 @@ import com.fb2.obd.ui.theme.FB2Theme
 import com.fb2.obd.ui.theme.ThemePalette
 import java.io.File
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 private enum class Screen {
     DASHBOARD, SETTINGS, DIAG_HUB, FAULTS, DEBUG_LOG, VALUE_LOG,
@@ -87,7 +95,10 @@ private enum class Screen {
 
 class MainActivity : ComponentActivity() {
 
-    private val viewModel: DashboardViewModel by viewModels()
+    private val viewModel: DashboardViewModel by lazy {
+        ViewModelProvider(application as Fb2App)[DashboardViewModel::class.java]
+    }
+    private var batteryPrompted = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -120,6 +131,49 @@ class MainActivity : ComponentActivity() {
                 val deepFoundValues by viewModel.deepFoundValues.collectAsState()
                 val healthThresholds by viewModel.healthThresholds.collectAsState()
 
+                var batteryUnrestricted by remember { mutableStateOf(isBatteryUnrestricted()) }
+                val lifecycleOwner = LocalLifecycleOwner.current
+                DisposableEffect(lifecycleOwner) {
+                    val observer = LifecycleEventObserver { _, event ->
+                        if (event == Lifecycle.Event.ON_RESUME) {
+                            batteryUnrestricted = isBatteryUnrestricted()
+                        }
+                    }
+                    lifecycleOwner.lifecycle.addObserver(observer)
+                    onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+                }
+
+                val appUpdateManager = remember { AppUpdateManager(applicationContext) }
+                val appUpdateUi by appUpdateManager.state.collectAsState()
+                val updateScope = rememberCoroutineScope()
+                val updateBusy = appUpdateUi is AppUpdateManager.UiState.Checking ||
+                    appUpdateUi is AppUpdateManager.UiState.Downloading
+                val updateStatusText = when (val s = appUpdateUi) {
+                    is AppUpdateManager.UiState.Idle -> ""
+                    is AppUpdateManager.UiState.Checking -> "Checking for update…"
+                    is AppUpdateManager.UiState.UpToDate -> s.message
+                    is AppUpdateManager.UiState.Available ->
+                        if (s.newer.size == 1) {
+                            "Update available: v${s.newer.first().versionName}"
+                        } else {
+                            "${s.newer.size} updates available (v${s.newer.first().versionName} – v${s.newer.last().versionName})"
+                        }
+                    is AppUpdateManager.UiState.Downloading ->
+                        "Downloading v${s.remote.versionName}… ${s.percent}%"
+                    is AppUpdateManager.UiState.ReadyToInstall ->
+                        "Ready to install v${s.remote.versionName}"
+                    is AppUpdateManager.UiState.Error -> s.message
+                }
+                val availableUpdates = when (val s = appUpdateUi) {
+                    is AppUpdateManager.UiState.Available -> s.newer
+                    is AppUpdateManager.UiState.Downloading -> s.newer
+                    is AppUpdateManager.UiState.ReadyToInstall -> s.newer
+                    else -> emptyList()
+                }
+                val downloadingName = (appUpdateUi as? AppUpdateManager.UiState.Downloading)?.remote?.versionName
+                val downloadPercent = (appUpdateUi as? AppUpdateManager.UiState.Downloading)?.percent ?: 0
+                val readyToInstallName = (appUpdateUi as? AppUpdateManager.UiState.ReadyToInstall)?.remote?.versionName
+
                 var screen by remember { mutableStateOf(Screen.DASHBOARD) }
                 // Lives above the screen switch so Settings scroll is kept when opening a sub-page.
                 val settingsScrollState = rememberScrollState()
@@ -138,6 +192,11 @@ class MainActivity : ComponentActivity() {
                     while (screen == Screen.DEBUG_LOG || screen == Screen.VALUE_LOG) {
                         delay(1000L)
                         tick++
+                    }
+                }
+                LaunchedEffect(state.connection, state.sourceIsLive) {
+                    if (state.sourceIsLive && state.connection == ConnectionState.CONNECTED) {
+                        maybeRequestUnrestrictedBattery()
                     }
                 }
 
@@ -353,6 +412,10 @@ class MainActivity : ComponentActivity() {
                                 viewModel.testSoundAlert()
                                 toast("Playing test alarm — CarPlay volume should stay up afterward")
                             },
+                            onKeepAliveBattery = {
+                                maybeRequestUnrestrictedBattery(force = true)
+                            },
+                            batteryUnrestricted = batteryUnrestricted,
                             uploadStatus = uploadStatus,
                             githubToken = viewModel.githubUploadToken(),
                             onGithubTokenChange = viewModel::setGithubUploadToken,
@@ -362,6 +425,25 @@ class MainActivity : ComponentActivity() {
                             },
                             openAiApiKey = viewModel.openAiApiKey(),
                             onOpenAiApiKeyChange = viewModel::setOpenAiApiKey,
+                            appVersionLabel = appUpdateManager.localLabel,
+                            updateStatusText = updateStatusText,
+                            updateBusy = updateBusy,
+                            availableUpdates = availableUpdates,
+                            downloadingName = downloadingName,
+                            downloadPercent = downloadPercent,
+                            readyToInstallName = readyToInstallName,
+                            onCheckForUpdate = {
+                                updateScope.launch { appUpdateManager.checkForUpdate() }
+                            },
+                            onDownloadVersion = { remote ->
+                                updateScope.launch { appUpdateManager.downloadUpdate(remote) }
+                            },
+                            onInstallUpdate = {
+                                val ready = appUpdateUi as? AppUpdateManager.UiState.ReadyToInstall
+                                if (ready != null) {
+                                    appUpdateManager.installApk(this@MainActivity, ready.apk)
+                                }
+                            },
                             nav = settingsNav,
                             onBack = { screen = Screen.DASHBOARD },
                             modifier = Modifier.fillMaxSize(),
@@ -776,6 +858,26 @@ class MainActivity : ComponentActivity() {
             ?.map { BtDeviceUi(runCatching { it.name }.getOrNull().orEmpty(), it.address) }
             ?.sortedBy { it.name }
             ?: emptyList()
+    }
+
+    private fun isBatteryUnrestricted(): Boolean {
+        val pm = getSystemService(PowerManager::class.java) ?: return false
+        return pm.isIgnoringBatteryOptimizations(packageName)
+    }
+
+    @SuppressLint("BatteryLife")
+    private fun maybeRequestUnrestrictedBattery(force: Boolean = false) {
+        if (batteryPrompted && !force) return
+        val pm = getSystemService(PowerManager::class.java) ?: return
+        if (pm.isIgnoringBatteryOptimizations(packageName)) return
+        batteryPrompted = true
+        runCatching {
+            startActivity(
+                Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                    data = Uri.parse("package:$packageName")
+                },
+            )
+        }
     }
 
     @SuppressLint("MissingPermission")

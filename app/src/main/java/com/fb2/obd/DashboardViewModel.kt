@@ -1,6 +1,8 @@
 package com.fb2.obd
 
+import android.annotation.SuppressLint
 import android.app.Application
+import android.bluetooth.BluetoothAdapter
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.fb2.obd.car.CarDashBuilder
@@ -12,9 +14,11 @@ import com.fb2.obd.data.ConnectionState
 import com.fb2.obd.data.DashTileOverrideStore
 import com.fb2.obd.data.DemoFlavour
 import com.fb2.obd.data.DemoObdSource
+import com.fb2.obd.data.Elm327BluetoothSource
 import com.fb2.obd.data.HealthThresholdStore
 import com.fb2.obd.data.MaintenanceEntry
 import com.fb2.obd.data.MaintenanceStore
+import com.fb2.obd.data.LastElmStore
 import com.fb2.obd.data.LogExportHelper
 import com.fb2.obd.data.LogUploadManager
 import com.fb2.obd.data.ObdLogger
@@ -25,6 +29,7 @@ import com.fb2.obd.data.SavedLogFile
 import com.fb2.obd.data.SessionLogStore
 import com.fb2.obd.data.DashThemeStore
 import com.fb2.obd.data.VehicleProfileStore
+import com.fb2.obd.obd.KeepAlivePolicy
 import com.fb2.obd.obd.DashTheme
 import com.fb2.obd.data.VoiceAlerter
 import com.fb2.obd.obd.AiAnalysisPayloadBuilder
@@ -228,6 +233,7 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
     private val _health = MutableStateFlow<HealthScore?>(null)
     val health: StateFlow<HealthScore?> = _health.asStateFlow()
 
+    private val lastElmStore = LastElmStore(File(filesDir, "last_elm.json"))
     private val thresholdStore = HealthThresholdStore(File(filesDir, "health_thresholds.json"))
     private val _healthThresholds = MutableStateFlow(HealthThresholds.DEFAULT)
     val healthThresholds: StateFlow<HealthThresholds> = _healthThresholds.asStateFlow()
@@ -1044,6 +1050,7 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
         collectJob?.cancel()
         collectJob = null
         currentSource = null
+        lastElmStore.markUserDisconnected()
         stopElmMonitor()
         eventTracker.onConnection(ConnectionState.DISCONNECTED, false, "")
         eventTracker.reset()
@@ -1067,6 +1074,13 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
         staleWatchJob?.cancel()
         collectJob?.cancel()
         currentSource = source
+        if (source is Elm327BluetoothSource) {
+            runCatching {
+                lastElmStore.saveConnected(source.deviceAddress, source.deviceName)
+            }.onFailure { e ->
+                ObdLogger.logDebug(ObdLogger.Dir.INFO, "Last ELM save failed: ${e.message}")
+            }
+        }
         // Demo / non-live: drop the connected-device FGS. Live ELM starts it on first frame.
         if (!source.isLive) {
             stopElmMonitor()
@@ -1277,6 +1291,31 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
         if (elmMonitorStatus == status) return
         ObdMonitorForegroundService.updateStatus(app, status)
         elmMonitorStatus = status
+    }
+
+    /**
+     * Sticky FGS / process death: reconnect the last ELM unless the driver
+     * tapped Disconnect / Exit.
+     */
+    @SuppressLint("MissingPermission")
+    fun reconnectLastElmIfIdle() {
+        val live = currentSource?.isLive == true
+        val conn = _uiState.value.connection
+        if (live && conn != ConnectionState.DISCONNECTED && conn != ConnectionState.ERROR) {
+            ensureElmMonitor(ObdMonitorForegroundService.STATUS_LIVE)
+            return
+        }
+        val saved = lastElmStore.load()
+        if (!KeepAlivePolicy.shouldReconnectAfterDeath(saved.address, saved.userDisconnected)) {
+            return
+        }
+        val adapter = BluetoothAdapter.getDefaultAdapter() ?: return
+        val remote = runCatching { adapter.getRemoteDevice(saved.address) }.getOrNull() ?: return
+        ObdLogger.logDebug(
+            ObdLogger.Dir.INFO,
+            "Keep-alive reconnect ${saved.name ?: ""} ${saved.address}",
+        )
+        useSource(Elm327BluetoothSource(remote))
     }
 
     private fun stopElmMonitor() {

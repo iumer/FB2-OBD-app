@@ -12,13 +12,11 @@ android {
         applicationId = "com.fb2.obd"
         minSdk = 26
         targetSdk = 34
-        // Bump on each sideload APK so HU package installer treats it as an update.
-        // Code is an exact revert to the 0.1.15 tree. Only the version number is
-        // raised: Android refuses to install a lower versionCode over the
-        // installed 0.1.34, so 15 would require an uninstall (losing settings
-        // and saved logs) before it could be sideloaded.
-        versionCode = 35
-        versionName = "0.1.15-revert"
+        // Visible line: 0.1.15 revert → 0.1.16 updater → 0.1.17 Nakamichi.
+        // versionCode is an Android install counter only (must rise so this
+        // APK can replace the mis-named 0.1.36/0.1.37 builds). Not shown in UI.
+        versionCode = 39
+        versionName = "0.1.18"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -58,6 +56,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 
     composeOptions {

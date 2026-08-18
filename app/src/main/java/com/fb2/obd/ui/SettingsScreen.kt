@@ -35,7 +35,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.fb2.obd.SettingsState
 import com.fb2.obd.data.LogUploadManager
+import com.fb2.obd.obd.AppUpdateChecker
 import com.fb2.obd.obd.DashTheme
+import com.fb2.obd.obd.KeepAlivePolicy
 import com.fb2.obd.obd.VehicleProfile
 import com.fb2.obd.ui.theme.Accent
 import com.fb2.obd.ui.theme.LocalThemePalette
@@ -103,12 +105,24 @@ fun SettingsScreen(
     onToggleVoiceAlerts: (Boolean) -> Unit = {},
     onToggleDuckMedia: (Boolean) -> Unit = {},
     onCheckSoundAlert: () -> Unit = {},
+    onKeepAliveBattery: () -> Unit = {},
+    batteryUnrestricted: Boolean = false,
     uploadStatus: LogUploadManager.Status = LogUploadManager.Status(),
     githubToken: String = "",
     onGithubTokenChange: (String) -> Unit = {},
     onUploadLogs: () -> Unit = {},
     openAiApiKey: String = "",
     onOpenAiApiKeyChange: (String) -> Unit = {},
+    appVersionLabel: String = "",
+    updateStatusText: String = "",
+    updateBusy: Boolean = false,
+    availableUpdates: List<AppUpdateChecker.RemoteVersion> = emptyList(),
+    downloadingName: String? = null,
+    downloadPercent: Int = 0,
+    readyToInstallName: String? = null,
+    onCheckForUpdate: () -> Unit = {},
+    onDownloadVersion: (AppUpdateChecker.RemoteVersion) -> Unit = {},
+    onInstallUpdate: () -> Unit = {},
     nav: SettingsNav,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
@@ -135,6 +149,65 @@ fun SettingsScreen(
             fontSize = 12.sp,
             modifier = Modifier.padding(bottom = 8.dp),
         )
+
+        SectionLabel("App update")
+        Text(
+            text = if (appVersionLabel.isNotBlank()) {
+                "Installed: $appVersionLabel. Check lists every newer build; pick the one you want."
+            } else {
+                "Check lists every newer build on GitHub; pick the one you want to install."
+            },
+            color = TextMuted,
+            fontSize = 12.sp,
+            modifier = Modifier.padding(bottom = 8.dp),
+        )
+        ActionRow(
+            title = if (updateStatusText.isNotBlank()) updateStatusText else "Check for update",
+            subtitle = "Needs internet. Allow “install unknown apps” for FB2 Diag when prompted.",
+            actionLabel = if (updateBusy) "…" else "CHECK",
+            onClick = { if (!updateBusy) onCheckForUpdate() },
+        )
+        if (availableUpdates.isNotEmpty()) {
+            Text(
+                text = "${availableUpdates.size} newer " +
+                    if (availableUpdates.size == 1) "version" else "versions",
+                color = palette.textMuted,
+                fontSize = 12.sp,
+                modifier = Modifier.padding(top = 4.dp, bottom = 4.dp),
+            )
+            val latestCode = availableUpdates.maxOf { it.versionCode }
+            availableUpdates.forEach { remote ->
+                val isDownloading = downloadingName == remote.versionName
+                val isReady = readyToInstallName == remote.versionName
+                val label = when {
+                    isReady -> "INSTALL"
+                    isDownloading -> "${downloadPercent}%"
+                    else -> "GET"
+                }
+                val title = buildString {
+                    append("v${remote.versionName}")
+                    if (remote.versionCode == latestCode) append("  ·  latest")
+                }
+                val subtitle = when {
+                    isReady -> "Downloaded — tap Install"
+                    isDownloading -> "Downloading…"
+                    remote.notes.isNotBlank() -> remote.notes
+                    else -> "Tap GET to download"
+                }
+                ActionRow(
+                    title = title,
+                    subtitle = subtitle,
+                    actionLabel = label,
+                    onClick = {
+                        when {
+                            updateBusy && !isReady -> Unit
+                            isReady -> onInstallUpdate()
+                            else -> onDownloadVersion(remote)
+                        }
+                    },
+                )
+            }
+        }
 
         SectionLabel("Vehicle profile")
         Text(
@@ -176,6 +249,18 @@ fun SettingsScreen(
             },
             checked = settings.showEstimatedGear,
             onCheckedChange = onToggleEstimatedGear,
+        )
+
+        SectionLabel("Keep-alive (Torque-style)")
+        ActionRow(
+            title = "Unrestricted battery",
+            subtitle = if (batteryUnrestricted) {
+                "Allowed already — ELM session can stay alive in the background."
+            } else {
+                "Nakamichi / phone OEM killers stop logging when they reclaim RAM. Allow unrestricted battery so the ELM session + LOG survive Home / screen-off. Prompt also appears on live connect."
+            },
+            actionLabel = KeepAlivePolicy.batteryExemptionActionLabel(batteryUnrestricted),
+            onClick = { if (!batteryUnrestricted) onKeepAliveBattery() },
         )
 
         SectionLabel("Alerts")

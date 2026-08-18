@@ -1,13 +1,11 @@
 # AGENTS.md
 
-> ## ⚠️ App code is reverted to 0.1.15
+> ## ⚠️ Base tree is 0.1.15; updater 0.1.16; Nakamichi keep-alive 0.1.17
 >
-> `app/` and `scripts/` are an exact copy of commit `d3790be` (0.1.15). Sections
-> below describing the in-app updater, crash reporter, full-screen sensor picker,
-> freshness LEDs, poll holds, keep-alive/auto-reconnect and Robolectric tests
-> describe **0.1.34, not the current build**. See
-> [`CHANGELOG-0.1.15-to-0.1.34.md`](CHANGELOG-0.1.15-to-0.1.34.md).
-> The 0.1.34 tree is preserved on branch `cursor/obd-connect-crash-c3be`.
+> `app/` started as an exact copy of commit `d3790be` (0.1.15). Restored: in-app
+> updater and Nakamichi keep-alive (`Fb2App`, `stopWithTask=false`, last-ELM
+> reconnect). Crash reporter, full-screen sensor picker, freshness LEDs, poll holds
+> and Robolectric tests are still **not** in this tree.
 
 ## Cursor Cloud specific instructions
 
