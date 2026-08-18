@@ -1,0 +1,22 @@
+{
+  "latest": {
+    "versionCode": 36,
+    "versionName": "0.1.36",
+    "apkUrl": "https://raw.githubusercontent.com/iumer/FB2-OBD-app/latest/dist/FB2-Diag-debug.apk",
+    "notes": "In-app updater: list every newer version and pick which one to install"
+  },
+  "releases": [
+    {
+      "versionCode": 35,
+      "versionName": "0.1.15-revert",
+      "apkUrl": "https://raw.githubusercontent.com/iumer/FB2-OBD-app/latest/dist/archive/FB2-Diag-0.1.15-revert.apk",
+      "notes": "0.1.15 tree restored after 0.1.27–0.1.34 connect crashes"
+    },
+    {
+      "versionCode": 36,
+      "versionName": "0.1.36",
+      "apkUrl": "https://raw.githubusercontent.com/iumer/FB2-OBD-app/latest/dist/archive/FB2-Diag-0.1.36.apk",
+      "notes": "In-app updater: list every newer version and pick which one to install"
+    }
+  ]
+}

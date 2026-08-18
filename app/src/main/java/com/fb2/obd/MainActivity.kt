@@ -41,6 +41,7 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -50,6 +51,7 @@ import androidx.core.content.FileProvider
 import com.fb2.obd.ui.theme.Accent
 import com.fb2.obd.ui.theme.Background
 import com.fb2.obd.ui.theme.TextPrimary
+import com.fb2.obd.data.AppUpdateManager
 import com.fb2.obd.data.DemoObdSource
 import com.fb2.obd.data.Elm327BluetoothSource
 import com.fb2.obd.data.LogExportHelper
@@ -79,6 +81,7 @@ import com.fb2.obd.ui.theme.FB2Theme
 import com.fb2.obd.ui.theme.ThemePalette
 import java.io.File
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 private enum class Screen {
     DASHBOARD, SETTINGS, DIAG_HUB, FAULTS, DEBUG_LOG, VALUE_LOG,
@@ -119,6 +122,37 @@ class MainActivity : ComponentActivity() {
                 val deepSearch by viewModel.deepSearch.collectAsState()
                 val deepFoundValues by viewModel.deepFoundValues.collectAsState()
                 val healthThresholds by viewModel.healthThresholds.collectAsState()
+
+                val appUpdateManager = remember { AppUpdateManager(applicationContext) }
+                val appUpdateUi by appUpdateManager.state.collectAsState()
+                val updateScope = rememberCoroutineScope()
+                val updateBusy = appUpdateUi is AppUpdateManager.UiState.Checking ||
+                    appUpdateUi is AppUpdateManager.UiState.Downloading
+                val updateStatusText = when (val s = appUpdateUi) {
+                    is AppUpdateManager.UiState.Idle -> ""
+                    is AppUpdateManager.UiState.Checking -> "Checking for update…"
+                    is AppUpdateManager.UiState.UpToDate -> s.message
+                    is AppUpdateManager.UiState.Available ->
+                        if (s.newer.size == 1) {
+                            "Update available: v${s.newer.first().versionName}"
+                        } else {
+                            "${s.newer.size} updates available (v${s.newer.first().versionName} – v${s.newer.last().versionName})"
+                        }
+                    is AppUpdateManager.UiState.Downloading ->
+                        "Downloading v${s.remote.versionName}… ${s.percent}%"
+                    is AppUpdateManager.UiState.ReadyToInstall ->
+                        "Ready to install v${s.remote.versionName}"
+                    is AppUpdateManager.UiState.Error -> s.message
+                }
+                val availableUpdates = when (val s = appUpdateUi) {
+                    is AppUpdateManager.UiState.Available -> s.newer
+                    is AppUpdateManager.UiState.Downloading -> s.newer
+                    is AppUpdateManager.UiState.ReadyToInstall -> s.newer
+                    else -> emptyList()
+                }
+                val downloadingName = (appUpdateUi as? AppUpdateManager.UiState.Downloading)?.remote?.versionName
+                val downloadPercent = (appUpdateUi as? AppUpdateManager.UiState.Downloading)?.percent ?: 0
+                val readyToInstallName = (appUpdateUi as? AppUpdateManager.UiState.ReadyToInstall)?.remote?.versionName
 
                 var screen by remember { mutableStateOf(Screen.DASHBOARD) }
                 // Lives above the screen switch so Settings scroll is kept when opening a sub-page.
@@ -362,6 +396,25 @@ class MainActivity : ComponentActivity() {
                             },
                             openAiApiKey = viewModel.openAiApiKey(),
                             onOpenAiApiKeyChange = viewModel::setOpenAiApiKey,
+                            appVersionLabel = appUpdateManager.localLabel,
+                            updateStatusText = updateStatusText,
+                            updateBusy = updateBusy,
+                            availableUpdates = availableUpdates,
+                            downloadingName = downloadingName,
+                            downloadPercent = downloadPercent,
+                            readyToInstallName = readyToInstallName,
+                            onCheckForUpdate = {
+                                updateScope.launch { appUpdateManager.checkForUpdate() }
+                            },
+                            onDownloadVersion = { remote ->
+                                updateScope.launch { appUpdateManager.downloadUpdate(remote) }
+                            },
+                            onInstallUpdate = {
+                                val ready = appUpdateUi as? AppUpdateManager.UiState.ReadyToInstall
+                                if (ready != null) {
+                                    appUpdateManager.installApk(this@MainActivity, ready.apk)
+                                }
+                            },
                             nav = settingsNav,
                             onBack = { screen = Screen.DASHBOARD },
                             modifier = Modifier.fillMaxSize(),

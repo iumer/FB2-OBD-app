@@ -1,15 +1,11 @@
 # FB2 Diag — Regression checklist
 
-> ## ⚠️ App code is reverted to 0.1.15
+> ## ⚠️ Base tree is 0.1.15; updater restored in 0.1.36
 >
-> On 2026-08-18 the user asked to revert to 0.1.15 after 0.1.27 broke live data
-> and 0.1.28–0.1.34 crashed on Connect. `app/` and `scripts/` are an exact copy of
-> commit `d3790be` (0.1.15); only `versionCode` was raised to 35 so it can install
-> over 0.1.34.
->
-> **Rows below marked Fixed for 0.1.16+ are NOT in the current build.** See
-> [`CHANGELOG-0.1.15-to-0.1.34.md`](CHANGELOG-0.1.15-to-0.1.34.md) for exactly what
-> was reverted. The 0.1.34 tree is preserved on `cursor/obd-connect-crash-c3be`.
+> `app/` started as an exact copy of commit `d3790be` (0.1.15). The in-app updater
+> (version list) is back as of 0.1.36. Crash reporter, full-screen sensor picker,
+> freshness LEDs, poll holds, keep-alive/auto-reconnect and Robolectric tests are
+> still **not** in this tree. See [`CHANGELOG-0.1.15-to-0.1.34.md`](CHANGELOG-0.1.15-to-0.1.34.md).
 
 **Mandatory for every code change.** After any non-trivial edit, run the full
 automated suite below and tick the relevant manual items before calling the
@@ -70,7 +66,7 @@ Keep these fixed. If a change might touch one of these areas, re-verify it.
 | I24 | Dash text too small to read while driving on HU | Fixed | `DashType` HU scale (hero **30**sp / tile **22**sp, 80dp tiles, 92dp hero); ellipsis; fewer wider columns |
 | I25 | Floating bubble ring too small / overflow on HU | Fixed | `FloatingDashLayout`: 92/100/max **340**dp (tightened by I64); shrinks on short-edge HUs |
 | I26 | Log Share shows “No apps…” / opens Bluetooth search on HU | Fixed | Always save to Downloads/FB2-Diag; ignore BT as share target |
-| I48 | Want in-app Update button (check / download / install or “up to date”) | Fixed | Settings → App update; `version.json` on `latest`; FileProvider install |
+| I48 | Want in-app Update button (check / download / install or “up to date”) | Fixed | Settings → App update; catalog `versions.json` lists every newer release; pick one to download |
 | I49 | Soft-recover / ATRV-only frames wipe Dash mid-drive; UI RETRY blanks bubble | Fixed | ATRV-only = blank sticky; recover heartbeat + 450ms AT timeout; stale UI 12s; deep-found TTL/clear; deep search gentle restore |
 | I50 | Analyze via AI on Generic OBD2 still wrote Honda Civic FB2 | Fixed | Profile-aware system/user prompt + VIN if Mode 09 available; otherwise “generic SAE data from a car” |
 | I51 | Extra Dash sensors added via **+** vanished after closing the app | Fixed | Persist `filesDir/dash_extra_pids.json`; reload on start (Honda extras stay on disk when switching Generic) |
@@ -104,6 +100,7 @@ Keep these fixed. If a change might touch one of these areas, re-verify it.
 | I79 | **Still crashing on connect at 0.1.33.** `startForeground()` failure was swallowed, so the service never reached foreground and Android killed the process with `ForegroundServiceDidNotStartInTime` ~5 s later — thrown on the main looper where no `runCatching` can reach it | Fixed | Both services now `stopSelf()` when promotion fails |
 | I80 | No stack trace available for on-car crashes (no logcat in the car) | Fixed | `CrashReporter` persists trace + device + **recent ELM log**; prompts to save on next launch; `CrashReporterTest` |
 | I81 | `loadBondedDevices` / `connectTo` could throw `SecurityException` on the UI thread if BT permission is revoked after the gate | Fixed | Both wrapped; connect surfaces a toast instead of dying |
+| I82 | Show every newer version in a list, not only “latest”; after installing 0.1.18 the next check shows 0.1.19+ | Fixed | `AppUpdateChecker.newerThan`; Settings list GET/INSTALL per row; `versions.json` catalog |
 
 When the user reports a **new** bug, add a new `Ixx` row here (Status: Open → Fixed)
 and add a matching automated or manual check in sections 2–3.
@@ -121,6 +118,8 @@ Run from repo root (`/workspace`):
 # It produces a v1+v2 signed release-classpath APK (~7 MB). A plain AGP debug
 # APK is v2-only and ~11 MB, which hangs some car HU installers (I72).
 bash scripts/package-hu-apk.sh   # writes dist/FB2-Diag-debug.apk
+# Also copy to dist/archive/FB2-Diag-<versionName>.apk and add a row to
+# dist/versions.json so older installs can pick this build from the list.
 # Then publish to branch `latest` so the stable sideload URL stays current:
 #   https://raw.githubusercontent.com/iumer/FB2-OBD-app/latest/dist/FB2-Diag-debug.apk
 ```
@@ -131,13 +130,13 @@ All tasks must pass. Verify the shipped APK before publishing:
 $ANDROID_HOME/build-tools/34.0.0/apksigner verify --verbose --min-sdk-version 21 dist/FB2-Diag-debug.apk
 # must print: v1 scheme ... true  AND  v2 scheme ... true
 $ANDROID_HOME/build-tools/34.0.0/aapt2 dump badging dist/FB2-Diag-debug.apk | grep '^package:'
-# versionCode must match dist/version.json
+# versionCode must match dist/version.json AND dist/versions.json latest
 ```
 
-After publishing, confirm the feed the app actually reads returns the new version:
+After publishing, confirm the catalog the app actually reads:
 
 ```bash
-curl -fsSL "https://api.github.com/repos/iumer/FB2-OBD-app/contents/dist/version.json?ref=latest" \
+curl -fsSL "https://api.github.com/repos/iumer/FB2-OBD-app/contents/dist/versions.json?ref=latest" \
   | python3 -c "import sys,json,base64;print(base64.b64decode(json.load(sys.stdin)['content']).decode())"
 ```
 
@@ -170,7 +169,7 @@ curl -fsSL "https://api.github.com/repos/iumer/FB2-OBD-app/contents/dist/version
 | `ElmConnectRuntimeTest` | **Android runtime (Robolectric).** Real `DashboardViewModel` on a real `Application`: construct, Demo→live ELM connect without crashing, no Demo leak into first live frame, ATRV-only frame keeps heroes, disconnect clears state |
 | `ForegroundServiceRuntimeTest` | **Android runtime (Robolectric).** Neither service propagates an exception out of `onTaskRemoved` (app swiped from recents) or `startOverlay` |
 | `DashboardSnapshotTest` / `ScreensSnapshotTest` / `ConnectSheetSnapshotTest` | Paparazzi UI snapshots |
-| `AppUpdateCheckerTest` | version.json parse + local/remote versionCode compare |
+| `AppUpdateCheckerTest` | versions.json catalog parse; newerThan lists 0.1.16–0.1.20 then only 0.1.19+ after installing 0.1.18 |
 | `DashExtraPidStoreTest` | **+** extras survive process death (`dash_extra_pids.json`) |
 | `SensorPickerReadingsTest` | Green/live vs waiting vs ECU-unsupported; SAE support bitmask parse; **ATRV battery live even if 0142 unsupported**; 2026-07-24 FB2 Dash PIDs stay LIVE |
 | `ChromeCollapseTest` | Classic Dash chrome hides on scroll-up and returns at list top |
