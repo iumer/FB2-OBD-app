@@ -1,6 +1,6 @@
 # AGENTS.md
 
-> ## ⚠️ Base tree is 0.1.15; updater 0.1.36; Nakamichi keep-alive 0.1.37
+> ## ⚠️ Base tree is 0.1.15; updater 0.1.16; Nakamichi keep-alive 0.1.17
 >
 > `app/` started as an exact copy of commit `d3790be` (0.1.15). Restored: in-app
 > updater and Nakamichi keep-alive (`Fb2App`, `stopWithTask=false`, last-ELM

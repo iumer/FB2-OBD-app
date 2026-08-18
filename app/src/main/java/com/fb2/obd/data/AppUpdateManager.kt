@@ -51,7 +51,7 @@ class AppUpdateManager(private val appContext: Context) {
     private var lastNewer: List<AppUpdateChecker.RemoteVersion> = emptyList()
 
     val localLabel: String
-        get() = "v${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})"
+        get() = "v${BuildConfig.VERSION_NAME}"
 
     suspend fun checkForUpdate() {
         _state.value = UiState.Checking

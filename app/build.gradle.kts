@@ -12,9 +12,11 @@ android {
         applicationId = "com.fb2.obd"
         minSdk = 26
         targetSdk = 34
-        // Bump on each sideload APK so HU package installer treats it as an update.
-        versionCode = 37
-        versionName = "0.1.37"
+        // Visible line: 0.1.15 revert → 0.1.16 updater → 0.1.17 Nakamichi.
+        // versionCode is an Android install counter only (must rise so this
+        // APK can replace the mis-named 0.1.36/0.1.37 builds). Not shown in UI.
+        versionCode = 38
+        versionName = "0.1.17"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
