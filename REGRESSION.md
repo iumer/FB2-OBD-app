@@ -123,8 +123,11 @@ Run from repo root (`/workspace`):
 bash scripts/package-hu-apk.sh   # writes dist/FB2-Diag-debug.apk
 # Also copy to dist/archive/FB2-Diag-<versionName>.apk and add a row to
 # dist/versions.json so older installs can pick this build from the list.
-# Then publish to branch `latest` so the stable sideload URL stays current:
+# Then publish to branch `latest` (script copies APK + version.json + versions.json + archive):
+bash scripts/publish-latest-apk.sh
 #   https://raw.githubusercontent.com/iumer/FB2-OBD-app/latest/dist/FB2-Diag-debug.apk
+# Confirm catalog is live (must be HTTP 200, not 404):
+curl -fsSL "https://raw.githubusercontent.com/iumer/FB2-OBD-app/latest/dist/versions.json" | head
 ```
 
 All tasks must pass. Verify the shipped APK before publishing:
