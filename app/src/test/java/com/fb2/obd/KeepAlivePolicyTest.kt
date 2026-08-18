@@ -1,6 +1,7 @@
 package com.fb2.obd
 
 import com.fb2.obd.obd.KeepAlivePolicy
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -20,6 +21,12 @@ class KeepAlivePolicyTest {
         assertTrue(KeepAlivePolicy.shouldPromptBatteryExemption(ignoringOptimizations = false, liveElmConnected = true))
         assertFalse(KeepAlivePolicy.shouldPromptBatteryExemption(ignoringOptimizations = true, liveElmConnected = true))
         assertFalse(KeepAlivePolicy.shouldPromptBatteryExemption(ignoringOptimizations = false, liveElmConnected = false))
+    }
+
+    @Test
+    fun batteryRow_saysAllowedOnceExemptionGranted() {
+        assertEquals("ALLOW", KeepAlivePolicy.batteryExemptionActionLabel(allowed = false))
+        assertEquals("ALLOWED", KeepAlivePolicy.batteryExemptionActionLabel(allowed = true))
     }
 
     @Test

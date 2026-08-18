@@ -1,9 +1,9 @@
 {
   "latest": {
-    "versionCode": 38,
-    "versionName": "0.1.17",
+    "versionCode": 39,
+    "versionName": "0.1.18",
     "apkUrl": "https://raw.githubusercontent.com/iumer/FB2-OBD-app/latest/dist/FB2-Diag-debug.apk",
-    "notes": "Nakamichi keep-alive: session survives HU killing the activity"
+    "notes": "Unrestricted battery row shows ALLOWED after you grant it"
   },
   "releases": [
     {
@@ -23,6 +23,12 @@
       "versionName": "0.1.17",
       "apkUrl": "https://raw.githubusercontent.com/iumer/FB2-OBD-app/latest/dist/archive/FB2-Diag-0.1.17.apk",
       "notes": "Nakamichi keep-alive: session survives HU killing the activity"
+    },
+    {
+      "versionCode": 39,
+      "versionName": "0.1.18",
+      "apkUrl": "https://raw.githubusercontent.com/iumer/FB2-OBD-app/latest/dist/archive/FB2-Diag-0.1.18.apk",
+      "notes": "Unrestricted battery row shows ALLOWED after you grant it"
     }
   ]
 }

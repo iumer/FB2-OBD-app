@@ -21,4 +21,7 @@ object KeepAlivePolicy {
         liveElmConnected: Boolean,
         valueLogging: Boolean,
     ): Boolean = liveElmConnected || valueLogging
+
+    fun batteryExemptionActionLabel(allowed: Boolean): String =
+        if (allowed) "ALLOWED" else "ALLOW"
 }

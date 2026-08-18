@@ -37,6 +37,7 @@ import com.fb2.obd.SettingsState
 import com.fb2.obd.data.LogUploadManager
 import com.fb2.obd.obd.AppUpdateChecker
 import com.fb2.obd.obd.DashTheme
+import com.fb2.obd.obd.KeepAlivePolicy
 import com.fb2.obd.obd.VehicleProfile
 import com.fb2.obd.ui.theme.Accent
 import com.fb2.obd.ui.theme.LocalThemePalette
@@ -105,6 +106,7 @@ fun SettingsScreen(
     onToggleDuckMedia: (Boolean) -> Unit = {},
     onCheckSoundAlert: () -> Unit = {},
     onKeepAliveBattery: () -> Unit = {},
+    batteryUnrestricted: Boolean = false,
     uploadStatus: LogUploadManager.Status = LogUploadManager.Status(),
     githubToken: String = "",
     onGithubTokenChange: (String) -> Unit = {},
@@ -252,9 +254,13 @@ fun SettingsScreen(
         SectionLabel("Keep-alive (Torque-style)")
         ActionRow(
             title = "Unrestricted battery",
-            subtitle = "Nakamichi / phone OEM killers stop logging when they reclaim RAM. Allow unrestricted battery so the ELM session + LOG survive Home / screen-off. Prompt also appears on live connect.",
-            actionLabel = "ALLOW",
-            onClick = onKeepAliveBattery,
+            subtitle = if (batteryUnrestricted) {
+                "Allowed already — ELM session can stay alive in the background."
+            } else {
+                "Nakamichi / phone OEM killers stop logging when they reclaim RAM. Allow unrestricted battery so the ELM session + LOG survive Home / screen-off. Prompt also appears on live connect."
+            },
+            actionLabel = KeepAlivePolicy.batteryExemptionActionLabel(batteryUnrestricted),
+            onClick = { if (!batteryUnrestricted) onKeepAliveBattery() },
         )
 
         SectionLabel("Alerts")

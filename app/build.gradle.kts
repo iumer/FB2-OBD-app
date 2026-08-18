@@ -15,8 +15,8 @@ android {
         // Visible line: 0.1.15 revert → 0.1.16 updater → 0.1.17 Nakamichi.
         // versionCode is an Android install counter only (must rise so this
         // APK can replace the mis-named 0.1.36/0.1.37 builds). Not shown in UI.
-        versionCode = 38
-        versionName = "0.1.17"
+        versionCode = 39
+        versionName = "0.1.18"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
