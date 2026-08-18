@@ -4,7 +4,7 @@
 >
 > `app/` started as an exact copy of commit `d3790be` (0.1.15). Restored so far:
 > in-app updater (0.1.16), Nakamichi keep-alive (0.1.17), battery ALLOWED row
-> (0.1.18), and Settings stop-simulation (0.1.19).
+> (0.1.18), Settings stop-simulation (0.1.19), and live-ELM Disconnect chip (0.1.20).
 > Crash reporter, full-screen sensor picker, freshness LEDs, poll holds and
 > Robolectric tests are still **not** in this tree.
 
@@ -103,6 +103,7 @@ Keep these fixed. If a change might touch one of these areas, re-verify it.
 | I81 | `loadBondedDevices` / `connectTo` could throw `SecurityException` on the UI thread if BT permission is revoked after the gate | Fixed | Both wrapped; connect surfaces a toast instead of dying |
 | I82 | Show every newer version in a list, not only “latest”; after installing 0.1.18 the next check shows 0.1.19+ | Fixed | `AppUpdateChecker.newerThan`; Settings list GET/INSTALL per row; `versions.json` catalog |
 | I83 | No way to stop Demo values from Settings | Fixed | Settings → Simulation: **STOP** while Demo is running; **Demo / simulated data** toggle persists `allowDemo` |
+| I84 | After live OBD connect, chip still said CONNECT and opened the picker | Fixed | Live ELM → red **DISCONNECT** (tap drops adapter). Demo stays CONNECT. Opt ☰ / AA match |
 
 When the user reports a **new** bug, add a new `Ixx` row here (Status: Open → Fixed)
 and add a matching automated or manual check in sections 2–3.
@@ -172,6 +173,7 @@ curl -fsSL "https://api.github.com/repos/iumer/FB2-OBD-app/contents/dist/version
 | `ForegroundServiceRuntimeTest` | **Android runtime (Robolectric).** Neither service propagates an exception out of `onTaskRemoved` (app swiped from recents) or `startOverlay` |
 | `DashboardSnapshotTest` / `ScreensSnapshotTest` / `ConnectSheetSnapshotTest` | Paparazzi UI snapshots |
 | `DemoAllowPolicyTest` | Settings stop-simulation: off while Demo disconnects; on while idle starts Demo; live ELM left running |
+| `ConnectActionPolicyTest` | Live ELM → DISCONNECT; Demo/idle → CONNECT; RETRY/ERROR not disconnect |
 | `AppUpdateCheckerTest` | versions.json catalog parse; newerThan lists 0.1.16–0.1.20 then only 0.1.19+ after installing 0.1.18 |
 | `DashExtraPidStoreTest` | **+** extras survive process death (`dash_extra_pids.json`) |
 | `SensorPickerReadingsTest` | Green/live vs waiting vs ECU-unsupported; SAE support bitmask parse; **ATRV battery live even if 0142 unsupported**; 2026-07-24 FB2 Dash PIDs stay LIVE |
@@ -192,7 +194,7 @@ touches ELM, Dash health, deep search, logging, or share:
 1a. **Stop simulation** — Settings → Simulation → **STOP** (or turn off Demo / simulated data). Dash goes `--` / disconnected. Toggle off survives process death; Connect → Demo or toggle on starts it again.
 1b. **Vehicle profile** — Settings → select Generic OBD2 → Trans + Honda DIAG gone; picker SAE-only; badge `OBD2`. Switch back to FB2 → Trans + Honda modules return.
 1c. **Faults** — Read shows Stored / Pending / Permanent (Mode 0A); Clear refreshes lists.
-2. **Connect live ELM** — chip goes `LIVE`; Battery shows volts (ATRV); MAF at idle ~3–5 g/s and **not** CRITICAL.
+2. **Connect live ELM** — chip goes red **DISCONNECT**; Battery shows volts (ATRV); MAF at idle ~3–5 g/s and **not** CRITICAL. Tap DISCONNECT → adapter drops, chip returns to CONNECT.
 3. **Idle stability** — leave idling several minutes; Dash stays populated; on drop chip shows `RETRY` and auto-recovers without tapping.
 4. **Deep analysis (Battery)** — triple-tap Battery when n/s (or after a glitch) → should recover via ATRV when adapter is powered.
 5. **Rough Idle page** — opens with live values quickly; does not hang on Probing if bus is unhealthy.

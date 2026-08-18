@@ -47,4 +47,23 @@ class CarDashBuilderTest {
         assertEquals("CONNECT", state.connectLabel) // demo is not live ELM
         assertTrue(state.statusLine.contains("DEMO"))
     }
+
+    @Test
+    fun liveElm_connectLabelIsDisconnect() {
+        val state = CarDashBuilder.build(
+            snapshot = VehicleSnapshot(rpm = 800.0, speedKmh = 0.0, coolantC = 90.0),
+            thresholds = HealthThresholds.DEFAULT,
+            extraPidIds = emptyList(),
+            extraValues = emptyMap(),
+            deepFoundValues = emptyMap(),
+            catalog = StandardPidCatalog.all,
+            connection = ConnectionState.CONNECTED,
+            sourceIsLive = true,
+            sourceName = "OBDII",
+            logging = true,
+            showEstimatedGear = true,
+        )
+        assertEquals("DISCONNECT", state.connectLabel)
+        assertTrue(state.statusLine.startsWith("LIVE"))
+    }
 }
