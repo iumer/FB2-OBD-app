@@ -13,8 +13,8 @@ android {
         minSdk = 26
         targetSdk = 34
         // Bump on each sideload APK so HU package installer treats it as an update.
-        versionCode = 30
-        versionName = "0.1.30"
+        versionCode = 31
+        versionName = "0.1.31"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -69,6 +69,7 @@ android {
 
     testOptions {
         unitTests.isReturnDefaultValues = true
+        unitTests.isIncludeAndroidResources = true
     }
 }
 
@@ -97,4 +98,8 @@ dependencies {
 
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.8.1")
+    // Android-runtime tests on the JVM (no emulator / no /dev/kvm in cloud VM).
+    // Pure-Kotlin tests cannot catch ViewModel + foreground-service connect crashes.
+    testImplementation("org.robolectric:robolectric:4.12.2")
+    testImplementation("androidx.test:core:1.5.0")
 }
