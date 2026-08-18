@@ -12,6 +12,7 @@ import com.fb2.obd.obd.PidDefinition
 import com.fb2.obd.obd.PidProbeResult
 import com.fb2.obd.obd.ReadinessStatus
 import com.fb2.obd.obd.SnapshotFreshness
+import com.fb2.obd.obd.StandardPidCatalog
 import com.fb2.obd.obd.VehicleInfo
 import com.fb2.obd.obd.VehicleSnapshot
 import kotlinx.coroutines.flow.Flow
@@ -213,9 +214,15 @@ class DemoObdSource(
         "221316" to 12.0, // total misfire
     )
 
+    override fun advertisedMode01(): Set<Int> {
+        val all = StandardPidCatalog.all.mapNotNull { it.mode01Number }.toSet()
+        return if (flavour == DemoFlavour.FB2) all - setOf(0x07, 0x46, 0x67) else all
+    }
+
     override suspend fun probePids(
         pids: List<PidDefinition>,
         recoverFirst: Boolean,
+        retryNoData: Boolean,
     ) = pids.map { pid ->
         when {
             pid.request.equals("0103", true) -> {

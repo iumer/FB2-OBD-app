@@ -55,10 +55,23 @@ interface ObdSource {
     /** Run [block] without the poll loop sending bytes (one ATSH strategy). */
     suspend fun <T> withLinkExclusive(block: suspend () -> T): T = block()
 
-    /** Probe a list of PIDs; returns support + sample value when possible. */
+    /**
+     * Mode 01 PIDs advertised by the ECU support bitmask at connect
+     * (`0100`/`0120`/…). Empty until the first successful bitmask probe.
+     * Picker scan uses this instead of re-sending bitmask commands (those
+     * starve Dash heroes on cheap clones).
+     */
+    fun advertisedMode01(): Set<Int> = emptySet()
+
+    /**
+     * Probe a list of PIDs; returns support + sample value when possible.
+     * [retryNoData] is for idle/fuel pages; picker scan sets it false so a
+     * missing PID does not hold the ELM mutex for a second 450 ms timeout.
+     */
     suspend fun probePids(
         pids: List<PidDefinition>,
         recoverFirst: Boolean = true,
+        retryNoData: Boolean = true,
     ): List<PidProbeResult> = emptyList()
 
     /** Probe all Honda enhanced packs and return per-module results. */

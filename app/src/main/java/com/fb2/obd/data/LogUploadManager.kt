@@ -93,8 +93,9 @@ class LogUploadManager(
     fun isOnline(): Boolean {
         val net = cm.activeNetwork ?: return false
         val caps = cm.getNetworkCapabilities(net) ?: return false
-        return caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
-            caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+        // Car HUs often have INTERNET without VALIDATED (captive / OEM Wi‑Fi).
+        // App update already works on that path — do not block log upload on VALIDATED.
+        return caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
     }
 
     fun refreshOnline() {
@@ -135,13 +136,13 @@ class LogUploadManager(
         withContext(Dispatchers.IO) {
             refreshOnline()
             if (!isOnline()) {
-                _status.value = _status.value.copy(lastMessage = "No internet")
+                _status.value = _status.value.copy(lastMessage = LogUploadErrors.NO_INTERNET)
                 return@withContext emptyList()
             }
             val token = githubToken
             if (token.isBlank()) {
                 _status.value = _status.value.copy(
-                    lastMessage = "Add a GitHub token in Settings → Log upload",
+                    lastMessage = LogUploadErrors.NO_TOKEN,
                 )
                 return@withContext emptyList()
             }
@@ -161,19 +162,21 @@ class LogUploadManager(
                 val uploaded = out.count { it.outcome == FileResult.Outcome.UPLOADED }
                 val already = out.count { it.outcome == FileResult.Outcome.ALREADY_SYNCED }
                 val failed = out.count { it.outcome == FileResult.Outcome.FAILED }
-                val msg = buildString {
-                    if (uploaded > 0) append("Uploaded $uploaded. ")
-                    if (already > 0) append("Already synced $already. ")
-                    if (failed > 0) append("Failed $failed. ")
-                    if (uploaded == 0 && already > 0 && failed == 0) append("All logs/reports already synced.")
-                    if (out.isEmpty()) append("No saved logs or AI reports to upload.")
-                }.trim()
+                val firstFail = out.firstOrNull { it.outcome == FileResult.Outcome.FAILED }
+                    ?.let { "${it.fileName}: ${it.detail}" }
+                val msg = LogUploadErrors.summarize(
+                    uploaded = uploaded,
+                    already = already,
+                    failed = failed,
+                    firstFailure = firstFail,
+                    empty = out.isEmpty(),
+                )
                 _status.value = _status.value.copy(lastMessage = msg, uploading = false)
                 refreshCounts()
             } catch (e: Exception) {
                 _status.value = _status.value.copy(
                     uploading = false,
-                    lastMessage = "Upload error: ${e.message}",
+                    lastMessage = LogUploadErrors.friendly(e.message),
                 )
             }
             out
@@ -212,12 +215,19 @@ class LogUploadManager(
         bytes: ByteArray,
     ): Result<Unit> {
         return runCatching {
-            val path = "$remoteDir/$fileName"
+            val payload = LogUploadPayload.prepare(fileName, bytes)
+            val remoteName = payload.first
+            val bodyBytes = payload.second
+            val path = "$remoteDir/$remoteName"
             val api = "https://api.github.com/repos/$githubOwner/$githubRepo/contents/$path"
-            val existingSha = getRemoteSha(token, api)
+            if (bodyBytes.size > MAX_CONTENTS_BYTES) {
+                error("too large (${bodyBytes.size} bytes, GitHub Contents API max $MAX_CONTENTS_BYTES)")
+            }
+            val existingSha = getRemoteSha(token, "$api?ref=$DEFAULT_BRANCH")
             val body = JSONObject().apply {
-                put("message", "car upload: $fileName")
-                put("content", Base64.encodeToString(bytes, Base64.NO_WRAP))
+                put("message", "car upload: $remoteName")
+                put("content", Base64.encodeToString(bodyBytes, Base64.NO_WRAP))
+                put("branch", DEFAULT_BRANCH)
                 if (existingSha != null) put("sha", existingSha)
             }
             val conn = (URL(api).openConnection() as HttpURLConnection).apply {
@@ -226,9 +236,10 @@ class LogUploadManager(
                 setRequestProperty("Accept", "application/vnd.github+json")
                 setRequestProperty("X-GitHub-Api-Version", "2022-11-28")
                 setRequestProperty("Content-Type", "application/json")
+                setRequestProperty("User-Agent", USER_AGENT)
                 doOutput = true
-                connectTimeout = 20_000
-                readTimeout = 60_000
+                connectTimeout = 45_000
+                readTimeout = 300_000
             }
             OutputStreamWriter(conn.outputStream, StandardCharsets.UTF_8).use { it.write(body.toString()) }
             val code = conn.responseCode
@@ -246,8 +257,9 @@ class LogUploadManager(
                 requestMethod = "GET"
                 setRequestProperty("Authorization", "Bearer $token")
                 setRequestProperty("Accept", "application/vnd.github+json")
-                connectTimeout = 15_000
-                readTimeout = 15_000
+                setRequestProperty("User-Agent", USER_AGENT)
+                connectTimeout = 20_000
+                readTimeout = 45_000
             }
             val code = conn.responseCode
             val text = (if (code in 200..299) conn.inputStream else conn.errorStream)
@@ -279,5 +291,8 @@ class LogUploadManager(
         const val DEFAULT_REPO = "FB2-OBD-app"
         const val REMOTE_DIR = "logs/car-uploads"
         const val REMOTE_AI_DIR = "logs/ai-reports"
+        const val DEFAULT_BRANCH = "main"
+        private const val MAX_CONTENTS_BYTES = 900_000
+        private const val USER_AGENT = "FB2-Diag"
     }
 }

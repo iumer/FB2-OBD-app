@@ -6,6 +6,8 @@ import com.fb2.obd.obd.Dtc
 import com.fb2.obd.obd.GearSource
 import com.fb2.obd.obd.VehicleSnapshot
 import com.fb2.obd.perf.AccelResult
+import com.fb2.obd.obd.PidProbeResult
+import com.fb2.obd.obd.StandardPidCatalog
 import com.fb2.obd.ui.DebugLogScreen
 import com.fb2.obd.ui.FaultsScreen
 import com.fb2.obd.ui.PerformanceScreen
@@ -54,6 +56,31 @@ class ScreensSnapshotTest {
                     ),
                     nav = com.fb2.obd.ui.SettingsNav(),
                     onBack = {},
+                )
+            }
+        }
+    }
+
+    @Test
+    fun sensor_picker_refresh_chip() {
+        val rpm = StandardPidCatalog.all.first { it.request.equals("010C", true) }
+        val coolant = StandardPidCatalog.all.first { it.request.equals("0105", true) }
+        val map = StandardPidCatalog.all.first { it.request.equals("010B", true) }
+        val maf = StandardPidCatalog.all.first { it.request.equals("0110", true) }
+        val ambient = StandardPidCatalog.all.first { it.request.equals("0146", true) }
+        val catalog = listOf(rpm, coolant, map, maf, ambient)
+        val snap = VehicleSnapshot(rpm = 847.0, coolantC = 57.0, mapKpa = 32.0, mafGps = 3.1)
+        paparazzi.snapshot {
+            FB2Theme {
+                com.fb2.obd.ui.SensorPickerContent(
+                    catalog = catalog,
+                    snapshot = snap,
+                    probeById = mapOf(
+                        maf.id to PidProbeResult(maf, true, 3.1, "from-live-dashboard"),
+                    ),
+                    scanning = false,
+                    onPick = {},
+                    onDismiss = {},
                 )
             }
         }
