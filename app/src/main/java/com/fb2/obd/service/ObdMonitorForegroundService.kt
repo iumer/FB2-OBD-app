@@ -64,7 +64,17 @@ class ObdMonitorForegroundService : Service() {
             putExtra(EXTRA_STATUS, STATUS_LIVE)
             putExtra(EXTRA_RECONNECT, true)
         }
-        ContextCompat.startForegroundService(applicationContext, restart)
+        // Swiping the app from recents leaves us in the background, where a
+        // restart can be refused (ForegroundServiceStartNotAllowedException).
+        // Losing keep-alive is acceptable; crashing the process is not.
+        runCatching {
+            ContextCompat.startForegroundService(applicationContext, restart)
+        }.onFailure { e ->
+            ObdLogger.logDebug(
+                ObdLogger.Dir.INFO,
+                "ObdMonitor onTaskRemoved restart refused: ${e.message}",
+            )
+        }
         super.onTaskRemoved(rootIntent)
     }
 
