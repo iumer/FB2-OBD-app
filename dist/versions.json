@@ -1,9 +1,9 @@
 {
   "latest": {
-    "versionCode": 56,
-    "versionName": "0.1.35",
+    "versionCode": 57,
+    "versionName": "0.1.36",
     "apkUrl": "https://raw.githubusercontent.com/iumer/FB2-OBD-app/latest/dist/FB2-Diag-debug.apk",
-    "notes": "Settings Simulation: short line + Off/On radios only"
+    "notes": "Picker Refresh + Torque-style one-PID scan; log upload shows GitHub error"
   },
   "releases": [
     {
@@ -131,6 +131,12 @@
       "versionName": "0.1.35",
       "apkUrl": "https://raw.githubusercontent.com/iumer/FB2-OBD-app/latest/dist/archive/FB2-Diag-0.1.35.apk",
       "notes": "Settings Simulation: short line + Off/On radios only"
+    },
+    {
+      "versionCode": 57,
+      "versionName": "0.1.36",
+      "apkUrl": "https://raw.githubusercontent.com/iumer/FB2-OBD-app/latest/dist/archive/FB2-Diag-0.1.36.apk",
+      "notes": "Picker Refresh + Torque-style one-PID scan; log upload shows GitHub error"
     }
   ]
 }
