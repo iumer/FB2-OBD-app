@@ -1,9 +1,9 @@
 {
   "latest": {
-    "versionCode": 42,
-    "versionName": "0.1.21",
+    "versionCode": 43,
+    "versionName": "0.1.22",
     "apkUrl": "https://raw.githubusercontent.com/iumer/FB2-OBD-app/latest/dist/FB2-Diag-debug.apk",
-    "notes": "Disconnect chip on Classic + OptA/B/C themes"
+    "notes": "Deep search keeps Dash heroes live; Torque-style blinking green freshness LEDs on all themes"
   },
   "releases": [
     {
@@ -47,6 +47,12 @@
       "versionName": "0.1.21",
       "apkUrl": "https://raw.githubusercontent.com/iumer/FB2-OBD-app/latest/dist/archive/FB2-Diag-0.1.21.apk",
       "notes": "Disconnect chip on Classic + OptA/B/C themes"
+    },
+    {
+      "versionCode": 43,
+      "versionName": "0.1.22",
+      "apkUrl": "https://raw.githubusercontent.com/iumer/FB2-OBD-app/latest/dist/archive/FB2-Diag-0.1.22.apk",
+      "notes": "Deep search keeps Dash heroes live; blinking green freshness LEDs on all themes"
     }
   ]
 }
