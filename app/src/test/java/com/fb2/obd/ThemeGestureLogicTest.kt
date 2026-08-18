@@ -8,7 +8,6 @@ import org.junit.Test
 
 /**
  * Double-tap / triple-tap / hold contract used by Classic + OptA/B/C.
- * Regression for user bug: gestures must keep working on every theme.
  */
 class ThemeGestureLogicTest {
 
@@ -31,11 +30,11 @@ class ThemeGestureLogicTest {
     }
 
     @Test
-    fun tripleTap_deepSearch_resetsTaps() {
+    fun tripleTap_resetsTaps_noDeepSearch() {
         val t1 = ThemeGestureLogic.onTap(0, 0L, 1_000L, hasRemap = true)
         val t2 = ThemeGestureLogic.onTap(t1.taps, 1_000L, 1_150L, hasRemap = true)
         val t3 = ThemeGestureLogic.onTap(t2.taps, 1_150L, 1_300L, hasRemap = true)
-        assertEquals(ThemeGestureLogic.TapAction.DEEP_SEARCH, t3.action)
+        assertEquals(ThemeGestureLogic.TapAction.NONE, t3.action)
         assertEquals(0, t3.taps)
     }
 
@@ -61,22 +60,14 @@ class ThemeGestureLogicTest {
     }
 
     @Test
-    fun hold_prefersThresholdsOverDeepSearch() {
+    fun hold_opensThresholdEditorWhenAvailable() {
         assertEquals(
             ThemeGestureLogic.HoldAction.EDIT_THRESHOLDS,
-            ThemeGestureLogic.onHold(hasDeepSearch = true, hasEditThresholds = true),
-        )
-        assertEquals(
-            ThemeGestureLogic.HoldAction.DEEP_SEARCH,
-            ThemeGestureLogic.onHold(hasDeepSearch = true, hasEditThresholds = false),
-        )
-        assertEquals(
-            ThemeGestureLogic.HoldAction.EDIT_THRESHOLDS,
-            ThemeGestureLogic.onHold(hasDeepSearch = false, hasEditThresholds = true),
+            ThemeGestureLogic.onHold(hasEditThresholds = true),
         )
         assertEquals(
             ThemeGestureLogic.HoldAction.NONE,
-            ThemeGestureLogic.onHold(hasDeepSearch = false, hasEditThresholds = false),
+            ThemeGestureLogic.onHold(hasEditThresholds = false),
         )
     }
 }

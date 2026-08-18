@@ -19,14 +19,13 @@ import kotlinx.coroutines.launch
 /**
  * Classic + Opt theme Dash gesture contract (see [ThemeGestureLogic]):
  * - double-tap → remap / change value
- * - triple-tap → deep search
- * - long-press → threshold editor when available, else deep search
+ * - triple-tap → ignored
+ * - long-press → threshold editor when available
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun Modifier.themeMetricGestures(
     onRemap: (() -> Unit)? = null,
-    onDeepSearch: (() -> Unit)? = null,
     onEditThresholds: (() -> Unit)? = null,
 ): Modifier {
     var taps by remember { mutableIntStateOf(0) }
@@ -47,7 +46,6 @@ fun Modifier.themeMetricGestures(
             lastTapMs = now
             pendingRemap?.cancel()
             when (result.action) {
-                ThemeGestureLogic.TapAction.DEEP_SEARCH -> onDeepSearch?.invoke()
                 ThemeGestureLogic.TapAction.SCHEDULE_REMAP -> {
                     val delayMs = result.confirmRemapAfterMs ?: ThemeGestureLogic.REMAP_CONFIRM_DELAY_MS
                     pendingRemap = scope.launch {
@@ -62,8 +60,7 @@ fun Modifier.themeMetricGestures(
             }
         },
         onLongClick = {
-            when (ThemeGestureLogic.onHold(onDeepSearch != null, onEditThresholds != null)) {
-                ThemeGestureLogic.HoldAction.DEEP_SEARCH -> onDeepSearch?.invoke()
+            when (ThemeGestureLogic.onHold(onEditThresholds != null)) {
                 ThemeGestureLogic.HoldAction.EDIT_THRESHOLDS -> onEditThresholds?.invoke()
                 ThemeGestureLogic.HoldAction.NONE -> Unit
             }
@@ -73,13 +70,11 @@ fun Modifier.themeMetricGestures(
 
 fun DashThemeMetric.interaction(
     onRemapBase: (String) -> Unit,
-    onDeepSearch: (label: String, pidId: String?) -> Unit,
     onEdit: (EditableMetric) -> Unit,
-): Triple<() -> Unit, () -> Unit, (() -> Unit)?> {
+): Pair<() -> Unit, (() -> Unit)?> {
     val remapKey = remapBaseLabel ?: label
-    return Triple(
+    return Pair(
         { onRemapBase(remapKey) },
-        { onDeepSearch(label, pidRequest) },
         editMetric?.let { e -> { onEdit(e) } },
     )
 }

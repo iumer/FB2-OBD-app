@@ -84,21 +84,17 @@ class RegressionGateTest {
     }
 
     @Test
-    fun metricInteraction_wiresRemapDeepSearchAndEdit() {
+    fun metricInteraction_wiresRemapAndEdit() {
         val m = DashThemeMetrics.sideMetrics(drivingSnap()).first { it.label == "Coolant 1" }
         var remapped: String? = null
-        var deep: Pair<String, String?>? = null
         var edited: EditableMetric? = null
-        val (remap, search, edit) = m.interaction(
+        val (remap, edit) = m.interaction(
             onRemapBase = { remapped = it },
-            onDeepSearch = { label, pid -> deep = label to pid },
             onEdit = { edited = it },
         )
         remap()
-        search()
         edit?.invoke()
         assertEquals("Coolant 1", remapped)
-        assertEquals("Coolant 1" to "0105", deep)
         assertEquals(EditableMetric.COOLANT, edited)
     }
 

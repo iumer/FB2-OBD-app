@@ -200,7 +200,6 @@ fun OptAThemeDash(
                 metrics = left,
                 palette = palette,
                 onRemapBase = onRemapBase,
-                onDeepSearch = onDeepSearch,
                 onEditThresholds = onEditThresholds,
                 modifier = Modifier
                     .weight(0.20f)
@@ -223,7 +222,6 @@ fun OptAThemeDash(
                     freshAtMs = snapshot.freshAtMs[SnapshotFreshness.KEY_RPM],
                     palette = palette,
                     onRemap = { onRemapBase("RPM") },
-                    onDeepSearch = { onDeepSearch("RPM", "010C") },
                     onEdit = { onEditThresholds(EditableMetric.RPM) },
                 )
             }
@@ -242,7 +240,6 @@ fun OptAThemeDash(
                     .padding(6.dp)
                     .themeMetricGestures(
                         onRemap = { onRemapBase("Gear") },
-                        onDeepSearch = { onDeepSearch("Gear", null) },
                     ),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center,
@@ -303,7 +300,6 @@ fun OptAThemeDash(
                     freshAtMs = snapshot.freshAtMs[SnapshotFreshness.KEY_SPEED],
                     palette = palette,
                     onRemap = { onRemapBase("Speed") },
-                    onDeepSearch = { onDeepSearch("Speed", "010D") },
                 )
             }
 
@@ -311,7 +307,6 @@ fun OptAThemeDash(
                 metrics = right,
                 palette = palette,
                 onRemapBase = onRemapBase,
-                onDeepSearch = onDeepSearch,
                 onEditThresholds = onEditThresholds,
                 modifier = Modifier
                     .weight(0.20f)
@@ -392,7 +387,6 @@ fun OptBThemeDash(
                     .weight(1f)
                     .themeMetricGestures(
                         onRemap = { onRemapBase("RPM") },
-                        onDeepSearch = { onDeepSearch("RPM", "010C") },
                         onEditThresholds = { onEditThresholds(EditableMetric.RPM) },
                     ),
             )
@@ -408,7 +402,6 @@ fun OptBThemeDash(
                     .padding(vertical = 10.dp)
                     .themeMetricGestures(
                         onRemap = { onRemapBase("Gear") },
-                        onDeepSearch = { onDeepSearch("Gear", null) },
                     ),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.SpaceEvenly,
@@ -450,7 +443,6 @@ fun OptBThemeDash(
                     .weight(1f)
                     .themeMetricGestures(
                         onRemap = { onRemapBase("Speed") },
-                        onDeepSearch = { onDeepSearch("Speed", "010D") },
                     ),
             )
         }
@@ -467,7 +459,6 @@ fun OptBThemeDash(
                     metric = m,
                     palette = palette,
                     onRemapBase = onRemapBase,
-                    onDeepSearch = onDeepSearch,
                     onEditThresholds = onEditThresholds,
                     modifier = Modifier.weight(1f),
                 )
@@ -546,7 +537,6 @@ fun OptCThemeDash(
                     .fillMaxHeight()
                     .themeMetricGestures(
                         onRemap = { onRemapBase("RPM") },
-                        onDeepSearch = { onDeepSearch("RPM", "010C") },
                         onEditThresholds = { onEditThresholds(EditableMetric.RPM) },
                     ),
                 contentAlignment = Alignment.Center,
@@ -606,7 +596,6 @@ fun OptCThemeDash(
                     .fillMaxHeight()
                     .themeMetricGestures(
                         onRemap = { onRemapBase("Gear") },
-                        onDeepSearch = { onDeepSearch("Gear", null) },
                     ),
                 contentAlignment = Alignment.Center,
             ) {
@@ -679,7 +668,6 @@ fun OptCThemeDash(
                     .fillMaxHeight()
                     .themeMetricGestures(
                         onRemap = { onRemapBase("Speed") },
-                        onDeepSearch = { onDeepSearch("Speed", "010D") },
                     ),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center,
@@ -727,7 +715,7 @@ fun OptCThemeDash(
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             items(metrics, key = { it.label }) { m ->
-                PulseCard(m, palette, onRemapBase, onDeepSearch, onEditThresholds)
+                PulseCard(m, palette, onRemapBase, onEditThresholds)
             }
         }
     }
@@ -744,7 +732,6 @@ private fun OrbitValuePanel(
     freshAtMs: Long?,
     palette: ThemePalette,
     onRemap: () -> Unit,
-    onDeepSearch: () -> Unit,
     onEdit: (() -> Unit)? = null,
 ) {
     Column(
@@ -755,7 +742,7 @@ private fun OrbitValuePanel(
                 Brush.verticalGradient(listOf(Color(0xFF2A1016), palette.surfaceAlt)),
             )
             .border(1.5.dp, palette.accent.copy(alpha = 0.65f), RoundedCornerShape(16.dp))
-            .themeMetricGestures(onRemap, onDeepSearch, onEdit)
+            .themeMetricGestures(onRemap = onRemap, onEditThresholds = onEdit)
             .padding(horizontal = 10.dp, vertical = 10.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
@@ -814,7 +801,6 @@ private fun OrbitWheel(
     metrics: List<DashThemeMetric>,
     palette: ThemePalette,
     onRemapBase: (String) -> Unit,
-    onDeepSearch: (label: String, pidId: String?) -> Unit,
     onEditThresholds: (EditableMetric) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -949,7 +935,6 @@ private fun OrbitWheel(
                                     focused = focused,
                                     palette = palette,
                                     onRemapBase = onRemapBase,
-                                    onDeepSearch = onDeepSearch,
                                     onEditThresholds = onEditThresholds,
                                 )
                             }
@@ -982,17 +967,16 @@ private fun OrbitWheelItem(
     focused: Boolean,
     palette: ThemePalette,
     onRemapBase: (String) -> Unit,
-    onDeepSearch: (label: String, pidId: String?) -> Unit,
     onEditThresholds: (EditableMetric) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val (remap, deep, edit) = metric.interaction(onRemapBase, onDeepSearch, onEditThresholds)
+    val (remap, edit) = metric.interaction(onRemapBase, onEditThresholds)
     Column(
         modifier = modifier
             .fillMaxWidth()
             .fillMaxHeight()
             .padding(horizontal = 3.dp)
-            .themeMetricGestures(remap, deep, edit),
+            .themeMetricGestures(remap, edit),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
@@ -1203,19 +1187,18 @@ private fun TwinBottomChip(
     metric: DashThemeMetric,
     palette: ThemePalette,
     onRemapBase: (String) -> Unit,
-    onDeepSearch: (label: String, pidId: String?) -> Unit,
     onEditThresholds: (EditableMetric) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val frac = guessFraction(metric)
-    val (remap, deep, edit) = metric.interaction(onRemapBase, onDeepSearch, onEditThresholds)
+    val (remap, edit) = metric.interaction(onRemapBase, onEditThresholds)
     Column(
         modifier = modifier
             .fillMaxHeight()
             .clip(RoundedCornerShape(12.dp))
             .background(palette.surface)
             .border(1.dp, palette.accent.copy(alpha = 0.3f), RoundedCornerShape(12.dp))
-            .themeMetricGestures(remap, deep, edit)
+            .themeMetricGestures(remap, edit)
             .padding(horizontal = 6.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.SpaceBetween,
     ) {
@@ -1354,17 +1337,16 @@ private fun PulseCard(
     m: DashThemeMetric,
     palette: ThemePalette,
     onRemapBase: (String) -> Unit,
-    onDeepSearch: (label: String, pidId: String?) -> Unit,
     onEditThresholds: (EditableMetric) -> Unit,
 ) {
-    val (remap, deep, edit) = m.interaction(onRemapBase, onDeepSearch, onEditThresholds)
+    val (remap, edit) = m.interaction(onRemapBase, onEditThresholds)
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(14.dp))
             .background(palette.surfaceAlt)
             .border(1.dp, palette.accent.copy(alpha = 0.25f), RoundedCornerShape(14.dp))
-            .themeMetricGestures(remap, deep, edit)
+            .themeMetricGestures(remap, edit)
             .padding(horizontal = 10.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
