@@ -32,6 +32,17 @@ class AppUpdateCheckerTest {
     }
 
     @Test
+    fun parseVersionJsonFromGitHubContents_decodesBase64Manifest() {
+        val inner = """{"versionCode":29,"versionName":"0.1.29","apkUrl":"https://example.com/x.apk"}"""
+        val b64 = java.util.Base64.getEncoder().encodeToString(inner.toByteArray())
+        val api = """{"name":"version.json","content":"$b64"}"""
+        val remote = AppUpdateChecker.parseVersionJsonFromGitHubContents(api)
+        assertEquals(29, remote.versionCode)
+        assertEquals("0.1.29", remote.versionName)
+        assertEquals("https://example.com/x.apk", remote.apkUrl)
+    }
+
+    @Test
     fun compare_availableWhenRemoteCodeHigher() {
         val result = AppUpdateChecker.compare(
             localCode = 19,

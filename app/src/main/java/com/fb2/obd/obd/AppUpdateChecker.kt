@@ -3,13 +3,18 @@ package com.fb2.obd.obd
 /**
  * Pure version-check helpers for in-app updates against the always-latest sideload.
  *
- * Remote manifest lives next to the APK on branch `latest`:
+ * Manifest on branch `latest`:
  *   https://raw.githubusercontent.com/iumer/FB2-OBD-app/latest/dist/version.json
+ *
+ * Prefer [VERSION_JSON_API_URL] — raw.githubusercontent.com CDN can lag hours behind
+ * the repo; the Contents API reflects the branch immediately.
  */
 object AppUpdateChecker {
 
     const val VERSION_JSON_URL =
         "https://raw.githubusercontent.com/iumer/FB2-OBD-app/latest/dist/version.json"
+    const val VERSION_JSON_API_URL =
+        "https://api.github.com/repos/iumer/FB2-OBD-app/contents/dist/version.json?ref=latest"
     const val DEFAULT_APK_URL =
         "https://raw.githubusercontent.com/iumer/FB2-OBD-app/latest/dist/FB2-Diag-debug.apk"
 
@@ -57,6 +62,18 @@ object AppUpdateChecker {
         val apk = stringField(json, "apkUrl")?.ifBlank { null } ?: DEFAULT_APK_URL
         return RemoteVersion(versionCode = code, versionName = name, apkUrl = apk)
     }
+
+    /** Decode GitHub Contents API base64 payload into version.json text. */
+    fun decodeGitHubContentsVersionJson(apiResponse: String): String {
+        val encoded = stringField(apiResponse, "content")
+            ?: throw IllegalArgumentException("GitHub contents missing content field")
+        val cleaned = encoded.replace("\\n", "").replace("\n", "").trim()
+        val bytes = java.util.Base64.getDecoder().decode(cleaned)
+        return String(bytes, Charsets.UTF_8)
+    }
+
+    fun parseVersionJsonFromGitHubContents(apiResponse: String): RemoteVersion =
+        parseVersionJson(decodeGitHubContentsVersionJson(apiResponse))
 
     private fun intField(json: String, key: String): Int? {
         val re = Regex("\"$key\"\\s*:\\s*(-?\\d+)")
