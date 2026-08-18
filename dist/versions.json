@@ -1,9 +1,9 @@
 {
   "latest": {
-    "versionCode": 44,
-    "versionName": "0.1.23",
+    "versionCode": 45,
+    "versionName": "0.1.24",
     "apkUrl": "https://raw.githubusercontent.com/iumer/FB2-OBD-app/latest/dist/FB2-Diag-debug.apk",
-    "notes": "Classic theme: RPM/Speed/Gear hero scrolls with Dash tiles (not sticky)"
+    "notes": "Persist Dash + extras across app restart"
   },
   "releases": [
     {
@@ -59,6 +59,12 @@
       "versionName": "0.1.23",
       "apkUrl": "https://raw.githubusercontent.com/iumer/FB2-OBD-app/latest/dist/archive/FB2-Diag-0.1.23.apk",
       "notes": "Classic theme: RPM/Speed/Gear hero scrolls with Dash tiles (not sticky)"
+    },
+    {
+      "versionCode": 45,
+      "versionName": "0.1.24",
+      "apkUrl": "https://raw.githubusercontent.com/iumer/FB2-OBD-app/latest/dist/archive/FB2-Diag-0.1.24.apk",
+      "notes": "Persist Dash + extras across app restart"
     }
   ]
 }

@@ -11,6 +11,7 @@ import com.fb2.obd.data.AiAnalysisErrors
 import com.fb2.obd.data.AiAnalysisStore
 import com.fb2.obd.data.AiReportStore
 import com.fb2.obd.data.ConnectionState
+import com.fb2.obd.data.DashExtraPidStore
 import com.fb2.obd.data.DashTileOverrideStore
 import com.fb2.obd.data.DemoFlavour
 import com.fb2.obd.data.DemoObdSource
@@ -264,7 +265,8 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
     private val _maintenance = MutableStateFlow(MaintenanceStore.defaultTemplate())
     val maintenance: StateFlow<List<MaintenanceEntry>> = _maintenance.asStateFlow()
 
-    private val _dashExtraPidIds = MutableStateFlow<List<String>>(emptyList())
+    private val extraPidStore = DashExtraPidStore(File(filesDir, "dash_extra_pids.json"))
+    private val _dashExtraPidIds = MutableStateFlow(extraPidStore.load())
     val dashExtraPidIds: StateFlow<List<String>> = _dashExtraPidIds.asStateFlow()
 
     private val _dashExtraValues = MutableStateFlow<Map<String, String>>(emptyMap())
@@ -388,6 +390,7 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
             next[slot] = pid.id
             next.filter { it.isNotBlank() }
         }
+        extraPidStore.save(_dashExtraPidIds.value)
         // One-shot probe so tiles outside the main poll set still show a value.
         probeAndCachePid(pid)
     }
@@ -395,6 +398,7 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
     fun clearDashExtraPid(pidId: String) {
         _dashExtraPidIds.update { it.filter { id -> id != pidId } }
         _dashExtraValues.update { it - pidId }
+        extraPidStore.save(_dashExtraPidIds.value)
         publishCarDash()
     }
 
@@ -477,6 +481,15 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
             VehicleProfileConfig.healthDefaults(loadedProfile)
         }
         voiceAlerter.enabled = _settings.value.voiceAlerts
+        // Re-probe persisted extras + tile overrides so tiles show values after restart.
+        viewModelScope.launch {
+            _dashExtraPidIds.value.forEach { id ->
+                pidCatalog.find { it.id.equals(id, true) }?.let { probeAndCachePid(it) }
+            }
+            _dashTileOverrides.value.values.distinct().forEach { id ->
+                pidCatalog.find { it.id.equals(id, true) }?.let { probeAndCachePid(it) }
+            }
+        }
         voiceAlerter.duckMediaDuringAlerts = _settings.value.duckMediaDuringAlerts
         voiceAlerter.start()
         logUploadManager.start()
@@ -537,13 +550,9 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
                 showEstimatedGear = gearDefault,
             )
         }
-        // Drop Honda-only extras / overlays that are invisible in Generic.
+        // Honda-only extras stay on disk so switching back to FB2 restores them.
+        // Generic Dash already hides ids that are not in the SAE catalog.
         if (profile.isGeneric) {
-            _dashExtraPidIds.update { ids ->
-                ids.filter { id ->
-                    pidCatalog.any { it.id.equals(id, true) }
-                }
-            }
             _transValues.value = emptyMap()
             _hondaScan.value = emptyList()
             _deepFoundValues.value = _deepFoundValues.value.filterKeys { key ->
