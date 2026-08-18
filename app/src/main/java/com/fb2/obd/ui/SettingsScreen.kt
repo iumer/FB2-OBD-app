@@ -370,7 +370,7 @@ fun SettingsScreen(
             modifier = Modifier.padding(bottom = 6.dp),
         )
         Text(
-            text = "Uploads finished drives to …/${LogUploadManager.REMOTE_DIR}/ and AI reports to …/${LogUploadManager.REMOTE_AI_DIR}/. Needs a fine-grained PAT with Contents: Write.",
+            text = "Uploads finished drives to github.com/${LogUploadManager.DEFAULT_OWNER}/${LogUploadManager.DEFAULT_REPO}/${LogUploadManager.REMOTE_DIR}/ (branch ${LogUploadManager.DEFAULT_BRANCH}) and AI reports to …/${LogUploadManager.REMOTE_AI_DIR}/. Fine-grained PAT: Contents Read and write on that repo. Large logs are gzipped. If Upload fails, the HTTP reason is shown on this row — not just “Failed 1”.",
             color = TextMuted,
             fontSize = 12.sp,
             modifier = Modifier.padding(bottom = 8.dp),

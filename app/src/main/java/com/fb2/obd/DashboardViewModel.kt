@@ -53,7 +53,7 @@ import com.fb2.obd.obd.LiveSnapshotOverlay
 import com.fb2.obd.obd.MetricStatus
 import com.fb2.obd.obd.Mode06Result
 import com.fb2.obd.obd.ModuleScanResult
-import com.fb2.obd.obd.ObdResponseParser
+import com.fb2.obd.obd.PickerScanPlanner
 import com.fb2.obd.obd.PollHold
 import com.fb2.obd.obd.SensorPickerReadings
 import com.fb2.obd.obd.O2TestResult
@@ -351,50 +351,61 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun startSensorPickerScan() {
-        if (pickerScanJob?.isActive == true) return
+        startSensorPickerScan(force = false)
+    }
+
+    /** Re-probe Mode 01 PIDs that are still waiting — keeps LIVE rows. */
+    fun refreshSensorPickerScan() {
+        startSensorPickerScan(force = true)
+    }
+
+    private fun startSensorPickerScan(force: Boolean) {
+        if (!force && pickerScanJob?.isActive == true) return
+        if (force) {
+            pickerScanJob?.cancel()
+            pickerScanJob = null
+        }
         val source = currentSource
         val catalog = pidCatalog
         val snap = _uiState.value.snapshot
         val seeded = LinkedHashMap<String, PidProbeResult>()
-        // Latch whatever the Dash already decoded so a later bitmask / TTL cannot
-        // yank MAP (etc.) off Readable — Torque keeps a PID once it has answered.
+        val keep = if (force) HashMap(_pickerScan.value.results.filter { it.value.supported }) else emptyMap()
+        keep.forEach { (id, hit) -> seeded[id] = hit }
         catalog.forEach { pid ->
+            if (pid.id in seeded) return@forEach
             val live = LiveSnapshotOverlay.liveSample(pid, snap)
             if (live != null) {
                 seeded[pid.id] = PidProbeResult(pid, supported = true, sample = live, raw = "from-live-dashboard")
-            } else if (pid.request.equals("0103", true) && !snap.fuelSystemStatus.isNullOrBlank()) {
-                seeded[pid.id] = PidProbeResult(pid, supported = true, sample = null, raw = snap.fuelSystemStatus)
+            } else if (pid.request.equals("0103", true)) {
+                val loop = snap.fuelSystemStatus?.trim().orEmpty()
+                if (loop.isNotEmpty() && !SensorPickerReadings.looksLikeNoData(loop)) {
+                    seeded[pid.id] = PidProbeResult(pid, supported = true, sample = null, raw = loop)
+                }
             }
         }
         _pickerScan.value = SensorPickerScanState(running = source != null, results = HashMap(seeded))
         if (source == null) return
         pickerScanJob = viewModelScope.launch {
-            // Do not pause Mode 01 (I54). Heroes-only hold lets MAP TTL-expire in ~2.5s
-            // while MAF (always-polled) stays — that is the MAP flicker in the recording.
             try {
-                var advertised: Set<Int> = emptySet()
-                val supportScan = probeSaeSupportBitmask(source)
-                if (supportScan != null) {
-                    advertised = supportScan.first
-                }
-                // Torque does not hide a PID just because 0100 omitted it — probe it.
-                val toProbe = catalog.filter { pid ->
-                    pid.id !in seeded
-                }.distinctBy { it.request.uppercase() }.sortedBy { pid ->
-                    val n = pid.mode01Number
-                    when {
-                        n != null && n in advertised -> 0
-                        pid.request.startsWith("01") -> 1
-                        else -> 2
-                    }
-                }
-                for (batch in toProbe.chunked(6)) {
+                val toProbe = PickerScanPlanner.requestsToProbe(
+                    catalog = catalog,
+                    alreadyLiveIds = seeded.keys,
+                    advertised = source.advertisedMode01(),
+                )
+                for (pid in toProbe) {
                     if (!isActive) break
-                    val probed = source.probePids(batch, recoverFirst = false)
+                    // One PID at a time, then yield so Dash heroes keep the ELM mutex.
+                    val probed = source.probePids(
+                        listOf(pid),
+                        recoverFirst = false,
+                        retryNoData = false,
+                    )
                     val expanded = SensorPickerReadings.expandProbeHits(catalog, probed)
                     _pickerScan.update { st ->
                         st.copy(results = SensorPickerReadings.mergeProbeResults(st.results, expanded))
                     }
+                    val hit = probed.any { it.supported }
+                    delay(PickerScanPlanner.yieldMs(hit))
                 }
             } finally {
                 _pickerScan.update { it.copy(running = false) }
@@ -407,22 +418,6 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
         pickerScanJob = null
         currentSource?.setPollHold(PollHold.NONE)
         _pickerScan.update { it.copy(running = false) }
-    }
-
-    private suspend fun probeSaeSupportBitmask(source: ObdSource): Pair<Set<Int>, Set<Int>>? {
-        val supported = HashSet<Int>()
-        val coveredBases = HashSet<Int>()
-        for (base in SensorPickerReadings.SAE_SUPPORT_BASES) {
-            val req = "01%02X".format(base)
-            val raw = source.command(req) ?: continue
-            val parsed = SensorPickerReadings.parseSaeSupport(base, raw)
-            val bytes = ObdResponseParser.rawDataBytes(req, 4, raw)
-            if (bytes != null) {
-                coveredBases.add(base)
-                supported.addAll(parsed)
-            }
-        }
-        return if (coveredBases.isNotEmpty()) supported to coveredBases else null
     }
 
     /** Replace a built-in Dash tile (e.g. Coolant 1) with any catalog sensor. */

@@ -78,6 +78,12 @@ class Elm327BluetoothSource(
     /** Rolling ATRV samples for median filter (cheap clones spit occasional false lows). */
     private val atrvWindow = ArrayDeque<Double>(3)
 
+    /** Connect-time Mode 01 support bitmask — reused by the sensor picker. */
+    @Volatile
+    private var advertisedMode01: Set<Int> = emptySet()
+
+    override fun advertisedMode01(): Set<Int> = advertisedMode01
+
     override fun pausePolling() {
         setPollHold(PollHold.FULL_PAUSE)
     }
@@ -146,6 +152,7 @@ class Elm327BluetoothSource(
                 runInit(conn)
 
                 val supported = probeSupportedPids(conn)
+                advertisedMode01 = supported
                 val basePids = if (supported.isEmpty()) {
                     polled
                 } else {
@@ -441,6 +448,7 @@ class Elm327BluetoothSource(
     override suspend fun probePids(
         pids: List<PidDefinition>,
         recoverFirst: Boolean,
+        retryNoData: Boolean,
     ): List<PidProbeResult> {
         val conn = connection ?: return emptyList()
         if (recoverFirst) {
@@ -459,7 +467,7 @@ class Elm327BluetoothSource(
             }.getOrNull()
             var up = raw?.uppercase().orEmpty()
             var bad = raw == null || BAD_TOKENS.any { up.contains(it) }
-            if (bad && up.contains("NO DATA")) {
+            if (retryNoData && bad && up.contains("NO DATA")) {
                 delay(20L)
                 raw = runCatching {
                     conn.exec(pid.request, Elm327Connection.PROBE_TIMEOUT_MS)

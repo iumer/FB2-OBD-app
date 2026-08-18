@@ -59,7 +59,7 @@ object SensorPickerReadings {
 
         extraValues[pid.id]?.let { raw ->
             val cleaned = raw.trim()
-            if (cleaned.isNotEmpty() && !isNoDataText(cleaned)) {
+            if (cleaned.isNotEmpty() && !looksLikeNoData(cleaned)) {
                 return SensorPickerReading(SensorReadKind.LIVE, cleaned)
             }
         }
@@ -70,7 +70,7 @@ object SensorPickerReadings {
         if (probed != null) {
             if (probed.supported) {
                 val text = LiveSnapshotOverlay.formatDisplay(probed)
-                return if (isNoDataText(text)) {
+                return if (looksLikeNoData(text)) {
                     SensorPickerReading(SensorReadKind.NONE)
                 } else {
                     SensorPickerReading(SensorReadKind.LIVE, text)
@@ -81,14 +81,8 @@ object SensorPickerReadings {
 
         val mode01 = pid.mode01Number
         if (mode01 != null && mode01 in snapshot.unsupportedPids) {
-            // Connect-time bitmask often omits live PIDs (MAP, LTFT, …). While the
-            // catalog scan is still running, stay "Waiting" — not "No data" — until
-            // we actually probe. Torque probes anyway; it does not trust 0100 alone.
-            return if (scanning) {
-                SensorPickerReading(SensorReadKind.WAITING)
-            } else {
-                SensorPickerReading(SensorReadKind.NONE)
-            }
+            // Bitmask is a hint, not a veto. Stay Waiting so Refresh can probe.
+            return SensorPickerReading(SensorReadKind.WAITING)
         }
 
         return SensorPickerReading(SensorReadKind.WAITING)
@@ -117,8 +111,9 @@ object SensorPickerReadings {
         if (expanded.isEmpty()) return existing
         val merged = existing.toMutableMap()
         expanded.forEach { (id, hit) ->
+            if (!hit.supported) return@forEach
             val prev = merged[id]
-            if (prev?.supported == true && !hit.supported) return@forEach
+            if (prev?.supported == true && hit.sample == null && prev.sample != null) return@forEach
             merged[id] = hit
         }
         return merged
@@ -180,16 +175,17 @@ object SensorPickerReadings {
 
     private fun liveText(pid: PidDefinition, snapshot: VehicleSnapshot): String? {
         if (pid.request.equals("0103", true)) {
-            return snapshot.fuelSystemStatus?.takeIf { it.isNotBlank() }
+            return snapshot.fuelSystemStatus?.takeIf { it.isNotBlank() && !looksLikeNoData(it) }
         }
         val sample = LiveSnapshotOverlay.liveSample(pid, snapshot) ?: return null
         return "%.2f %s".format(sample, pid.unit).trim()
     }
 
-    private fun isNoDataText(text: String): Boolean {
+    fun looksLikeNoData(text: String): Boolean {
         val t = text.trim()
         if (t.isEmpty() || t == "—" || t == "--" || t == "n/s") return true
         val up = t.uppercase()
-        return up.startsWith("N/S") || up.startsWith("NO DATA") || up == "UNSUPPORTED"
+        return up.startsWith("N/S") || up.startsWith("NO DATA") || up == "UNSUPPORTED" ||
+            up == "UNKNOWN" || up.startsWith("SKIPPED")
     }
 }

@@ -78,6 +78,7 @@ fun SensorPickerDialog(
     onRestore: (() -> Unit)? = null,
     onPick: (PidDefinition) -> Unit,
     onDismiss: () -> Unit,
+    onRefresh: () -> Unit = {},
     onOpen: () -> Unit = {},
     onClose: () -> Unit = {},
 ) {
@@ -103,7 +104,10 @@ fun SensorPickerDialog(
             onRestore = onRestore,
             onPick = onPick,
             onDismiss = onDismiss,
-            modifier = Modifier.fillMaxSize(),
+            onRefresh = onRefresh,
+            modifier = Modifier
+                .fillMaxSize()
+                .background(PickerBg),
         )
     }
 }
@@ -119,6 +123,7 @@ fun SensorPickerContent(
     onRestore: (() -> Unit)? = null,
     onPick: (PidDefinition) -> Unit,
     onDismiss: () -> Unit,
+    onRefresh: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     var query by remember { mutableStateOf("") }
@@ -209,16 +214,33 @@ fun SensorPickerContent(
                             .padding(horizontal = 10.dp, vertical = 6.dp),
                     )
                 }
-                Text(
-                    text = if (scanning) {
-                        "Scanning ECU… $liveCount readable"
-                    } else {
-                        "$liveCount readable · tap a green row to add"
-                    },
-                    color = PickerCyan,
-                    fontSize = 13.sp,
-                    modifier = Modifier.padding(top = 4.dp, bottom = 8.dp),
-                )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 4.dp, bottom = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = if (scanning) {
+                            "Scanning ECU… $liveCount readable"
+                        } else {
+                            "$liveCount readable · tap a green row to add"
+                        },
+                        color = PickerCyan,
+                        fontSize = 13.sp,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Text(
+                        text = if (scanning) "…" else "Refresh",
+                        color = if (scanning) PickerMuted else PickerCyan,
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable(enabled = !scanning, onClick = onRefresh)
+                            .padding(horizontal = 10.dp, vertical = 4.dp),
+                    )
+                }
                 OutlinedTextField(
                     value = query,
                     onValueChange = { query = it },

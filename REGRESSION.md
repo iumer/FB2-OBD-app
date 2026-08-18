@@ -112,6 +112,8 @@ Keep these fixed. If a change might touch one of these areas, re-verify it.
 | I88 | Red Orbit side wheels not smooth (22 dp snap + `AnimatedContent`) | Fixed | Pixel-follow `OrbitWheelPhysics` + spring settle to slot |
 | I89 | Select sensor: any readable PID (MAP, Coolant, Intake, …) flickers off Readable | Fixed | SideEffect latch same frame; never downgrade supported probe; bitmask→Waiting while scan runs |
 | I90 | Settings Simulation still two verbose tiles | Fixed | One short line + **Off / On** radio row (no card, no subtitles) |
+| I91 | Picker scan blanks Dash / Readable shrinks; reconnect restores PIDs | Fixed | Torque-style: Mode 01 only (skip Mode 22 + bitmask burst), one PID then yield 350/700 ms; never store probe misses; **Refresh** re-probes |
+| I92 | Settings Upload said Failed 1 with no reason | Fixed | Show GitHub HTTP detail; gzip large CSVs; 5 min PUT timeout; PUT `main` `logs/car-uploads/` |
 
 When the user reports a **new** bug, add a new `Ixx` row here (Status: Open → Fixed)
 and add a matching automated or manual check in sections 2–3.
@@ -190,7 +192,9 @@ curl -fsSL "https://api.github.com/repos/iumer/FB2-OBD-app/contents/dist/version
 | `DashExtraPidStoreTest` | **+** extras survive process death (`dash_extra_pids.json`) |
 | `SensorPickerReadingsTest` | Live beats bitmask (MAP/Coolant/Intake); latch same-frame; merge never downgrades; bitmask→Waiting while scanning |
 | `TorqueReadablePidCoverageTest` | Catalog includes every Mode 01 PID Torque showed readable in the 2026-08-18 recording |
-| `OrbitWheelPhysicsTest` | Pixel-follow fold at half-item; successive 1 px drags match one jump; fling cap |
+| `PickerScanPlannerTest` | FB2 picker scan skips Mode 22 + bitmask PIDs; advertised first; yield longer after miss |
+| `LogUploadErrorsTest` | GitHub 401/403 wording; Failed 1 includes HTTP detail |
+| `LogUploadPayloadTest` | Large CSVs gzip before GitHub Contents PUT |
 | `ChromeCollapseTest` | Classic Dash chrome hides on scroll-up and returns at list top |
 | `FreshnessLedTest` | Shared blink: bright on fetch, dim when stale |
 | `KeepAlivePolicyTest` / `LastElmStoreTest` | Reconnect after HU process death unless user disconnected |
