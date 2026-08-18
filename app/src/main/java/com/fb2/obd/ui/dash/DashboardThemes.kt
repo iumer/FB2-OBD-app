@@ -35,6 +35,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
@@ -812,7 +813,7 @@ private fun OrbitWheel(
     val scope = rememberCoroutineScope()
     val dragPx = remember { Animatable(0f) }
     val density = LocalDensity.current
-    val stepPx = with(density) { 36.dp.toPx() }
+    val stepPx = with(density) { 22.dp.toPx() }
 
     fun idx(delta: Int): Int {
         if (pages.isEmpty()) return 0
@@ -823,6 +824,7 @@ private fun OrbitWheel(
 
     Column(
         modifier = modifier
+            .widthIn(min = 52.dp)
             .clip(RoundedCornerShape(999.dp))
             .background(
                 Brush.verticalGradient(
