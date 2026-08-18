@@ -81,6 +81,7 @@ Keep these fixed. If a change might touch one of these areas, re-verify it.
 | I67 | Dual FGS notifications felt noisy | Fixed | Shared group `fb2_diag_session`; bubble channel IMPORTANCE_MIN |
 | I68 | Sensor picker “N readable” confused vs main Dash heroes | Fixed | Subtitle clarifies catalog scan vs heroes-always-live |
 | I69 | 0.1.27 only battery/ATRV live — heroes n/s everywhere (FB2 + Generic) | Fixed | `shouldRecoverAfterResume` only after `FULL_PAUSE`; field `mergeLastGood`; batch Mode 01 picker scan; Demo reconnect guard |
+| I70 | 0.1.28 crash on ELM connect (Demo snapshot + mergeLastGood + FGS) | Fixed | Clear snapshot on fresh live `useSource`; runCatching FGS/bubble restore; `attachOverlay` guard; `ElmConnectTransitionTest` |
 
 When the user reports a **new** bug, add a new `Ixx` row here (Status: Open → Fixed)
 and add a matching automated or manual check in sections 2–3.

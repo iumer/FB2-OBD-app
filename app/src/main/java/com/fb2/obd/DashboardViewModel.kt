@@ -686,8 +686,16 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
         if (!FloatingDashPrefs.isEnabled(app)) return
         if (!com.fb2.obd.service.FloatingDashOverlayService.isOverlayAllowed(app)) return
         floatingBubbleRestoreDone = true
-        com.fb2.obd.service.FloatingDashOverlayService.startOverlay(app)
-        ObdLogger.logDebug(ObdLogger.Dir.INFO, "Restored floating Dash bubble after reconnect")
+        runCatching {
+            com.fb2.obd.service.FloatingDashOverlayService.startOverlay(app)
+            ObdLogger.logDebug(ObdLogger.Dir.INFO, "Restored floating Dash bubble after reconnect")
+        }.onFailure { e ->
+            floatingBubbleRestoreDone = false
+            ObdLogger.logDebug(
+                ObdLogger.Dir.INFO,
+                "Floating bubble restore failed: ${e.message}",
+            )
+        }
     }
 
     /** Zone hysteresis shared by phone Dash + Android Auto tiles. */
@@ -1232,7 +1240,14 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
         probeCollectJob?.cancel()
         currentSource = source
         if (source is Elm327BluetoothSource) {
-            lastElmStore.saveConnected(source.deviceAddress, source.deviceName)
+            runCatching {
+                lastElmStore.saveConnected(source.deviceAddress, source.deviceName)
+            }.onFailure { e ->
+                ObdLogger.logDebug(
+                    ObdLogger.Dir.INFO,
+                    "Last ELM save failed: ${e.message}",
+                )
+            }
         }
         syncKeepaliveProbes()
         // Demo / non-live: drop the connected-device FGS. Live ELM starts it on first frame.
@@ -1244,11 +1259,15 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
         diagnosticBrain.reset()
         voiceAlerter.resetHoldTimers()
         _faults.update { FaultsState() }
+        // Fresh live ELM connect must not inherit Demo numbers — mergeLastGood is for
+        // partial RFCOMM frames mid-session, not Demo→ELM transitions.
+        val clearedSnap = if (source.isLive) VehicleSnapshot.EMPTY else null
         _uiState.update {
             it.copy(
                 connection = ConnectionState.CONNECTING,
                 sourceName = source.name,
                 sourceIsLive = source.isLive,
+                snapshot = clearedSnap ?: it.snapshot,
                 decisionSnapshot = VehicleSnapshot.EMPTY,
                 dtcCount = null,
                 reconnecting = false,
@@ -1258,9 +1277,13 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
         publishCarDash()
         // Real ELM: auto-start value logging unless already running.
         // Manual STOP LOG turns it off until the next fresh ELM connect.
-        if (source.isLive && !_settings.value.valueLogging) {
-            startValueLogging()
-            ObdLogger.logDebug(ObdLogger.Dir.INFO, "VALUE LOG auto-started on ELM connect")
+        if (source.isLive) {
+            if (_settings.value.valueLogging) {
+                sessionLoggingIsDemo = false
+            } else {
+                startValueLogging()
+                ObdLogger.logDebug(ObdLogger.Dir.INFO, "VALUE LOG auto-started on ELM connect")
+            }
         }
         collectJob = source.snapshots()
             .onEach { incoming ->
@@ -1341,9 +1364,21 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
                     source.name,
                 )
                 if (source.isLive) {
-                    ensureElmMonitor(ObdMonitorForegroundService.STATUS_LIVE)
+                    runCatching {
+                        ensureElmMonitor(ObdMonitorForegroundService.STATUS_LIVE)
+                    }.onFailure { e ->
+                        ObdLogger.logDebug(
+                            ObdLogger.Dir.INFO,
+                            "ELM monitor FGS failed: ${e.message}",
+                        )
+                    }
                 }
-                publishCarDash()
+                runCatching { publishCarDash() }.onFailure { e ->
+                    ObdLogger.logDebug(
+                        ObdLogger.Dir.INFO,
+                        "publishCarDash failed: ${e.message}",
+                    )
+                }
                 // Sample main Dash only into the session CSV.
                 if (ObdLogger.valueLoggingEnabled) {
                     logDashValues(snapshot)
