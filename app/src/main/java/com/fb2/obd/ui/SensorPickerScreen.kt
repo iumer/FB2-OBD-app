@@ -22,7 +22,7 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -124,16 +124,22 @@ fun SensorPickerContent(
     var query by remember { mutableStateOf("") }
     var filter by remember { mutableStateOf<PickerFilter>(PickerFilter.All) }
 
-    val readings = remember(catalog, snapshot, probeById, extraValues) {
+    var latched by remember { mutableStateOf<Map<String, SensorPickerReading>>(emptyMap()) }
+    val displayReadings = remember(catalog, snapshot, probeById, extraValues, scanning, latched) {
         catalog.associate { pid ->
-            pid.id to SensorPickerReadings.resolve(pid, snapshot, probeById, extraValues)
+            val resolved = SensorPickerReadings.resolve(
+                pid,
+                snapshot,
+                probeById,
+                extraValues,
+                scanning,
+            )
+            pid.id to SensorPickerReadings.latch(latched[pid.id], resolved)
         }
     }
-    var latched by remember { mutableStateOf<Map<String, SensorPickerReading>>(emptyMap()) }
-    val displayReadings = remember(readings, latched) {
-        readings.mapValues { (id, row) -> SensorPickerReadings.latch(latched[id], row) }
-    }
-    LaunchedEffect(displayReadings) {
+    // SideEffect (not LaunchedEffect): latch must update in the same frame as a
+    // LIVE row, before the next snapshot TTL can emit NONE and drop Readable.
+    SideEffect {
         if (displayReadings != latched) latched = displayReadings
     }
     val liveCount = displayReadings.values.count { it.isReadable }

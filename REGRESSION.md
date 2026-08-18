@@ -110,6 +110,7 @@ Keep these fixed. If a change might touch one of these areas, re-verify it.
 | I86 | Select sensor title/search/chips sticky — landscape list almost unusable | Fixed | Chrome is a normal `LazyColumn` item (same unsticky rule as Classic hero) |
 | I87 | Picker missed Torque-readable Mode 01 PIDs (APP D/E, baro, abs load, rel throttle, O2 current) | Fixed | Probe every unique Mode 01 request, not only bitmask hits; `0124I` sibling decode |
 | I88 | Red Orbit side wheels not smooth (22 dp snap + `AnimatedContent`) | Fixed | Pixel-follow `OrbitWheelPhysics` + spring settle to slot |
+| I89 | Select sensor: any readable PID (MAP, Coolant, Intake, …) flickers off Readable | Fixed | SideEffect latch same frame; never downgrade supported probe; bitmask→Waiting while scan runs |
 
 When the user reports a **new** bug, add a new `Ixx` row here (Status: Open → Fixed)
 and add a matching automated or manual check in sections 2–3.
@@ -186,7 +187,7 @@ curl -fsSL "https://api.github.com/repos/iumer/FB2-OBD-app/contents/dist/version
 | `AppUpdateCheckerTest` | versions.json catalog parse; newerThan lists 0.1.16–0.1.20 then only 0.1.19+ after installing 0.1.18 |
 | `PublishCatalogGuardTest` | publish script ships both JSON catalogs + archive; dist matches BuildConfig; no `lumer` typo; archive APKs on disk |
 | `DashExtraPidStoreTest` | **+** extras survive process death (`dash_extra_pids.json`) |
-| `SensorPickerReadingsTest` | Green/live vs waiting vs ECU-unsupported; live MAP beats bitmask; latch last-good; SAE support parse; 0124I sibling decode |
+| `SensorPickerReadingsTest` | Live beats bitmask (MAP/Coolant/Intake); latch same-frame; merge never downgrades; bitmask→Waiting while scanning |
 | `TorqueReadablePidCoverageTest` | Catalog includes every Mode 01 PID Torque showed readable in the 2026-08-18 recording |
 | `OrbitWheelPhysicsTest` | Pixel-follow fold at half-item; successive 1 px drags match one jump; fling cap |
 | `ChromeCollapseTest` | Classic Dash chrome hides on scroll-up and returns at list top |

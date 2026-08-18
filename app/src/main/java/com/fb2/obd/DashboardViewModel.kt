@@ -393,15 +393,7 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
                     val probed = source.probePids(batch, recoverFirst = false)
                     val expanded = SensorPickerReadings.expandProbeHits(catalog, probed)
                     _pickerScan.update { st ->
-                        val merged = st.results.toMutableMap()
-                        expanded.forEach { (id, hit) ->
-                            val prev = merged[id]
-                            if (prev?.supported == true && prev.sample != null && !hit.supported) {
-                                return@forEach
-                            }
-                            merged[id] = hit
-                        }
-                        st.copy(results = merged)
+                        st.copy(results = SensorPickerReadings.mergeProbeResults(st.results, expanded))
                     }
                 }
             } finally {
