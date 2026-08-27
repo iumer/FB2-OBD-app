@@ -8,12 +8,14 @@ import com.fb2.obd.obd.VehicleSnapshot
 import com.fb2.obd.perf.AccelResult
 import com.fb2.obd.obd.PidProbeResult
 import com.fb2.obd.obd.StandardPidCatalog
+import com.fb2.obd.ui.AiAnalyzeScreen
 import com.fb2.obd.ui.DebugLogScreen
 import com.fb2.obd.ui.FaultsScreen
 import com.fb2.obd.ui.PerformanceScreen
 import com.fb2.obd.ui.SettingsScreen
 import com.fb2.obd.ui.ValueLogScreen
 import com.fb2.obd.ui.theme.FB2Theme
+import com.fb2.obd.obd.VehicleProfile
 import org.junit.Rule
 import org.junit.Test
 
@@ -21,6 +23,33 @@ class ScreensSnapshotTest {
 
     @get:Rule
     val paparazzi = Paparazzi(deviceConfig = CarHuDevices.HU_1024x600)
+
+    @Test
+    fun aiAnalyze_driverNotes_screen() {
+        paparazzi.snapshot {
+            FB2Theme {
+                AiAnalyzeScreen(
+                    state = AiAnalyzeUiState(
+                        modeLive = true,
+                        windowMinutes = 5,
+                        driverNotes = "Daihatsu Mira 2015 MAP-only 6-injector FWD — no physical MAF.",
+                    ),
+                    savedLogs = emptyList(),
+                    hasApiKey = true,
+                    vehicleProfile = VehicleProfile.GENERIC_OBD2,
+                    onModeLive = {},
+                    onWindowMinutes = {},
+                    onSelectLog = {},
+                    onDriverNotes = {},
+                    onAnalyze = {},
+                    onClearReport = {},
+                    onRefreshLogs = {},
+                    onOpenSettings = {},
+                    onBack = {},
+                )
+            }
+        }
+    }
 
     @Test
     fun settings_screen() {
