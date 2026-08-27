@@ -22,6 +22,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.fb2.obd.data.ObdLogger
+import com.fb2.obd.data.SavedAiReport
 import com.fb2.obd.data.SavedLogFile
 import com.fb2.obd.ui.theme.Accent
 import com.fb2.obd.ui.theme.Background
@@ -114,11 +115,15 @@ fun ValueLogScreen(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
     savedFiles: List<SavedLogFile> = emptyList(),
+    savedAiReports: List<SavedAiReport> = emptyList(),
     loggingActive: Boolean = false,
     /** True when the current/connected source is Demo (simulated). */
     sourceIsDemo: Boolean = false,
     onShareFile: (SavedLogFile) -> Unit = {},
     onDeleteFile: (SavedLogFile) -> Unit = {},
+    onOpenAiReport: (SavedAiReport) -> Unit = {},
+    onShareAiReport: (SavedAiReport) -> Unit = {},
+    onDeleteAiReport: (SavedAiReport) -> Unit = {},
     uploadEnabled: Boolean = true,
     onUpload: () -> Unit = {},
     uploadStatusLine: String = "",
@@ -129,7 +134,7 @@ fun ValueLogScreen(
             .background(MaterialTheme.colorScheme.background)
             .padding(16.dp),
     ) {
-        ScreenHeader(title = "Value log", onBack = onBack) {
+        ScreenHeader(title = "Saved logs", onBack = onBack) {
             Row {
                 HeaderAction("Upload", onUpload, color = if (uploadEnabled) MaterialTheme.colorScheme.primary else TextMuted)
                 HeaderAction("Save", onShare)
@@ -164,7 +169,7 @@ fun ValueLogScreen(
                     "LOGGING LIVE — main Dash only (${rows.size} rows). Tap STOP LOG on the dashboard to save."
                 }
             } else {
-                "Current buffer: ${rows.size} rows. Finished sessions upload to GitHub when online (Settings → token)."
+                "Current buffer: ${rows.size} rows. Finished sessions + AI reports upload to GitHub when online (Settings → token)."
             },
             color = if (loggingActive) {
                 if (sourceIsDemo) WarnAmber else GoodGreen
@@ -225,6 +230,73 @@ fun ValueLogScreen(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(8.dp))
                                 .clickable { onDeleteFile(file) }
+                                .padding(horizontal = 10.dp, vertical = 6.dp),
+                        )
+                    }
+                }
+            }
+        }
+
+        if (savedAiReports.isNotEmpty()) {
+            Text(
+                text = "SAVED AI REPORTS (${savedAiReports.size})",
+                color = TextMuted,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(bottom = 6.dp),
+            )
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 10.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                savedAiReports.take(30).forEach { rep ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(MaterialTheme.colorScheme.surface)
+                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(rep.displayName, color = TextPrimary, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                            Text(
+                                text = "${FILE_FMT.format(Date(rep.createdMs))} · ${rep.sizeBytes / 1024} KB",
+                                color = TextMuted,
+                                fontSize = 11.sp,
+                            )
+                        }
+                        Text(
+                            text = "Open",
+                            color = GoodGreen,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .clickable { onOpenAiReport(rep) }
+                                .padding(horizontal = 10.dp, vertical = 6.dp),
+                        )
+                        Text(
+                            text = "Save",
+                            color = MaterialTheme.colorScheme.primary,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .clickable { onShareAiReport(rep) }
+                                .padding(horizontal = 10.dp, vertical = 6.dp),
+                        )
+                        Text(
+                            text = "Del",
+                            color = CritRed,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .clickable { onDeleteAiReport(rep) }
                                 .padding(horizontal = 10.dp, vertical = 6.dp),
                         )
                     }

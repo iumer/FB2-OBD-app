@@ -30,6 +30,7 @@ import com.fb2.obd.data.SavedAiReport
 import com.fb2.obd.data.SavedLogFile
 import com.fb2.obd.data.SessionLogStore
 import com.fb2.obd.data.DashThemeStore
+import com.fb2.obd.data.DurableLogArchive
 import com.fb2.obd.data.VehicleProfileStore
 import com.fb2.obd.obd.KeepAlivePolicy
 import com.fb2.obd.obd.DashTheme
@@ -763,8 +764,15 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
         val isDemo = sessionLoggingIsDemo
         runCatching {
             val csv = sessionCsv(isDemo = isDemo)
-            sessionLogStore.writeCheckpoint(path, csv)
+            val saved = sessionLogStore.writeCheckpoint(path, csv)
             ObdLogger.logDebug(ObdLogger.Dir.INFO, "VALUE LOG checkpoint ${csv.length} chars")
+            saved?.let {
+                LogExportHelper.mirrorToAppExports(
+                    getApplication(),
+                    File(it.absolutePath),
+                    it.fileName,
+                )
+            }
         }.onFailure {
             ObdLogger.logDebug(ObdLogger.Dir.INFO, "VALUE LOG checkpoint failed: ${it.message}")
         }
@@ -819,7 +827,9 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun refreshSavedAiReports() {
+        reimportDurableArchives()
         _savedAiReports.value = aiReportStore.list()
+        logUploadManager.refreshCounts()
     }
 
     fun openAiReport(fileName: String) {
@@ -1148,7 +1158,26 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun refreshSavedLogs() {
+        reimportDurableArchives()
         _savedLogs.value = sessionLogStore.list()
+        _savedAiReports.value = aiReportStore.list()
+        logUploadManager.refreshCounts()
+    }
+
+    /** Pull FB2-log / FB2-ai files back from Downloads after uninstall+reinstall. */
+    private fun reimportDurableArchives() {
+        val app = getApplication<Application>()
+        val result = DurableLogArchive.importMissing(
+            context = app,
+            valueLogsDir = File(app.filesDir, "value_logs"),
+            aiReportsDir = File(app.filesDir, "ai_reports"),
+        )
+        if (result.csvImported > 0 || result.aiImported > 0) {
+            ObdLogger.logDebug(
+                ObdLogger.Dir.INFO,
+                "Restored ${result.csvImported} log(s), ${result.aiImported} AI report(s) from Downloads/exports",
+            )
+        }
     }
 
     fun readSavedLog(fileName: String): String? = sessionLogStore.read(fileName)

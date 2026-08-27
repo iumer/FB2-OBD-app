@@ -192,7 +192,8 @@ fun SettingsScreen(
                     if (remote.versionCode == latestCode) append("  ·  latest")
                 }
                 val subtitle = when {
-                    isReady -> "Downloaded — tap Install"
+                    isReady && readyToInstallName != null ->
+                        "Downloaded — tap Install (kept if you just allowed permissions)"
                     isDownloading -> "Downloading…"
                     remote.notes.isNotBlank() -> remote.notes
                     else -> "Tap GET to download"
@@ -353,13 +354,13 @@ fun SettingsScreen(
 
         SectionLabel("Logging")
         Text(
-            text = "Real ELM connect auto-starts Dash value LOG until you tap STOP LOG. Sessions save as FB2-log-yyyyMMdd-HHmmss.csv (demo sessions: FB2-log-demo-…).",
+            text = "Real ELM connect auto-starts Dash value LOG until you tap STOP LOG. Sessions save as FB2-log-*.csv; AI reports as FB2-ai-*.txt. Copies also go to Downloads/FB2-Diag so they can be restored after reinstall.",
             color = TextMuted,
             fontSize = 12.sp,
             modifier = Modifier.padding(bottom = 8.dp),
         )
         NavRow("Debug log (raw ELM327)", nav.onDebug)
-        NavRow("Saved value logs (CSV)", nav.onValues)
+        NavRow("Saved logs & AI reports", nav.onValues)
 
         SectionLabel("Log upload")
         Text(

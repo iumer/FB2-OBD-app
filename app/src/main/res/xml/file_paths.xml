@@ -4,8 +4,10 @@
     <files-path name="value_logs" path="value_logs/" />
     <!-- Analyze-via-AI full reports -->
     <files-path name="ai_reports" path="ai_reports/" />
-    <!-- Downloaded in-app update APKs -->
-    <cache-path name="updates" path="updates/" />
+    <!-- Downloaded in-app update APKs (filesDir so cache wipe won't delete) -->
+    <files-path name="updates" path="updates/" />
+    <!-- Legacy cache location (older builds) -->
+    <cache-path name="updates_cache" path="updates/" />
     <!-- Temporary share copies (cache) -->
     <cache-path name="share_cache" path="share/" />
 </paths>

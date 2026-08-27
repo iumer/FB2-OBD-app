@@ -2,6 +2,7 @@ package com.fb2.obd
 
 import app.cash.paparazzi.Paparazzi
 import com.fb2.obd.data.ObdLogger
+import com.fb2.obd.data.SavedLogFile
 import com.fb2.obd.obd.Dtc
 import com.fb2.obd.obd.GearSource
 import com.fb2.obd.obd.VehicleSnapshot
@@ -46,6 +47,37 @@ class ScreensSnapshotTest {
                     onRefreshLogs = {},
                     onOpenSettings = {},
                     onBack = {},
+                )
+            }
+        }
+    }
+
+    @Test
+    fun valueLog_withAiReports_screen() {
+        val t = 1_700_000_000_000L
+        paparazzi.snapshot {
+            FB2Theme {
+                ValueLogScreen(
+                    rows = emptyList(),
+                    onShare = {},
+                    onClear = {},
+                    onBack = {},
+                    savedFiles = listOf(
+                        SavedLogFile(
+                            fileName = "FB2-log-20260827-194554.csv",
+                            absolutePath = "/tmp/FB2-log-20260827-194554.csv",
+                            startedMs = t,
+                            sizeBytes = 84_000,
+                        ),
+                    ),
+                    savedAiReports = listOf(
+                        com.fb2.obd.data.SavedAiReport(
+                            fileName = "FB2-ai-20260827-200000.txt",
+                            absolutePath = "/tmp/FB2-ai-20260827-200000.txt",
+                            createdMs = t + 60_000,
+                            sizeBytes = 12_000,
+                        ),
+                    ),
                 )
             }
         }
