@@ -12,11 +12,11 @@ android {
         applicationId = "com.fb2.obd"
         minSdk = 26
         targetSdk = 34
-        // Visible line: … → 0.1.38 credentials/AI notes → 0.1.39 durable logs + update APK retain + AI in Settings.
+        // Visible line: … → 0.1.39 durable logs → 0.1.40 Settings cleanup (Private keys, less chrome).
         // versionCode is an Android install counter only (must rise so this
         // APK can replace prior builds). Not shown in UI.
-        versionCode = 60
-        versionName = "0.1.39"
+        versionCode = 61
+        versionName = "0.1.40"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

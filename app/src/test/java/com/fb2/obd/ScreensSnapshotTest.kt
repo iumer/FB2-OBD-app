@@ -92,6 +92,7 @@ class ScreensSnapshotTest {
                     onToggleEstimatedGear = {},
                     onToggleVoiceAlerts = {},
                     onCheckSoundAlert = {},
+                    appVersionLabel = "v0.1.40",
                     nav = com.fb2.obd.ui.SettingsNav(),
                     onBack = {},
                 )
@@ -108,7 +109,7 @@ class ScreensSnapshotTest {
                     onToggleEstimatedGear = {},
                     onToggleVoiceAlerts = {},
                     onCheckSoundAlert = {},
-                    appVersionLabel = "v0.1.15 (15)",
+                    appVersionLabel = "v0.1.40",
                     updateStatusText = "5 updates available (v0.1.16 – v0.1.20)",
                     availableUpdates = listOf(
                         com.fb2.obd.obd.AppUpdateChecker.RemoteVersion(16, "0.1.16", notes = "OptA wheel"),

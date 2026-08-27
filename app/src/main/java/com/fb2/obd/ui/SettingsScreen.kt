@@ -15,8 +15,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.RadioButton
-import androidx.compose.material3.RadioButtonDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Switch
@@ -146,27 +144,13 @@ fun SettingsScreen(
             surface = palette.surface,
         )
 
-        Text(
-            text = "Classic: Dash swipe tabs. Opt themes: immersive cluster (☰ menu for Settings/DIAG/MIN/LOG). Faults/AI via DIAG.",
-            color = palette.textMuted,
-            fontSize = 12.sp,
-            modifier = Modifier.padding(bottom = 8.dp),
-        )
-
-        SectionLabel("App update")
-        Text(
-            text = if (appVersionLabel.isNotBlank()) {
-                "Installed: $appVersionLabel. Check lists every newer build; pick the one you want."
-            } else {
-                "Check lists every newer build on GitHub; pick the one you want to install."
-            },
-            color = TextMuted,
-            fontSize = 12.sp,
-            modifier = Modifier.padding(bottom = 8.dp),
-        )
         ActionRow(
             title = if (updateStatusText.isNotBlank()) updateStatusText else "Check for update",
-            subtitle = "Needs internet. Allow “install unknown apps” for FB2 Diag when prompted.",
+            subtitle = if (appVersionLabel.isNotBlank()) {
+                "Currently installed version is $appVersionLabel"
+            } else {
+                "Currently installed version unknown"
+            },
             actionLabel = if (updateBusy) "…" else "CHECK",
             onClick = { if (!updateBusy) onCheckForUpdate() },
         )
@@ -192,8 +176,7 @@ fun SettingsScreen(
                     if (remote.versionCode == latestCode) append("  ·  latest")
                 }
                 val subtitle = when {
-                    isReady && readyToInstallName != null ->
-                        "Downloaded — tap Install (kept if you just allowed permissions)"
+                    isReady -> "Downloaded — tap Install"
                     isDownloading -> "Downloading…"
                     remote.notes.isNotBlank() -> remote.notes
                     else -> "Tap GET to download"
@@ -213,37 +196,14 @@ fun SettingsScreen(
             }
         }
 
-        SectionLabel("Simulation")
-        Text(
-            text = "Simulated Dash when no ELM adapter is connected.",
-            color = TextMuted,
-            fontSize = 12.sp,
-            modifier = Modifier.padding(bottom = 8.dp),
+        ToggleRow(
+            title = "Simulation",
+            subtitle = "Simulated Dash when no ELM adapter is connected.",
+            checked = settings.allowDemo,
+            onCheckedChange = onToggleAllowDemo,
         )
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(24.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            SimulationOnOffOption(
-                label = "Off",
-                selected = !settings.allowDemo,
-                onSelect = { onToggleAllowDemo(false) },
-            )
-            SimulationOnOffOption(
-                label = "On",
-                selected = settings.allowDemo,
-                onSelect = { onToggleAllowDemo(true) },
-            )
-        }
 
         SectionLabel("Vehicle profile")
-        Text(
-            text = "FB2 keeps Honda Mode 22 / Transmission. Generic OBD2 is SAE-only for any OBD-II car.",
-            color = TextMuted,
-            fontSize = 12.sp,
-            modifier = Modifier.padding(bottom = 8.dp),
-        )
         SettingDropdown(
             label = settings.vehicleProfile.displayName,
             subtitle = settings.vehicleProfile.subtitle,
@@ -253,12 +213,6 @@ fun SettingsScreen(
         )
 
         SectionLabel("Theme")
-        Text(
-            text = "Classic keeps Idle/Perf tabs. OptA/B/C are full immersive looks (hamburger → Settings/DIAG/MIN/LOG).",
-            color = TextMuted,
-            fontSize = 12.sp,
-            modifier = Modifier.padding(bottom = 8.dp),
-        )
         SettingDropdown(
             label = settings.dashTheme.displayName,
             subtitle = settings.dashTheme.subtitle,
@@ -267,7 +221,6 @@ fun SettingsScreen(
             onSelectIndex = { onDashThemeChange(DashTheme.entries[it]) },
         )
 
-        SectionLabel("Gear")
         ToggleRow(
             title = "Show estimated gear",
             subtitle = if (settings.vehicleProfile.isGeneric) {
@@ -279,13 +232,12 @@ fun SettingsScreen(
             onCheckedChange = onToggleEstimatedGear,
         )
 
-        SectionLabel("Keep-alive (Torque-style)")
         ActionRow(
             title = "Unrestricted battery",
             subtitle = if (batteryUnrestricted) {
-                "Allowed already — ELM session can stay alive in the background."
+                "Allowed — background ELM session and logging can keep running."
             } else {
-                "Nakamichi / phone OEM killers stop logging when they reclaim RAM. Allow unrestricted battery so the ELM session + LOG survive Home / screen-off. Prompt also appears on live connect."
+                "Allow unrestricted battery so live ELM and logging keep running in the background."
             },
             actionLabel = KeepAlivePolicy.batteryExemptionActionLabel(batteryUnrestricted),
             onClick = { if (!batteryUnrestricted) onKeepAliveBattery() },
@@ -312,14 +264,9 @@ fun SettingsScreen(
             onClick = onCheckSoundAlert,
         )
 
-        SectionLabel("AI analysis")
-        Text(
-            text = "OpenAI API key for DIAGNOSTICS → Analyze via AI. ChatGPT Plus does not include API access — use platform.openai.com billing. Model: gpt-4o-mini (pay per use). Paste the key only here (never in chat/email — providers auto-revoke leaked keys). With Generic OBD2 profile selected, reports say generic SAE OBD-II — not Honda Civic FB2.",
-            color = TextMuted,
-            fontSize = 12.sp,
-            modifier = Modifier.padding(bottom = 8.dp),
-        )
+        SectionLabel("Private keys")
         var openAiDraft by remember(openAiApiKey) { mutableStateOf(openAiApiKey) }
+        var tokenDraft by remember(githubToken) { mutableStateOf(githubToken) }
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -327,7 +274,13 @@ fun SettingsScreen(
                 .background(MaterialTheme.colorScheme.surface)
                 .padding(14.dp),
         ) {
-            Text("OpenAI API key", color = TextPrimary, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+            Text("OpenAI key", color = TextPrimary, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+            Text(
+                text = "Used for DIAG → Analyze via AI (gpt-4o-mini). Paste from platform.openai.com.",
+                color = TextMuted,
+                fontSize = 12.sp,
+                modifier = Modifier.padding(top = 4.dp, bottom = 8.dp),
+            )
             BasicTextField(
                 value = openAiDraft,
                 onValueChange = {
@@ -339,7 +292,6 @@ fun SettingsScreen(
                 cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(top = 8.dp)
                     .clip(RoundedCornerShape(8.dp))
                     .background(MaterialTheme.colorScheme.background)
                     .padding(12.dp),
@@ -350,41 +302,20 @@ fun SettingsScreen(
                     inner()
                 },
             )
-        }
 
-        SectionLabel("Logging")
-        Text(
-            text = "Real ELM connect auto-starts Dash value LOG until you tap STOP LOG. Sessions save as FB2-log-*.csv; AI reports as FB2-ai-*.txt. Copies also go to Downloads/FB2-Diag so they can be restored after reinstall.",
-            color = TextMuted,
-            fontSize = 12.sp,
-            modifier = Modifier.padding(bottom = 8.dp),
-        )
-        NavRow("Debug log (raw ELM327)", nav.onDebug)
-        NavRow("Saved logs & AI reports", nav.onValues)
-
-        SectionLabel("Log upload")
-        Text(
-            text = if (uploadStatus.online) "Internet: online" else "Internet: offline",
-            color = if (uploadStatus.online) GoodGreen else WarnAmber,
-            fontSize = 12.sp,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(bottom = 6.dp),
-        )
-        Text(
-            text = "Paste a fine-grained GitHub PAT here (Contents: Read and write on ${LogUploadManager.DEFAULT_OWNER}/${LogUploadManager.DEFAULT_REPO}). The APK does not ship a live GitHub token — paste in Settings only. Uploads go to github.com/${LogUploadManager.DEFAULT_OWNER}/${LogUploadManager.DEFAULT_REPO}/${LogUploadManager.REMOTE_DIR}/ (branch ${LogUploadManager.DEFAULT_BRANCH}) and AI reports to …/${LogUploadManager.REMOTE_AI_DIR}/. Large logs are gzipped. If Upload fails, the HTTP reason is shown on this row.",
-            color = TextMuted,
-            fontSize = 12.sp,
-            modifier = Modifier.padding(bottom = 8.dp),
-        )
-        var tokenDraft by remember(githubToken) { mutableStateOf(githubToken) }
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(12.dp))
-                .background(MaterialTheme.colorScheme.surface)
-                .padding(14.dp),
-        ) {
-            Text("GitHub token", color = TextPrimary, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+            Text(
+                text = "GitHub key",
+                color = TextPrimary,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.padding(top = 16.dp),
+            )
+            Text(
+                text = "Fine-grained PAT with Contents: Read and write on this repo — uploads logs and AI reports.",
+                color = TextMuted,
+                fontSize = 12.sp,
+                modifier = Modifier.padding(top = 4.dp, bottom = 8.dp),
+            )
             BasicTextField(
                 value = tokenDraft,
                 onValueChange = {
@@ -396,22 +327,27 @@ fun SettingsScreen(
                 cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(top = 8.dp)
                     .clip(RoundedCornerShape(8.dp))
                     .background(MaterialTheme.colorScheme.background)
                     .padding(12.dp),
                 decorationBox = { inner ->
                     if (tokenDraft.isBlank()) {
-                        Text("ghp_… paste token", color = TextMuted, fontSize = 13.sp)
+                        Text("github_pat_… / ghp_… paste token", color = TextMuted, fontSize = 13.sp)
                     }
                     inner()
                 },
             )
         }
+
+        SectionLabel("Logging")
+        NavRow("Debug log (raw ELM327)", nav.onDebug)
+        NavRow("Saved logs & AI reports", nav.onValues)
+
         ActionRow(
             title = "Upload saved logs + AI reports",
             subtitle = buildString {
-                append("${uploadStatus.pendingCount} pending · ${uploadStatus.syncedCount} synced")
+                append(if (uploadStatus.online) "Online" else "Offline")
+                append(" · ${uploadStatus.pendingCount} pending · ${uploadStatus.syncedCount} synced")
                 if (uploadStatus.lastMessage.isNotBlank()) append(" · ${uploadStatus.lastMessage}")
             },
             actionLabel = if (uploadStatus.uploading) "…" else "UPLOAD",
@@ -558,6 +494,7 @@ private fun ToggleRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .padding(top = 8.dp, bottom = 8.dp)
             .clip(RoundedCornerShape(12.dp))
             .background(MaterialTheme.colorScheme.surface)
             .clickable { onCheckedChange(!checked) }
@@ -576,32 +513,6 @@ private fun ToggleRow(
                 checkedTrackColor = GoodGreen,
             ),
         )
-    }
-}
-
-@Composable
-private fun SimulationOnOffOption(
-    label: String,
-    selected: Boolean,
-    onSelect: () -> Unit,
-) {
-    val palette = LocalThemePalette.current
-    Row(
-        modifier = Modifier
-            .clip(RoundedCornerShape(8.dp))
-            .clickable(onClick = onSelect)
-            .padding(vertical = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        RadioButton(
-            selected = selected,
-            onClick = onSelect,
-            colors = RadioButtonDefaults.colors(
-                selectedColor = palette.accent,
-                unselectedColor = TextMuted,
-            ),
-        )
-        Text(label, color = TextPrimary, fontSize = 15.sp)
     }
 }
 
