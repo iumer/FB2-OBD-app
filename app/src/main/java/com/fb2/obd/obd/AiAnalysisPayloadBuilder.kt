@@ -12,6 +12,7 @@ object AiAnalysisPayloadBuilder {
     const val MAX_WINDOW_MINUTES = 15
     const val MAX_SNAPSHOT_ROWS = 150
     const val MAX_PAYLOAD_CHARS = 50_000
+    const val MAX_DRIVER_NOTES_CHARS = 2_000
 
     /** FB2 Civic system prompt (default). Prefer [systemPrompt] with the active profile. */
     val SYSTEM_PROMPT: String
@@ -142,6 +143,7 @@ Rules:
 - Prefer: "MAF stayed about X–Y g/s at Z rpm (expected …)" over repeating app alarm text.
 - Use event lines only as hints of when the driver was looking at the dashboard — not as diagnostic conclusions.
 - Do not list a vehicle concern when the only "evidence" is an app zone/event label.
+- CSV column maf_gps / Dash label MAF is SAE Mode 01 PID 0110 (mass air flow rate, g/s) decoded from the ECU reply. Many MAP-only cars still answer a calculated airflow on 0110 without a physical hot-wire MAF. Never claim a physical MAF sensor is fitted solely because 0110 returned a number; say "ECU reported PID 0110 airflow" unless the driver notes or VIN clearly state a MAF.
 
 CORE RULES
 
@@ -754,6 +756,7 @@ Before returning the reply, verify that:
         vin: String? = null,
         ecuName: String? = null,
         calibrationIds: List<String> = emptyList(),
+        driverNotes: String? = null,
     ): Payload {
         val requested = clampWindowMinutes(windowMinutes)
         val limitedNote = if (log.limited) {
@@ -809,6 +812,15 @@ Before returning the reply, verify that:
             append(demoNote)
             append(limitedNote)
             append(thinNote)
+            val notes = driverNotes?.trim().orEmpty().take(MAX_DRIVER_NOTES_CHARS)
+            if (notes.isNotEmpty()) {
+                appendLine()
+                appendLine("=== DRIVER NOTES (authoritative vehicle context for this request) ===")
+                appendLine(notes)
+                appendLine(
+                    "Treat the notes above as the driver's description of the car/engine. Prefer them over guessing make/model from SAE PIDs alone.",
+                )
+            }
             appendLine()
             appendLine("Reminders:")
             appendLine("- Reply with ===SCREEN_BRIEF=== then ===FULL_REPORT=== exactly as specified.")
@@ -821,6 +833,11 @@ Before returning the reply, verify that:
                 appendLine("- Vehicle section: unidentified OBD-II / generic SAE unless VIN/ECU name is listed above.")
             }
             appendLine("- Negative STFT → mild fuel correction, not proven “richness”.")
+            appendLine(
+                "- Column maf_gps / Dash MAF is SAE Mode 01 PID 0110 (g/s) as returned by the ECU — " +
+                    "many MAP-only cars still answer a calculated airflow on 0110. " +
+                    "A numeric MAF value does NOT prove a physical hot-wire MAF sensor is fitted.",
+            )
             if (isDemo) {
                 appendLine("- State clearly in Vehicle and session information that this is DEMO / simulated data.")
             }

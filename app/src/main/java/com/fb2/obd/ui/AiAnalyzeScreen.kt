@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
@@ -25,7 +26,9 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -58,6 +61,7 @@ fun AiAnalyzeScreen(
     onModeLive: (Boolean) -> Unit,
     onWindowMinutes: (Int) -> Unit,
     onSelectLog: (String?) -> Unit,
+    onDriverNotes: (String) -> Unit = {},
     onAnalyze: () -> Unit,
     onClearReport: () -> Unit,
     onRefreshLogs: () -> Unit,
@@ -231,6 +235,43 @@ fun AiAnalyzeScreen(
                 inactiveTrackColor = TextMuted.copy(alpha = 0.35f),
             ),
             modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
+        )
+
+        Text(
+            text = "Driver notes for this analysis",
+            color = TextPrimary,
+            fontSize = 14.sp,
+            fontWeight = FontWeight.SemiBold,
+        )
+        Text(
+            text = "Optional. Sent with the prompt (e.g. “Daihatsu Mira 2015, MAP-only, 6-injector FWD”). Max ${AiAnalysisPayloadBuilder.MAX_DRIVER_NOTES_CHARS} chars.",
+            color = TextMuted,
+            fontSize = 12.sp,
+            modifier = Modifier.padding(bottom = 4.dp),
+        )
+        BasicTextField(
+            value = state.driverNotes,
+            onValueChange = onDriverNotes,
+            enabled = !state.loading,
+            textStyle = TextStyle(color = TextPrimary, fontSize = 13.sp),
+            cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 88.dp)
+                .padding(bottom = 12.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(MaterialTheme.colorScheme.surface)
+                .padding(12.dp),
+            decorationBox = { inner ->
+                if (state.driverNotes.isBlank()) {
+                    Text(
+                        text = "Vehicle / engine context for the AI…",
+                        color = TextMuted,
+                        fontSize = 13.sp,
+                    )
+                }
+                inner()
+            },
         )
 
         if (state.modeLive) {

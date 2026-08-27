@@ -490,6 +490,7 @@ class MainActivity : ComponentActivity() {
                             onModeLive = viewModel::setAiAnalyzeModeLive,
                             onWindowMinutes = viewModel::setAiAnalyzeWindowMinutes,
                             onSelectLog = viewModel::setAiAnalyzeSelectedLog,
+                            onDriverNotes = viewModel::setAiAnalyzeDriverNotes,
                             onAnalyze = viewModel::runAiAnalysis,
                             onClearReport = viewModel::clearAiAnalyzeResult,
                             onRefreshLogs = viewModel::refreshSavedLogs,

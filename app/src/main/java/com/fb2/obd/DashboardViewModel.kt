@@ -128,6 +128,8 @@ data class AiAnalyzeUiState(
     val modeLive: Boolean = true,
     val windowMinutes: Int = AiAnalysisPayloadBuilder.DEFAULT_WINDOW_MINUTES,
     val selectedLogFileName: String? = null,
+    /** Optional driver notes merged into the OpenAI user message (car make/model, etc.). */
+    val driverNotes: String = "",
     val loading: Boolean = false,
     val reportText: String? = null,
     val savedReport: SavedAiReport? = null,
@@ -514,11 +516,13 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
         }
         voiceAlerter.duckMediaDuringAlerts = _settings.value.duckMediaDuringAlerts
         voiceAlerter.start()
-        // Sideload: bake OpenAI key from assets into prefs so APK updates refresh Settings.
+        // Sideload defaults: fill blank Settings only — never overwrite a pasted token.
         AppCredentialDefaults.applyPackagedCredentials(
-            app,
-            openAi = { key -> aiAnalysisStore.apiKey = key },
-            github = { pat -> if (logUploadManager.githubToken.isBlank()) logUploadManager.githubToken = pat },
+            context = app,
+            currentOpenAi = aiAnalysisStore.apiKey,
+            currentGithub = logUploadManager.githubToken,
+            setOpenAi = { key -> aiAnalysisStore.apiKey = key },
+            setGithub = { pat -> logUploadManager.githubToken = pat },
         )
         logUploadManager.start()
         autoUploadJob = viewModelScope.launch {
@@ -792,6 +796,15 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
         _aiAnalyze.update { it.copy(selectedLogFileName = fileName, error = null) }
     }
 
+    fun setAiAnalyzeDriverNotes(notes: String) {
+        _aiAnalyze.update {
+            it.copy(
+                driverNotes = notes.take(AiAnalysisPayloadBuilder.MAX_DRIVER_NOTES_CHARS),
+                error = null,
+            )
+        }
+    }
+
     fun clearAiAnalyzeResult() {
         _aiAnalyze.update {
             it.copy(
@@ -957,12 +970,18 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
                     vin = info.vin,
                     ecuName = info.ecuName,
                     calibrationIds = info.calibrationIds,
+                    driverNotes = st.driverNotes,
                 )
                 val result = openAiClient.complete(payload.systemPrompt, payload.userMessage)
                 val parsed = AiAnalysisPayloadBuilder.parseModelResponse(result.text)
                 val readingsAppendix = buildString {
                     if (isDemo) {
                         appendLine("NOTE: These readings are from DEMO (simulated), not a live ELM/vehicle connection.")
+                        appendLine()
+                    }
+                    if (st.driverNotes.isNotBlank()) {
+                        appendLine("--- Driver notes ---")
+                        appendLine(st.driverNotes.trim().take(AiAnalysisPayloadBuilder.MAX_DRIVER_NOTES_CHARS))
                         appendLine()
                     }
                     appendLine("--- Window metadata (app-computed) ---")
