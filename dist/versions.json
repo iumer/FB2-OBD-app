@@ -1,9 +1,9 @@
 {
   "latest": {
-    "versionCode": 60,
-    "versionName": "0.1.39",
+    "versionCode": 61,
+    "versionName": "0.1.40",
     "apkUrl": "https://raw.githubusercontent.com/iumer/FB2-OBD-app/latest/dist/FB2-Diag-debug.apk",
-    "notes": "Retain logs after reinstall; keep update APK after install permission; AI reports in Settings"
+    "notes": "Settings cleanup: Private keys, less chrome, Simulation matches gear toggle"
   },
   "releases": [
     {
@@ -155,6 +155,12 @@
       "versionName": "0.1.39",
       "apkUrl": "https://raw.githubusercontent.com/iumer/FB2-OBD-app/latest/dist/archive/FB2-Diag-0.1.39.apk",
       "notes": "Retain logs after reinstall; keep update APK after install permission; AI reports in Settings"
+    },
+    {
+      "versionCode": 61,
+      "versionName": "0.1.40",
+      "apkUrl": "https://raw.githubusercontent.com/iumer/FB2-OBD-app/latest/dist/archive/FB2-Diag-0.1.40.apk",
+      "notes": "Settings cleanup: Private keys, less chrome, Simulation matches gear toggle"
     }
   ]
 }
