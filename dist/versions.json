@@ -1,9 +1,9 @@
 {
   "latest": {
-    "versionCode": 59,
-    "versionName": "0.1.38",
+    "versionCode": 60,
+    "versionName": "0.1.39",
     "apkUrl": "https://raw.githubusercontent.com/iumer/FB2-OBD-app/latest/dist/FB2-Diag-debug.apk",
-    "notes": "Credentials fill blank only; AI driver notes; MAF=PID 0110 honesty; no key overwrite"
+    "notes": "Retain logs after reinstall; keep update APK after install permission; AI reports in Settings"
   },
   "releases": [
     {
@@ -149,6 +149,12 @@
       "versionName": "0.1.38",
       "apkUrl": "https://raw.githubusercontent.com/iumer/FB2-OBD-app/latest/dist/archive/FB2-Diag-0.1.38.apk",
       "notes": "Credentials fill blank only; AI driver notes; MAF=PID 0110 honesty; no key overwrite"
+    },
+    {
+      "versionCode": 60,
+      "versionName": "0.1.39",
+      "apkUrl": "https://raw.githubusercontent.com/iumer/FB2-OBD-app/latest/dist/archive/FB2-Diag-0.1.39.apk",
+      "notes": "Retain logs after reinstall; keep update APK after install permission; AI reports in Settings"
     }
   ]
 }
