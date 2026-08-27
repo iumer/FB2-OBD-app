@@ -313,7 +313,7 @@ fun SettingsScreen(
 
         SectionLabel("AI analysis")
         Text(
-            text = "OpenAI API key for DIAGNOSTICS → Analyze via AI. ChatGPT Plus does not include API access — use platform.openai.com billing. Model: gpt-4o-mini (pay per use).",
+            text = "OpenAI API key for DIAGNOSTICS → Analyze via AI. ChatGPT Plus does not include API access — use platform.openai.com billing. Model: gpt-4o-mini (pay per use). With Generic OBD2 profile selected, reports say generic SAE OBD-II — not Honda Civic FB2.",
             color = TextMuted,
             fontSize = 12.sp,
             modifier = Modifier.padding(bottom = 8.dp),

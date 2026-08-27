@@ -480,18 +480,36 @@ class MainActivity : ComponentActivity() {
                     Screen.AI_ANALYZE -> {
                         val aiState by viewModel.aiAnalyze.collectAsState()
                         val logs by viewModel.savedLogs.collectAsState()
+                        val aiReports by viewModel.savedAiReports.collectAsState()
                         AiAnalyzeScreen(
                             state = aiState,
                             savedLogs = logs,
+                            savedAiReports = aiReports,
                             hasApiKey = viewModel.openAiApiKey().isNotBlank(),
+                            vehicleProfile = settings.vehicleProfile,
                             onModeLive = viewModel::setAiAnalyzeModeLive,
                             onWindowMinutes = viewModel::setAiAnalyzeWindowMinutes,
                             onSelectLog = viewModel::setAiAnalyzeSelectedLog,
                             onAnalyze = viewModel::runAiAnalysis,
                             onClearReport = viewModel::clearAiAnalyzeResult,
                             onRefreshLogs = viewModel::refreshSavedLogs,
+                            onRefreshAiReports = viewModel::refreshSavedAiReports,
+                            onOpenAiReport = viewModel::openAiReport,
+                            onCloseAiReport = viewModel::closeAiReportViewer,
+                            onShareAiReport = { name ->
+                                viewModel.aiReportFile(name)?.let { file ->
+                                    shareOrExportFile(file, name, "text/plain", subject = name)
+                                } ?: toast("Report file missing")
+                            },
+                            onDeleteAiReport = viewModel::deleteAiReport,
                             onOpenSettings = { screen = Screen.SETTINGS },
-                            onBack = { screen = Screen.DIAG_HUB },
+                            onBack = {
+                                if (aiState.viewingReportText != null) {
+                                    viewModel.closeAiReportViewer()
+                                } else {
+                                    screen = Screen.DIAG_HUB
+                                }
+                            },
                             modifier = Modifier.fillMaxSize(),
                             liveSourceIsDemo = !state.sourceIsLive,
                         )
@@ -574,7 +592,12 @@ class MainActivity : ComponentActivity() {
                                     } else {
                                         "FB2-Diag-current.csv"
                                     },
-                                    ObdLogger.valuesCsv(isDemo = loggingDemo || !state.sourceIsLive),
+                                    ObdLogger.valuesCsv(
+                                        isDemo = loggingDemo || !state.sourceIsLive,
+                                        vehicleProfileId = settings.vehicleProfile.id,
+                                        vehicleLabel = com.fb2.obd.obd.AiAnalysisPayloadBuilder
+                                            .reportVehicleLabel(settings.vehicleProfile),
+                                    ),
                                 )
                             },
                             onClear = { ObdLogger.clearValues(); tick++ },

@@ -10,6 +10,7 @@ import com.fb2.obd.car.VehicleLiveStore
 import com.fb2.obd.data.AiAnalysisErrors
 import com.fb2.obd.data.AiAnalysisStore
 import com.fb2.obd.data.AiReportStore
+import com.fb2.obd.data.AppCredentialDefaults
 import com.fb2.obd.data.ConnectionState
 import com.fb2.obd.data.DashExtraPidStore
 import com.fb2.obd.data.DashTileOverrideStore
@@ -130,6 +131,9 @@ data class AiAnalyzeUiState(
     val loading: Boolean = false,
     val reportText: String? = null,
     val savedReport: SavedAiReport? = null,
+    /** Full `.txt` body when the user opens a saved AI report in-app. */
+    val viewingReportText: String? = null,
+    val viewingReportName: String? = null,
     val error: String? = null,
     val limitedData: Boolean = false,
 )
@@ -510,6 +514,12 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
         }
         voiceAlerter.duckMediaDuringAlerts = _settings.value.duckMediaDuringAlerts
         voiceAlerter.start()
+        // Sideload: bake OpenAI key from assets into prefs so APK updates refresh Settings.
+        AppCredentialDefaults.applyPackagedCredentials(
+            app,
+            openAi = { key -> aiAnalysisStore.apiKey = key },
+            github = { pat -> if (logUploadManager.githubToken.isBlank()) logUploadManager.githubToken = pat },
+        )
         logUploadManager.start()
         autoUploadJob = viewModelScope.launch {
             var lastAttemptMs = 0L
@@ -522,7 +532,8 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
                     now - lastAttemptMs > 30_000L
                 ) {
                     lastAttemptMs = now
-                    logUploadManager.uploadPending(skipFileName = null)
+                    val skip = activeCheckpointPath?.let { File(it).name }
+                    logUploadManager.uploadPending(skipFileName = skip)
                 }
             }
         }
@@ -697,7 +708,7 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
             activeCheckpointPath = null
             return null
         }
-        val csv = ObdLogger.valuesCsv(isDemo = isDemo)
+        val csv = sessionCsv(isDemo = isDemo)
         val started = if (sessionStartedMs > 0L) sessionStartedMs else System.currentTimeMillis()
         val path = activeCheckpointPath
         val saved = if (path != null) {
@@ -722,13 +733,21 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
         }
         viewModelScope.launch {
             if (logUploadManager.githubToken.isNotBlank() && logUploadManager.isOnline()) {
-                logUploadManager.uploadPending()
+                logUploadManager.uploadPending(skipFileName = null)
             } else {
                 logUploadManager.refreshCounts()
             }
         }
         return saved
     }
+
+    /** Lean Dash CSV with active vehicle-profile header for AI / humans. */
+    private fun sessionCsv(isDemo: Boolean): String =
+        ObdLogger.valuesCsv(
+            isDemo = isDemo,
+            vehicleProfileId = vehicleProfile.id,
+            vehicleLabel = AiAnalysisPayloadBuilder.reportVehicleLabel(vehicleProfile),
+        )
 
     /** Flush in-memory LOG buffer to the session CSV (every ~60s, or [force]). */
     private fun checkpointLogToDisk(force: Boolean) {
@@ -739,7 +758,7 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
         lastCheckpointMs = now
         val isDemo = sessionLoggingIsDemo
         runCatching {
-            val csv = ObdLogger.valuesCsv(isDemo = isDemo)
+            val csv = sessionCsv(isDemo = isDemo)
             sessionLogStore.writeCheckpoint(path, csv)
             ObdLogger.logDebug(ObdLogger.Dir.INFO, "VALUE LOG checkpoint ${csv.length} chars")
         }.onFailure {
@@ -774,11 +793,65 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun clearAiAnalyzeResult() {
-        _aiAnalyze.update { it.copy(reportText = null, savedReport = null, error = null, limitedData = false) }
+        _aiAnalyze.update {
+            it.copy(
+                reportText = null,
+                savedReport = null,
+                viewingReportText = null,
+                viewingReportName = null,
+                error = null,
+                limitedData = false,
+            )
+        }
     }
 
     fun refreshSavedAiReports() {
         _savedAiReports.value = aiReportStore.list()
+    }
+
+    fun openAiReport(fileName: String) {
+        val text = aiReportStore.read(fileName)
+        if (text.isNullOrBlank()) {
+            _aiAnalyze.update { it.copy(error = "Could not open $fileName") }
+            return
+        }
+        _aiAnalyze.update {
+            it.copy(
+                viewingReportName = fileName,
+                viewingReportText = text,
+                error = null,
+            )
+        }
+    }
+
+    fun closeAiReportViewer() {
+        _aiAnalyze.update {
+            it.copy(viewingReportName = null, viewingReportText = null)
+        }
+    }
+
+    fun deleteAiReport(fileName: String) {
+        aiReportStore.delete(fileName)
+        _savedAiReports.value = aiReportStore.list()
+        logUploadManager.refreshCounts(skipFileName = activeCheckpointPath?.let { File(it).name })
+        _aiAnalyze.update { st ->
+            if (st.viewingReportName.equals(fileName, true) ||
+                st.savedReport?.fileName.equals(fileName, true)
+            ) {
+                st.copy(
+                    viewingReportName = null,
+                    viewingReportText = null,
+                    savedReport = st.savedReport?.takeUnless { it.fileName.equals(fileName, true) },
+                )
+            } else {
+                st
+            }
+        }
+    }
+
+    fun aiReportFile(fileName: String): File? {
+        val f = File(File(getApplication<Application>().filesDir, "ai_reports"), fileName)
+        return f.takeIf { it.isFile }
     }
 
     /**
@@ -856,6 +929,22 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
                 } else {
                     st.selectedLogFileName?.contains("demo", ignoreCase = true) == true
                 }
+                // History: prefer profile stamped into the CSV; live uses Settings.
+                val profile = if (!st.modeLive) {
+                    val csv = sessionLogStore.read(st.selectedLogFileName.orEmpty()).orEmpty()
+                    AiAnalysisPayloadBuilder.parseVehicleProfileFromCsv(csv) ?: vehicleProfile
+                } else {
+                    vehicleProfile
+                }
+                if (currentSource != null &&
+                    _vehicleInfo.value.vin.isNullOrBlank() &&
+                    _vehicleInfo.value.ecuName.isNullOrBlank()
+                ) {
+                    runCatching { currentSource!!.readVehicleInfo() }.getOrNull()?.let {
+                        _vehicleInfo.value = it
+                    }
+                }
+                val info = _vehicleInfo.value
                 val payload = AiAnalysisPayloadBuilder.buildUserMessage(
                     sourceLabel = sourceLabel,
                     windowMinutes = minutes,
@@ -864,11 +953,10 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
                     dtcText = dtcText,
                     log = truncated,
                     isDemo = isDemo,
-                    vehicleLabel = when (vehicleProfile) {
-                        VehicleProfile.FB2 -> "Honda Civic FB2"
-                        VehicleProfile.GENERIC_OBD2 -> "generic OBD-II vehicle"
-                    },
-                    includeHondaEldHint = vehicleProfile.isFb2,
+                    profile = profile,
+                    vin = info.vin,
+                    ecuName = info.ecuName,
+                    calibrationIds = info.calibrationIds,
                 )
                 val result = openAiClient.complete(payload.systemPrompt, payload.userMessage)
                 val parsed = AiAnalysisPayloadBuilder.parseModelResponse(result.text)
@@ -878,6 +966,8 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
                         appendLine()
                     }
                     appendLine("--- Window metadata (app-computed) ---")
+                    appendLine("vehicle_profile=${profile.id}")
+                    appendLine("vehicle=${payload.vehicleLabel}")
                     appendLine("requested_window_minutes=${payload.windowMinutes}")
                     appendLine("actual_window_seconds=${payload.actualDurationSeconds}")
                     payload.firstTimestampMs?.let {
@@ -921,6 +1011,7 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
                     },
                     snapshotRows = payload.sampleCount,
                     uniqueTimestamps = payload.uniqueTimestampCount,
+                    vehicleLabel = payload.vehicleLabel,
                 )
                 val screenText = buildString {
                     append(parsed.screenBrief.trim())
@@ -928,9 +1019,11 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
                     appendLine()
                     appendLine("Full report saved to:")
                     appendLine(saved.fileName)
+                    appendLine()
+                    appendLine("Tap OPEN FULL below to read it in the app.")
                 }
                 _savedAiReports.value = aiReportStore.list()
-                logUploadManager.refreshCounts()
+                logUploadManager.refreshCounts(skipFileName = activeCheckpointPath?.let { File(it).name })
                 _aiAnalyze.update {
                     it.copy(
                         loading = false,
@@ -942,7 +1035,9 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
                 }
                 // Best-effort sync when online (same as value logs).
                 if (logUploadManager.isOnline() && logUploadManager.githubToken.isNotBlank()) {
-                    logUploadManager.uploadPending()
+                    logUploadManager.uploadPending(
+                        skipFileName = activeCheckpointPath?.let { File(it).name },
+                    )
                 }
             } catch (e: Exception) {
                 _aiAnalyze.update {
@@ -957,7 +1052,8 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
 
     fun uploadSavedLogs() {
         viewModelScope.launch {
-            logUploadManager.uploadPending()
+            val skip = activeCheckpointPath?.let { File(it).name }
+            logUploadManager.uploadPending(skipFileName = skip)
         }
     }
 

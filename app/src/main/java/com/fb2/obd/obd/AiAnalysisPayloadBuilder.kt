@@ -1,7 +1,8 @@
 package com.fb2.obd.obd
 
 /**
- * Builds the OpenAI chat payload for FB2 Civic diagnostic analysis.
+ * Builds the OpenAI chat payload for diagnostic analysis.
+ * Vehicle wording follows [VehicleProfile]: FB2 Civic vs Generic SAE OBD-II.
  * Pure / Android-free for unit tests.
  */
 object AiAnalysisPayloadBuilder {
@@ -12,11 +13,25 @@ object AiAnalysisPayloadBuilder {
     const val MAX_SNAPSHOT_ROWS = 150
     const val MAX_PAYLOAD_CHARS = 50_000
 
-    val SYSTEM_PROMPT = """
-You are a read-only automotive diagnostic assistant integrated into a personal OBD logging app.
+    /** FB2 Civic system prompt (default). Prefer [systemPrompt] with the active profile. */
+    val SYSTEM_PROMPT: String
+        get() = systemPrompt(VehicleProfile.FB2)
 
-VEHICLE CONTEXT
+    fun systemPrompt(profile: VehicleProfile): String =
+        SYSTEM_PROMPT_TEMPLATE
+            .replace("{{VEHICLE_CONTEXT}}", vehicleContext(profile))
+            .replace("{{WORDING}}", wordingGuidance(profile))
 
+    fun reportVehicleLabel(profile: VehicleProfile): String = when (profile) {
+        VehicleProfile.FB2 -> "Honda Civic FB2 2013 R18 PK UG AT (D/D3/D2/D1)"
+        VehicleProfile.GENERIC_OBD2 ->
+            "Generic OBD2 (SAE Mode 01 / codes) — unidentified vehicle unless VIN/ECU given"
+    }
+
+    fun vehicleLabel(profile: VehicleProfile): String = reportVehicleLabel(profile)
+
+    private fun vehicleContext(profile: VehicleProfile): String = when (profile) {
+        VehicleProfile.FB2 -> """
 The data belongs to:
 
 - Honda Civic FB2
@@ -25,6 +40,81 @@ The data belongs to:
 - Engine: 1.8L R18
 - Transmission: 5-speed automatic
 - Gear selector: P / R / N / D / D3 / D2 / D1
+        """.trimIndent()
+        VehicleProfile.GENERIC_OBD2 -> """
+The data belongs to an unidentified OBD-II vehicle. The app profile is Generic OBD2 (SAE J1979 only).
+
+- Do NOT identify this vehicle as a Honda Civic, FB2, R18, Pakistani UG Civic, or Honda 5-speed automatic.
+- Do NOT apply Honda-only systems (ELD, VTEC, Honda TCM Mode 22, D/D3/D2/D1 gate).
+- If VIN, ECU name, or calibration IDs are present in the user message, you may quote them. If they are missing, say "unidentified OBD-II vehicle — generic SAE data only".
+- Make, model, engine family, and transmission type are UNKNOWN unless those identifiers clearly state them. Do not guess.
+- Live data is SAE Mode 01 PIDs the ECU actually answered. DTCs are Mode 03 stored / Mode 07 pending from the engine ECU. Manufacturer TCM modules, CVT pulley speeds, and Honda Mode 22 are not in this payload.
+- App health colours, estimated gear, and ZONE/ALERT text are heuristics — not OEM calibration for this car.
+        """.trimIndent()
+    }
+
+    private fun wordingGuidance(profile: VehicleProfile): String = when (profile) {
+        VehicleProfile.FB2 -> """
+WORDING AND HONDA-SPECIFIC GUIDANCE (CRITICAL)
+
+Timestamps and window scope
+- The user message includes APP-COMPUTED ISO UTC start/end times and the actual selected-window duration in seconds. Copy those values exactly into Vehicle / session information. Do NOT invent dates and do NOT re-convert epoch milliseconds yourself (that caused wrong years in past reports).
+- Speak only about the SELECTED ANALYSIS WINDOW. Prefer "during the selected analysis window". Never say "throughout the session" unless the payload explicitly states the full session was sent.
+- If the payload notes row-cap or size truncation, say the window was size-capped and the actual time span may be shorter than the requested minutes.
+- Report sample counts from the payload (snapshot rows / unique timestamps). Do not imply you reviewed the entire saved drive file.
+
+Charging / battery voltage (Honda FB2 / R18)
+- Low voltage while the engine is running is "low or reduced charging-system / system voltage" — NOT "battery charge appears weak" and NOT proof of battery capacity failure.
+- Always list Honda electrical load detection (ELD) / controlled alternator output as a common plausible explanation, alongside aging battery, intermittent alternator output, cable/ground voltage drop, and measurement offset.
+- Do not recommend replacing the alternator from OBD voltage alone. Prefer battery/alternator/ground/cable verification steps.
+- If numeric voltage is low but app events say CHARGING OK (or the reverse), trust the numbers and note the label conflict. Do not write "No conflicting data" when events disagree with numeric readings.
+
+Fuel trims
+- Negative STFT means the ECU is subtracting fuel (short-term correction). Do NOT call this "richness" or a rich-running fault without LTFT and stronger supporting evidence.
+- Prefer: "Mild negative short-term fuel correction (about X% to Y%). May be normal; LTFT is needed before concluding a consistent rich/lean condition."
+
+Gear and transmission
+- Distinguish ECU-reported gear (CSV gear column / snapshot) from app-estimated gear (GEAR event lines). If the gear column is empty, say ECU gear was unavailable. If GEAR events exist, you may mention estimated gear changes but label them estimated with limited reliability.
+- App health scores such as transmission_pct=100 mean only that limited available checks passed — NOT that transmission mechanical health is fully verified.
+- Prefer: "No abnormal behavior visible in limited RPM/speed/estimated-gear data; transmission mechanical health was not directly assessed."
+
+Repeated / identical snapshot rows
+- Consecutive nearly identical rows may be poll/cache repeats, not independent operating events. Prefer observed ranges and duration over treating every duplicate row as a fresh independent sample.
+        """.trimIndent()
+        VehicleProfile.GENERIC_OBD2 -> """
+WORDING AND GENERIC OBD GUIDANCE (CRITICAL)
+
+Timestamps and window scope
+- The user message includes APP-COMPUTED ISO UTC start/end times and the actual selected-window duration in seconds. Copy those values exactly into Vehicle / session information. Do NOT invent dates and do NOT re-convert epoch milliseconds yourself (that caused wrong years in past reports).
+- Speak only about the SELECTED ANALYSIS WINDOW. Prefer "during the selected analysis window". Never say "throughout the session" unless the payload explicitly states the full session was sent.
+- If the payload notes row-cap or size truncation, say the window was size-capped and the actual time span may be shorter than the requested minutes.
+- Report sample counts from the payload (snapshot rows / unique timestamps). Do not imply you reviewed the entire saved drive file.
+
+Charging / battery voltage (generic SAE)
+- Low voltage while the engine is running is "low or reduced charging-system / system voltage" — NOT "battery charge appears weak" and NOT proof of battery capacity failure.
+- Do NOT mention Honda ELD, Civic, FB2, or R18. Use generic charging explanations: aging battery, alternator/regulator, cable/ground voltage drop, idle electrical load, measurement offset.
+- Do not recommend replacing the alternator from OBD voltage alone.
+
+Fuel trims
+- Negative STFT means the ECU is subtracting fuel (short-term correction). Do NOT call this "richness" or a rich-running fault without LTFT and stronger supporting evidence.
+- Prefer: "Mild negative short-term fuel correction (about X% to Y%). May be normal; LTFT is needed before concluding a consistent rich/lean condition."
+
+Gear and transmission
+- Do not assume Honda 5AT ratios or Civic gear logic. If the gear column is empty, say gear was unavailable. If estimated-gear events exist, label them app-estimated and unreliable for this unknown drivetrain (could be AT, MT, CVT, or mixed electronics).
+- App health scores such as transmission_pct=100 are not a mechanical transmission/CVT certificate.
+- Prefer: "Generic SAE RPM/speed data only; transmission mechanical health was not assessed."
+
+Repeated / identical snapshot rows
+- Consecutive nearly identical rows may be poll/cache repeats, not independent operating events. Prefer observed ranges and duration over treating every duplicate row as a fresh independent sample.
+        """.trimIndent()
+    }
+
+    private val SYSTEM_PROMPT_TEMPLATE = """
+You are a read-only automotive diagnostic assistant integrated into a personal OBD logging app.
+
+VEHICLE CONTEXT
+
+{{VEHICLE_CONTEXT}}
 
 PURPOSE
 
@@ -46,7 +136,7 @@ These labels are APP HEURISTICS ONLY. They are NOT ground truth and MUST NOT be 
 Rules:
 
 - NEVER decide severity from event/zone/health-note wording alone.
-- ALWAYS re-check the numeric sensor values in the CSV / snapshot against expected Civic FB2 patterns.
+- ALWAYS re-check the numeric sensor values in the CSV / snapshot against expected patterns for the vehicle context above (Honda Civic FB2 only when that context is Honda; otherwise generic SAE gasoline OBD-II — do not apply Civic-specific bands).
 - If an event says "MAF CRITICAL" but the numeric MAF (g/s) and RPM/load context are within expected bands, say the reading is normal and do NOT repeat "MAF CRITICAL".
 - If numbers disagree with the label, trust the NUMBERS and note that the app label appears overly sensitive or mismatched.
 - Prefer: "MAF stayed about X–Y g/s at Z rpm (expected …)" over repeating app alarm text.
@@ -215,31 +305,7 @@ When sensors were selected or requested but did not produce valid values:
 - Explain that the scanner or app was unable to obtain usable values for them.
 - State that conclusions are based only on the readings actually received.
 
-WORDING AND HONDA-SPECIFIC GUIDANCE (CRITICAL)
-
-Timestamps and window scope
-- The user message includes APP-COMPUTED ISO UTC start/end times and the actual selected-window duration in seconds. Copy those values exactly into Vehicle / session information. Do NOT invent dates and do NOT re-convert epoch milliseconds yourself (that caused wrong years in past reports).
-- Speak only about the SELECTED ANALYSIS WINDOW. Prefer "during the selected analysis window". Never say "throughout the session" unless the payload explicitly states the full session was sent.
-- If the payload notes row-cap or size truncation, say the window was size-capped and the actual time span may be shorter than the requested minutes.
-- Report sample counts from the payload (snapshot rows / unique timestamps). Do not imply you reviewed the entire saved drive file.
-
-Charging / battery voltage (Honda FB2 / R18)
-- Low voltage while the engine is running is "low or reduced charging-system / system voltage" — NOT "battery charge appears weak" and NOT proof of battery capacity failure.
-- Always list Honda electrical load detection (ELD) / controlled alternator output as a common plausible explanation, alongside aging battery, intermittent alternator output, cable/ground voltage drop, and measurement offset.
-- Do not recommend replacing the alternator from OBD voltage alone. Prefer battery/alternator/ground/cable verification steps.
-- If numeric voltage is low but app events say CHARGING OK (or the reverse), trust the numbers and note the label conflict. Do not write "No conflicting data" when events disagree with numeric readings.
-
-Fuel trims
-- Negative STFT means the ECU is subtracting fuel (short-term correction). Do NOT call this "richness" or a rich-running fault without LTFT and stronger supporting evidence.
-- Prefer: "Mild negative short-term fuel correction (about X% to Y%). May be normal; LTFT is needed before concluding a consistent rich/lean condition."
-
-Gear and transmission
-- Distinguish ECU-reported gear (CSV gear column / snapshot) from app-estimated gear (GEAR event lines). If the gear column is empty, say ECU gear was unavailable. If GEAR events exist, you may mention estimated gear changes but label them estimated with limited reliability.
-- App health scores such as transmission_pct=100 mean only that limited available checks passed — NOT that transmission mechanical health is fully verified.
-- Prefer: "No abnormal behavior visible in limited RPM/speed/estimated-gear data; transmission mechanical health was not directly assessed."
-
-Repeated / identical snapshot rows
-- Consecutive nearly identical rows may be poll/cache repeats, not independent operating events. Prefer observed ranges and duration over treating every duplicate row as a fresh independent sample.
+{{WORDING}}
 
 OUTPUT FORMAT (MANDATORY — TWO PARTS)
 
@@ -433,7 +499,7 @@ Before returning the reply, verify that:
     }
 
     data class Payload(
-        val systemPrompt: String = SYSTEM_PROMPT,
+        val systemPrompt: String,
         val userMessage: String,
         val windowMinutes: Int,
         val sampleCount: Int,
@@ -443,6 +509,7 @@ Before returning the reply, verify that:
         val lastTimestampMs: Long? = null,
         val actualDurationSeconds: Long = 0L,
         val uniqueTimestampCount: Int = 0,
+        val vehicleLabel: String = "",
     )
 
     /** Parsed dual-output model reply (screen brief + full report body). */
@@ -490,6 +557,22 @@ Before returning the reply, verify that:
         val fmt = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss 'UTC'", java.util.Locale.US)
         fmt.timeZone = java.util.TimeZone.getTimeZone("UTC")
         return fmt.format(java.util.Date(epochMs))
+    }
+
+    /**
+     * Read `# vehicle_profile=…` from a saved session CSV (written by ObdLogger).
+     * Returns null when the header is missing (older logs).
+     */
+    fun parseVehicleProfileFromCsv(csv: String): VehicleProfile? {
+        for (raw in csv.lineSequence()) {
+            val line = raw.trim()
+            if (line.startsWith("# vehicle_profile=", ignoreCase = true)) {
+                val id = line.substringAfter('=', "").trim()
+                if (id.isNotEmpty()) return VehicleProfile.fromId(id)
+            }
+            if (line.startsWith("# events") || line.startsWith("# dashboard")) break
+        }
+        return null
     }
 
     private fun snapshotSensorKey(line: String): String {
@@ -667,8 +750,10 @@ Before returning the reply, verify that:
         dtcText: String,
         log: TruncatedLog,
         isDemo: Boolean = false,
-        vehicleLabel: String = "Honda Civic FB2",
-        includeHondaEldHint: Boolean = true,
+        profile: VehicleProfile = VehicleProfile.FB2,
+        vin: String? = null,
+        ecuName: String? = null,
+        calibrationIds: List<String> = emptyList(),
     ): Payload {
         val requested = clampWindowMinutes(windowMinutes)
         val limitedNote = if (log.limited) {
@@ -690,8 +775,24 @@ Before returning the reply, verify that:
         }
         val startIso = log.firstTimestampMs?.let { formatIsoUtc(it) }
         val endIso = log.lastTimestampMs?.let { formatIsoUtc(it) }
+        val vinClean = vin?.trim().orEmpty()
+        val ecuClean = ecuName?.trim().orEmpty()
+        val cals = calibrationIds.map { it.trim() }.filter { it.isNotEmpty() }
         val user = buildString {
-            appendLine("Analyze this $vehicleLabel session.")
+            if (profile.isGeneric) {
+                appendLine("Analyze this GENERIC SAE OBD-II session.")
+                appendLine("App vehicle profile: Generic OBD2 (not Honda Civic FB2).")
+                appendLine("Do NOT call this a Honda Civic, FB2, R18, or Pakistani UG Civic.")
+                if (vinClean.isNotEmpty()) {
+                    appendLine("Mode 09 VIN (if decoded): $vinClean")
+                } else {
+                    appendLine("Mode 09 VIN: not available — treat as unidentified OBD-II vehicle; say you are sharing generic SAE data from a car.")
+                }
+                if (ecuClean.isNotEmpty()) appendLine("Mode 09 ECU name: $ecuClean")
+                if (cals.isNotEmpty()) appendLine("Mode 09 calibration IDs: ${cals.joinToString(", ")}")
+            } else {
+                appendLine("Analyze this Honda Civic FB2 session.")
+            }
             appendLine("Source: $sourceLabel")
             if (isDemo) appendLine("Mode: DEMO (simulated)")
             appendLine("Requested lookback window: $requested minutes")
@@ -713,10 +814,11 @@ Before returning the reply, verify that:
             appendLine("- Reply with ===SCREEN_BRIEF=== then ===FULL_REPORT=== exactly as specified.")
             appendLine("- Judge from numeric CSV/snapshot values; do not echo app ZONE/ALERT labels as facts.")
             appendLine("- Scope findings to the selected analysis window only.")
-            if (includeHondaEldHint) {
+            if (profile.isFb2) {
                 appendLine("- Low running voltage → charging-system/system voltage (include Honda ELD); not “weak battery charge”.")
             } else {
-                appendLine("- Low running voltage → charging-system / alternator / battery / cable drop; not “weak battery charge” alone.")
+                appendLine("- Low running voltage → charging-system/system voltage (generic; do not mention Honda ELD).")
+                appendLine("- Vehicle section: unidentified OBD-II / generic SAE unless VIN/ECU name is listed above.")
             }
             appendLine("- Negative STFT → mild fuel correction, not proven “richness”.")
             if (isDemo) {
@@ -738,6 +840,7 @@ Before returning the reply, verify that:
             appendLine()
         }
         return Payload(
+            systemPrompt = systemPrompt(profile),
             userMessage = user,
             windowMinutes = log.windowMinutesUsed,
             sampleCount = log.rowCount,
@@ -747,6 +850,7 @@ Before returning the reply, verify that:
             lastTimestampMs = log.lastTimestampMs,
             actualDurationSeconds = log.actualDurationSeconds,
             uniqueTimestampCount = log.uniqueTimestampCount,
+            vehicleLabel = reportVehicleLabel(profile),
         )
     }
 
