@@ -114,6 +114,9 @@ Keep these fixed. If a change might touch one of these areas, re-verify it.
 | I90 | Settings Simulation still two verbose tiles | Fixed | One short line + **Off / On** radio row (no card, no subtitles) |
 | I91 | Picker scan blanks Dash / Readable shrinks; reconnect restores PIDs | Fixed | Torque-style: Mode 01 only (skip Mode 22 + bitmask burst), one PID then yield 350/700 ms; never store probe misses; **Refresh** re-probes |
 | I92 | Settings Upload said Failed 1 with no reason | Fixed | Show GitHub HTTP detail; gzip large CSVs; 5 min PUT timeout; PUT `main` `logs/car-uploads/` |
+| I93 | Generic profile AI/logs still said Honda Civic FB2 | Fixed | Profile-aware system prompt + CSV `# vehicle_profile=` / `# vehicle=`; history Analyze reads CSV stamp |
+| I94 | Full AI report filename shown but not openable in-app | Fixed | Analyze → OPEN FULL + Saved AI reports list (Open/Share/Del) |
+| I95 | Log upload stays pending forever | Fixed | Skip empty/active checkpoint; count only real files; packaged OpenAI key refresh |
 
 When the user reports a **new** bug, add a new `Ixx` row here (Status: Open → Fixed)
 and add a matching automated or manual check in sections 2–3.

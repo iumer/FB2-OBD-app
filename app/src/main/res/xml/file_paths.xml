@@ -2,6 +2,8 @@
 <paths>
     <!-- Saved session CSVs under app files/value_logs -->
     <files-path name="value_logs" path="value_logs/" />
+    <!-- Analyze-via-AI full reports -->
+    <files-path name="ai_reports" path="ai_reports/" />
     <!-- Downloaded in-app update APKs -->
     <cache-path name="updates" path="updates/" />
     <!-- Temporary share copies (cache) -->

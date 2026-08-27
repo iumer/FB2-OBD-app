@@ -104,9 +104,15 @@ class LogUploadManager(
         refreshCounts()
     }
 
-    fun refreshCounts() {
-        val files = sessionLogStore.list()
-        val aiFiles = aiReportStore?.list().orEmpty()
+    fun refreshCounts(skipFileName: String? = null) {
+        val files = sessionLogStore.list().filter { saved ->
+            if (skipFileName != null && saved.fileName.equals(skipFileName, true)) return@filter false
+            // Empty / in-progress checkpoint stubs are not uploadable yet.
+            File(saved.absolutePath).length() > 32L
+        }
+        val aiFiles = aiReportStore?.list().orEmpty().filter {
+            File(it.absolutePath).length() > 32L
+        }
         val syncedLogs = files.count { isSynced(it.fileName, File(it.absolutePath)) }
         val syncedAi = aiFiles.count { isSynced(it.fileName, File(it.absolutePath)) }
         val total = files.size + aiFiles.size
@@ -190,6 +196,9 @@ class LogUploadManager(
     ): FileResult {
         if (!file.isFile) {
             return FileResult(fileName, FileResult.Outcome.FAILED, "missing file")
+        }
+        if (file.length() <= 32L) {
+            return FileResult(fileName, FileResult.Outcome.SKIPPED_ACTIVE, "empty / in-progress")
         }
         val sha = sha256Hex(file) ?: return FileResult(fileName, FileResult.Outcome.FAILED, "hash")
         if (prefs.getString(syncKey(fileName), null) == sha) {

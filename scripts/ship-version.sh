@@ -32,6 +32,7 @@ notes = {
     "0.1.34": "Picker Readable latch: no MAP/Coolant/any PID flicker off green",
     "0.1.35": "Settings Simulation: short line + Off/On radios only",
     "0.1.36": "Picker Refresh + Torque-style one-PID scan; log upload shows GitHub error",
+    "0.1.37": "Generic AI/logs labeling; open AI reports in-app; upload pending fixes",
 }.get(vn, catalog["latest"].get("notes", ""))
 catalog["latest"] = {
     "versionCode": vc,

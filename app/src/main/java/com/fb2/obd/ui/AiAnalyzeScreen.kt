@@ -30,11 +30,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.fb2.obd.AiAnalyzeUiState
+import com.fb2.obd.data.SavedAiReport
 import com.fb2.obd.data.SavedLogFile
 import com.fb2.obd.obd.AiAnalysisPayloadBuilder
+import com.fb2.obd.obd.VehicleProfile
 import com.fb2.obd.ui.theme.Accent
 import com.fb2.obd.ui.theme.Background
 import com.fb2.obd.ui.theme.CritRed
+import com.fb2.obd.ui.theme.GoodGreen
 import com.fb2.obd.ui.theme.Surface
 import com.fb2.obd.ui.theme.TextMuted
 import com.fb2.obd.ui.theme.TextPrimary
@@ -49,13 +52,20 @@ import kotlin.math.roundToInt
 fun AiAnalyzeScreen(
     state: AiAnalyzeUiState,
     savedLogs: List<SavedLogFile>,
+    savedAiReports: List<SavedAiReport> = emptyList(),
     hasApiKey: Boolean,
+    vehicleProfile: VehicleProfile = VehicleProfile.DEFAULT,
     onModeLive: (Boolean) -> Unit,
     onWindowMinutes: (Int) -> Unit,
     onSelectLog: (String?) -> Unit,
     onAnalyze: () -> Unit,
     onClearReport: () -> Unit,
     onRefreshLogs: () -> Unit,
+    onRefreshAiReports: () -> Unit = {},
+    onOpenAiReport: (String) -> Unit = {},
+    onCloseAiReport: () -> Unit = {},
+    onShareAiReport: (String) -> Unit = {},
+    onDeleteAiReport: (String) -> Unit = {},
     onOpenSettings: () -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
@@ -63,7 +73,70 @@ fun AiAnalyzeScreen(
     liveSourceIsDemo: Boolean = false,
 ) {
     val context = LocalContext.current
-    LaunchedEffect(Unit) { onRefreshLogs() }
+    LaunchedEffect(Unit) {
+        onRefreshLogs()
+        onRefreshAiReports()
+    }
+
+    // Full-report viewer takes over the screen when open.
+    val viewing = state.viewingReportText
+    if (viewing != null) {
+        Column(
+            modifier = modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background)
+                .padding(16.dp),
+        ) {
+            ScreenHeader(
+                title = state.viewingReportName ?: "AI report",
+                onBack = onCloseAiReport,
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text(
+                    text = "COPY",
+                    color = MaterialTheme.colorScheme.primary,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable {
+                            val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                            cm.setPrimaryClip(ClipData.newPlainText("FB2 AI full report", viewing))
+                        }
+                        .background(MaterialTheme.colorScheme.surface)
+                        .padding(horizontal = 12.dp, vertical = 6.dp),
+                )
+                state.viewingReportName?.let { name ->
+                    Text(
+                        text = "SHARE",
+                        color = MaterialTheme.colorScheme.primary,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable { onShareAiReport(name) }
+                            .background(MaterialTheme.colorScheme.surface)
+                            .padding(horizontal = 12.dp, vertical = 6.dp),
+                    )
+                }
+            }
+            Text(
+                text = viewing,
+                color = TextPrimary,
+                fontSize = 12.sp,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(MaterialTheme.colorScheme.surface)
+                    .padding(14.dp),
+            )
+        }
+        return
+    }
 
     Column(
         modifier = modifier
@@ -74,7 +147,12 @@ fun AiAnalyzeScreen(
     ) {
         ScreenHeader(title = "Analyze via AI", onBack = onBack)
         Text(
-            text = "One-shot OpenAI report for your FB2 Civic. Read-only — no chat thread. Report is saved as .txt and uploads with GitHub log sync.",
+            text = when (vehicleProfile) {
+                VehicleProfile.FB2 ->
+                    "One-shot OpenAI report for Honda Civic FB2. Read-only — no chat. Full .txt is saved and listed below; uploads with GitHub log sync."
+                VehicleProfile.GENERIC_OBD2 ->
+                    "One-shot OpenAI report for Generic OBD2 (any SAE OBD-II car). Do not expect Honda FB2 wording. Full .txt is saved and listed below."
+            },
             color = TextMuted,
             fontSize = 12.sp,
             modifier = Modifier.padding(bottom = 12.dp),
@@ -329,12 +407,106 @@ fun AiAnalyzeScreen(
                     .background(MaterialTheme.colorScheme.surface)
                     .padding(14.dp),
             )
+            state.savedReport?.let { saved ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 10.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Text(
+                        text = "OPEN FULL",
+                        color = MaterialTheme.colorScheme.background,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(MaterialTheme.colorScheme.primary)
+                            .clickable { onOpenAiReport(saved.fileName) }
+                            .padding(horizontal = 14.dp, vertical = 10.dp),
+                    )
+                    Text(
+                        text = "SHARE",
+                        color = MaterialTheme.colorScheme.primary,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(MaterialTheme.colorScheme.surface)
+                            .clickable { onShareAiReport(saved.fileName) }
+                            .padding(horizontal = 14.dp, vertical = 10.dp),
+                    )
+                }
+            }
             Text(
-                text = "Tip: scroll down in the report for the readings table. COPY includes AI findings + values.",
+                text = "Tip: OPEN FULL shows the complete .txt in the app (findings + readings table).",
                 color = TextMuted,
                 fontSize = 11.sp,
                 modifier = Modifier.padding(top = 8.dp),
             )
+        }
+
+        if (savedAiReports.isNotEmpty()) {
+            Text(
+                text = "Saved AI reports",
+                color = TextPrimary,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(top = 18.dp, bottom = 8.dp),
+            )
+            savedAiReports.take(20).forEach { rep ->
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 8.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(MaterialTheme.colorScheme.surface)
+                        .padding(12.dp),
+                ) {
+                    Text(rep.fileName, color = TextPrimary, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                    Text(
+                        text = "${rep.sizeBytes / 1024} KB",
+                        color = TextMuted,
+                        fontSize = 11.sp,
+                        modifier = Modifier.padding(top = 2.dp, bottom = 8.dp),
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(
+                            text = "OPEN",
+                            color = GoodGreen,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .clickable { onOpenAiReport(rep.fileName) }
+                                .background(MaterialTheme.colorScheme.background)
+                                .padding(horizontal = 10.dp, vertical = 6.dp),
+                        )
+                        Text(
+                            text = "SHARE",
+                            color = MaterialTheme.colorScheme.primary,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .clickable { onShareAiReport(rep.fileName) }
+                                .background(MaterialTheme.colorScheme.background)
+                                .padding(horizontal = 10.dp, vertical = 6.dp),
+                        )
+                        Text(
+                            text = "DEL",
+                            color = CritRed,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .clickable { onDeleteAiReport(rep.fileName) }
+                                .background(MaterialTheme.colorScheme.background)
+                                .padding(horizontal = 10.dp, vertical = 6.dp),
+                        )
+                    }
+                }
+            }
         }
     }
 }
