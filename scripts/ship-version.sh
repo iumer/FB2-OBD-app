@@ -34,6 +34,7 @@ notes = {
     "0.1.36": "Picker Refresh + Torque-style one-PID scan; log upload shows GitHub error",
     "0.1.37": "Generic AI/logs labeling; open AI reports in-app; upload pending fixes",
     "0.1.38": "Credentials fill blank only; AI driver notes; MAF=PID 0110 honesty; no key overwrite",
+    "0.1.39": "Retain logs after reinstall; keep update APK after install permission; AI reports in Settings",
 }.get(vn, catalog["latest"].get("notes", ""))
 catalog["latest"] = {
     "versionCode": vc,

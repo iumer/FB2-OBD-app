@@ -126,26 +126,34 @@ class MainActivity : ComponentActivity() {
                 val dashExtraValues by viewModel.dashExtraValues.collectAsState()
                 val dashTileOverrides by viewModel.dashTileOverrides.collectAsState()
                 val savedLogs by viewModel.savedLogs.collectAsState()
+                val savedAiReports by viewModel.savedAiReports.collectAsState()
                 val uploadStatus by viewModel.uploadStatus.collectAsState()
                 val pickerScan by viewModel.pickerScan.collectAsState()
                 val deepFoundValues by viewModel.deepFoundValues.collectAsState()
                 val healthThresholds by viewModel.healthThresholds.collectAsState()
 
+                val appUpdateManager = remember { AppUpdateManager(applicationContext) }
+                val appUpdateUi by appUpdateManager.state.collectAsState()
+                val updateScope = rememberCoroutineScope()
+
                 var batteryUnrestricted by remember { mutableStateOf(isBatteryUnrestricted()) }
                 val lifecycleOwner = LocalLifecycleOwner.current
-                DisposableEffect(lifecycleOwner) {
+                DisposableEffect(lifecycleOwner, appUpdateManager) {
                     val observer = LifecycleEventObserver { _, event ->
                         if (event == Lifecycle.Event.ON_RESUME) {
                             batteryUnrestricted = isBatteryUnrestricted()
+                            // Keep INSTALL after "Allow unknown apps" without re-downloading.
+                            appUpdateManager.restorePendingInstallIfAny()
                         }
                     }
                     lifecycleOwner.lifecycle.addObserver(observer)
                     onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
                 }
+                LaunchedEffect(Unit) {
+                    appUpdateManager.restorePendingInstallIfAny()
+                    viewModel.refreshSavedLogs()
+                }
 
-                val appUpdateManager = remember { AppUpdateManager(applicationContext) }
-                val appUpdateUi by appUpdateManager.state.collectAsState()
-                val updateScope = rememberCoroutineScope()
                 val updateBusy = appUpdateUi is AppUpdateManager.UiState.Checking ||
                     appUpdateUi is AppUpdateManager.UiState.Downloading
                 val updateStatusText = when (val s = appUpdateUi) {
@@ -161,7 +169,8 @@ class MainActivity : ComponentActivity() {
                     is AppUpdateManager.UiState.Downloading ->
                         "Downloading v${s.remote.versionName}… ${s.percent}%"
                     is AppUpdateManager.UiState.ReadyToInstall ->
-                        "Ready to install v${s.remote.versionName}"
+                        s.permissionHint
+                            ?: "Ready to install v${s.remote.versionName} — tap Install"
                     is AppUpdateManager.UiState.Error -> s.message
                 }
                 val availableUpdates = when (val s = appUpdateUi) {
@@ -605,6 +614,7 @@ class MainActivity : ComponentActivity() {
                             onBack = { screen = Screen.SETTINGS },
                             modifier = Modifier.fillMaxSize(),
                             savedFiles = savedLogs,
+                            savedAiReports = savedAiReports,
                             loggingActive = settings.valueLogging,
                             sourceIsDemo = !state.sourceIsLive,
                             onShareFile = { file ->
@@ -613,6 +623,20 @@ class MainActivity : ComponentActivity() {
                             onDeleteFile = { file ->
                                 viewModel.deleteSavedLog(file.fileName)
                                 toast("Deleted ${file.fileName}")
+                                tick++
+                            },
+                            onOpenAiReport = { rep ->
+                                viewModel.openAiReport(rep.fileName)
+                                screen = Screen.AI_ANALYZE
+                            },
+                            onShareAiReport = { rep ->
+                                viewModel.aiReportFile(rep.fileName)?.let { file ->
+                                    shareOrExportFile(file, rep.fileName, "text/plain", subject = rep.fileName)
+                                } ?: toast("Report file missing")
+                            },
+                            onDeleteAiReport = { rep ->
+                                viewModel.deleteAiReport(rep.fileName)
+                                toast("Deleted ${rep.fileName}")
                                 tick++
                             },
                             uploadEnabled = !uploadStatus.uploading,

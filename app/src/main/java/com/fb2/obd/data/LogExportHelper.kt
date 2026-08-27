@@ -128,6 +128,24 @@ object LogExportHelper {
         )
     }
 
+    /**
+     * Lightweight durable copy under app Documents/exports only (no MediaStore).
+     * Used on LOG checkpoints so a mid-drive reinstall still has a recoverable file.
+     */
+    fun mirrorToAppExports(context: Context, source: File, displayName: String): File? {
+        if (!source.isFile) return null
+        val safeName = displayName.replace(Regex("[^A-Za-z0-9._-]+"), "_").ifBlank { "fb2-log" }
+        return runCatching {
+            val dir = File(
+                context.getExternalFilesDir(Environment.DIRECTORY_DOCUMENTS),
+                "exports",
+            ).also { it.mkdirs() }
+            val dest = File(dir, safeName)
+            source.copyTo(dest, overwrite = true)
+            dest
+        }.getOrNull()
+    }
+
     /** Best-effort open in the unit's Files / Downloads UI. */
     fun openInFileManager(context: Context, result: ExportResult, mime: String): Boolean {
         val uri = result.mediaStoreUri ?: return false

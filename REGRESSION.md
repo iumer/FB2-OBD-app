@@ -120,6 +120,9 @@ Keep these fixed. If a change might touch one of these areas, re-verify it.
 | I96 | Fresh install missing GitHub token / APK overwrote OpenAI key | Fixed | Packaged secrets fill **blank** Settings only — never overwrite user paste |
 | I97 | Want custom command box on Analyze (Live + History) | Fixed | Driver notes field → `=== DRIVER NOTES ===` in OpenAI user message (max 2000) |
 | I98 | MAF logged on MAP-only car felt like invented data | Fixed | Document + AI prompt: Dash MAF = SAE PID `0110` ECU reply (often calculated airflow), not proof of a physical MAF |
+| I99 | Logs vanish after HU uninstall/reinstall update | Fixed | Checkpoint mirrors to Documents/exports; `DurableLogArchive` re-imports FB2-log/FB2-ai from Downloads/exports on refresh |
+| I100 | Update GET → allow installs → must download again | Fixed | APK in `filesDir/updates/` + prefs; ReadyToInstall kept on permission deny; restore on resume |
+| I101 | AI reports only on DIAG Analyze, not Settings logs | Fixed | Settings → Saved logs & AI reports lists AI with Open/Save/Del; Upload still syncs both |
 
 When the user reports a **new** bug, add a new `Ixx` row here (Status: Open → Fixed)
 and add a matching automated or manual check in sections 2–3.
