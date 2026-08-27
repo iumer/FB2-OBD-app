@@ -2,6 +2,7 @@ package com.fb2.obd
 
 import com.fb2.obd.obd.AiAnalysisPayloadBuilder
 import com.fb2.obd.obd.HealthScore
+import com.fb2.obd.obd.VehicleProfile
 import com.fb2.obd.obd.VehicleSnapshot
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -36,6 +37,38 @@ class AiAnalysisPayloadBuilderTest {
         assertTrue(p.contains("WORDING AND HONDA-SPECIFIC GUIDANCE"))
         assertTrue(p.contains("ELD") || p.contains("electrical load detection"))
         assertTrue(p.contains("selected analysis window"))
+        assertFalse(p.contains("{{VEHICLE_CONTEXT}}"))
+        assertFalse(p.contains("{{WORDING}}"))
+    }
+
+    @Test
+    fun systemPrompt_genericDoesNotClaimCivicFb2() {
+        val p = AiAnalysisPayloadBuilder.systemPrompt(VehicleProfile.GENERIC_OBD2)
+        assertTrue(p.contains("Generic OBD2") || p.contains("unidentified OBD-II"))
+        assertTrue(p.contains("Do NOT identify this vehicle as a Honda Civic"))
+        assertFalse(p.contains("Pakistani UG variant"))
+        assertFalse(p.contains("WORDING AND HONDA-SPECIFIC GUIDANCE"))
+        assertTrue(p.contains("WORDING AND GENERIC OBD GUIDANCE"))
+        assertTrue(p.contains("do not mention Honda ELD") || p.contains("Do NOT mention Honda ELD"))
+    }
+
+    @Test
+    fun parseVehicleProfileFromCsv_readsHeader() {
+        val csv = """
+            # fb2_session_log
+            # vehicle_profile=generic_obd2
+            # vehicle=Generic OBD2 (SAE Mode 01 / codes)
+            # events
+            time_ms,category,message
+        """.trimIndent()
+        assertEquals(
+            VehicleProfile.GENERIC_OBD2,
+            AiAnalysisPayloadBuilder.parseVehicleProfileFromCsv(csv),
+        )
+        assertEquals(
+            null,
+            AiAnalysisPayloadBuilder.parseVehicleProfileFromCsv("# fb2_session_log\n# events\n"),
+        )
     }
 
     @Test
@@ -154,7 +187,53 @@ class AiAnalysisPayloadBuilderTest {
         assertTrue(payload.userMessage.contains("Selected window start (UTC, app-computed): 2026-"))
         assertTrue(payload.userMessage.contains("Do not invent or re-convert"))
         assertTrue(payload.userMessage.contains("Honda ELD") || payload.userMessage.contains("ELD"))
+        assertTrue(payload.userMessage.contains("Honda Civic FB2"))
+        assertTrue(payload.systemPrompt.contains("Civic FB2"))
         assertEquals(60L, payload.actualDurationSeconds)
+    }
+
+    @Test
+    fun buildUserMessage_genericOmitsCivicAndIncludesVinOrUnknown() {
+        val truncated = AiAnalysisPayloadBuilder.TruncatedLog(
+            csvText = "# dashboard_snapshots\n1000,800,0,90,,,,,,,,,,,,,,\n",
+            rowCount = 2,
+            eventCount = 0,
+            limited = false,
+            windowMinutesUsed = 1,
+            firstTimestampMs = 1_785_182_650_255L,
+            lastTimestampMs = 1_785_182_710_255L,
+            uniqueTimestampCount = 2,
+        )
+        val noVin = AiAnalysisPayloadBuilder.buildUserMessage(
+            sourceLabel = "live_window_1min",
+            windowMinutes = 1,
+            snapshotText = "rpm=900",
+            healthText = "(none)",
+            dtcText = "(none)",
+            log = truncated,
+            profile = VehicleProfile.GENERIC_OBD2,
+        )
+        assertTrue(noVin.userMessage.contains("GENERIC SAE OBD-II"))
+        assertTrue(noVin.userMessage.contains("sharing generic SAE data from a car"))
+        assertFalse(noVin.userMessage.contains("Analyze this Honda Civic FB2"))
+        assertFalse(noVin.userMessage.contains("include Honda ELD"))
+        assertTrue(noVin.systemPrompt.contains("Do NOT identify this vehicle as a Honda Civic"))
+        assertTrue(noVin.vehicleLabel.contains("Generic OBD2"))
+
+        val withVin = AiAnalysisPayloadBuilder.buildUserMessage(
+            sourceLabel = "live_window_1min",
+            windowMinutes = 1,
+            snapshotText = "rpm=900",
+            healthText = "(none)",
+            dtcText = "(none)",
+            log = truncated,
+            profile = VehicleProfile.GENERIC_OBD2,
+            vin = "JDAXXXMIRA123",
+            ecuName = "ECM",
+        )
+        assertTrue(withVin.userMessage.contains("JDAXXXMIRA123"))
+        assertTrue(withVin.userMessage.contains("ECM"))
+        assertFalse(withVin.userMessage.contains("VIN: not available"))
     }
 
     @Test
@@ -210,6 +289,81 @@ class AiAnalysisPayloadBuilderTest {
         )
         assertTrue(payload.userMessage.contains("DEMO mode"))
         assertTrue(payload.userMessage.contains("simulated"))
+    }
+
+    @Test
+    fun buildUserMessage_includesDriverNotesWhenProvided() {
+        val truncated = AiAnalysisPayloadBuilder.TruncatedLog(
+            csvText = "# dashboard_snapshots\n1000,800,0,90,,,,,,,,,,,,,,\n",
+            rowCount = 10,
+            eventCount = 0,
+            limited = false,
+            windowMinutesUsed = 5,
+            firstTimestampMs = 1_785_182_650_255L,
+            lastTimestampMs = 1_785_182_710_255L,
+            uniqueTimestampCount = 10,
+        )
+        val payload = AiAnalysisPayloadBuilder.buildUserMessage(
+            sourceLabel = "live_window_5min",
+            windowMinutes = 5,
+            snapshotText = "rpm=800",
+            healthText = "(none)",
+            dtcText = "(none)",
+            log = truncated,
+            profile = VehicleProfile.GENERIC_OBD2,
+            driverNotes = "Daihatsu Mira 2015 MAP-only 6-injector FWD — no physical MAF.",
+        )
+        assertTrue(payload.userMessage.contains("=== DRIVER NOTES"))
+        assertTrue(payload.userMessage.contains("Daihatsu Mira 2015"))
+        assertTrue(payload.userMessage.contains("authoritative vehicle context"))
+        assertTrue(payload.userMessage.contains("does NOT prove a physical hot-wire MAF"))
+        assertTrue(payload.systemPrompt.contains("PID 0110"))
+    }
+
+    @Test
+    fun buildUserMessage_omitsDriverNotesWhenBlank() {
+        val truncated = AiAnalysisPayloadBuilder.TruncatedLog(
+            csvText = "# dashboard_snapshots\n1000,800,0,90,,,,,,,,,,,,,,\n",
+            rowCount = 10,
+            eventCount = 0,
+            limited = false,
+            windowMinutesUsed = 5,
+        )
+        val payload = AiAnalysisPayloadBuilder.buildUserMessage(
+            sourceLabel = "live_window_5min",
+            windowMinutes = 5,
+            snapshotText = "rpm=800",
+            healthText = "(none)",
+            dtcText = "(none)",
+            log = truncated,
+            driverNotes = "   ",
+        )
+        assertFalse(payload.userMessage.contains("=== DRIVER NOTES"))
+    }
+
+    @Test
+    fun buildUserMessage_clampsDriverNotesLength() {
+        val truncated = AiAnalysisPayloadBuilder.TruncatedLog(
+            csvText = "# dashboard_snapshots\n1000,800,0,90,,,,,,,,,,,,,,\n",
+            rowCount = 10,
+            eventCount = 0,
+            limited = false,
+            windowMinutesUsed = 5,
+        )
+        val longNotes = "x".repeat(AiAnalysisPayloadBuilder.MAX_DRIVER_NOTES_CHARS + 500)
+        val payload = AiAnalysisPayloadBuilder.buildUserMessage(
+            sourceLabel = "live_window_5min",
+            windowMinutes = 5,
+            snapshotText = "rpm=800",
+            healthText = "(none)",
+            dtcText = "(none)",
+            log = truncated,
+            driverNotes = longNotes,
+        )
+        val marker = "=== DRIVER NOTES (authoritative vehicle context for this request) ===\n"
+        val after = payload.userMessage.substringAfter(marker)
+        val notesBody = after.substringBefore("\nTreat the notes")
+        assertEquals(AiAnalysisPayloadBuilder.MAX_DRIVER_NOTES_CHARS, notesBody.length)
     }
 
     @Test

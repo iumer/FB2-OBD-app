@@ -114,6 +114,17 @@ Keep these fixed. If a change might touch one of these areas, re-verify it.
 | I90 | Settings Simulation still two verbose tiles | Fixed | One short line + **Off / On** radio row (no card, no subtitles) |
 | I91 | Picker scan blanks Dash / Readable shrinks; reconnect restores PIDs | Fixed | Torque-style: Mode 01 only (skip Mode 22 + bitmask burst), one PID then yield 350/700 ms; never store probe misses; **Refresh** re-probes |
 | I92 | Settings Upload said Failed 1 with no reason | Fixed | Show GitHub HTTP detail; gzip large CSVs; 5 min PUT timeout; PUT `main` `logs/car-uploads/` |
+| I93 | Generic profile AI/logs still said Honda Civic FB2 | Fixed | Profile-aware system prompt + CSV `# vehicle_profile=` / `# vehicle=`; history Analyze reads CSV stamp |
+| I94 | Full AI report filename shown but not openable in-app | Fixed | Analyze → OPEN FULL + Saved AI reports list (Open/Share/Del) |
+| I95 | Log upload stays pending forever | Fixed | Skip empty/active checkpoint; count only real files; packaged OpenAI key refresh |
+| I96 | Fresh install missing GitHub token / APK overwrote OpenAI key | Fixed | Packaged secrets fill **blank** Settings only — never overwrite user paste |
+| I97 | Want custom command box on Analyze (Live + History) | Fixed | Driver notes field → `=== DRIVER NOTES ===` in OpenAI user message (max 2000) |
+| I98 | MAF logged on MAP-only car felt like invented data | Fixed | Document + AI prompt: Dash MAF = SAE PID `0110` ECU reply (often calculated airflow), not proof of a physical MAF |
+| I99 | Logs vanish after HU uninstall/reinstall update | Fixed | Checkpoint mirrors to Documents/exports; `DurableLogArchive` re-imports FB2-log/FB2-ai from Downloads/exports on refresh |
+| I100 | Update GET → allow installs → must download again | Fixed | APK in `filesDir/updates/` + prefs; ReadyToInstall kept on permission deny; restore on resume |
+| I101 | AI reports only on DIAG Analyze, not Settings logs | Fixed | Settings → Saved logs & AI reports lists AI with Open/Save/Del; Upload still syncs both |
+| I102 | Settings screen too much chrome / long blurbs | Fixed | Trimmed blurbs; Simulation = ToggleRow; Private keys (OpenAI+GitHub); Upload kept without Log upload section |
+| I103 | Settings categories mixed (gear/battery under Theme) | Fixed | Regroup: Vehicle / Appearance / Background·power / Alerts / Private keys / Logging — all prior options kept |
 
 When the user reports a **new** bug, add a new `Ixx` row here (Status: Open → Fixed)
 and add a matching automated or manual check in sections 2–3.

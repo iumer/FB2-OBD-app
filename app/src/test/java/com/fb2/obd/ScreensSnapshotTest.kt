@@ -2,18 +2,21 @@ package com.fb2.obd
 
 import app.cash.paparazzi.Paparazzi
 import com.fb2.obd.data.ObdLogger
+import com.fb2.obd.data.SavedLogFile
 import com.fb2.obd.obd.Dtc
 import com.fb2.obd.obd.GearSource
 import com.fb2.obd.obd.VehicleSnapshot
 import com.fb2.obd.perf.AccelResult
 import com.fb2.obd.obd.PidProbeResult
 import com.fb2.obd.obd.StandardPidCatalog
+import com.fb2.obd.ui.AiAnalyzeScreen
 import com.fb2.obd.ui.DebugLogScreen
 import com.fb2.obd.ui.FaultsScreen
 import com.fb2.obd.ui.PerformanceScreen
 import com.fb2.obd.ui.SettingsScreen
 import com.fb2.obd.ui.ValueLogScreen
 import com.fb2.obd.ui.theme.FB2Theme
+import com.fb2.obd.obd.VehicleProfile
 import org.junit.Rule
 import org.junit.Test
 
@@ -21,6 +24,64 @@ class ScreensSnapshotTest {
 
     @get:Rule
     val paparazzi = Paparazzi(deviceConfig = CarHuDevices.HU_1024x600)
+
+    @Test
+    fun aiAnalyze_driverNotes_screen() {
+        paparazzi.snapshot {
+            FB2Theme {
+                AiAnalyzeScreen(
+                    state = AiAnalyzeUiState(
+                        modeLive = true,
+                        windowMinutes = 5,
+                        driverNotes = "Daihatsu Mira 2015 MAP-only 6-injector FWD — no physical MAF.",
+                    ),
+                    savedLogs = emptyList(),
+                    hasApiKey = true,
+                    vehicleProfile = VehicleProfile.GENERIC_OBD2,
+                    onModeLive = {},
+                    onWindowMinutes = {},
+                    onSelectLog = {},
+                    onDriverNotes = {},
+                    onAnalyze = {},
+                    onClearReport = {},
+                    onRefreshLogs = {},
+                    onOpenSettings = {},
+                    onBack = {},
+                )
+            }
+        }
+    }
+
+    @Test
+    fun valueLog_withAiReports_screen() {
+        val t = 1_700_000_000_000L
+        paparazzi.snapshot {
+            FB2Theme {
+                ValueLogScreen(
+                    rows = emptyList(),
+                    onShare = {},
+                    onClear = {},
+                    onBack = {},
+                    savedFiles = listOf(
+                        SavedLogFile(
+                            fileName = "FB2-log-20260827-194554.csv",
+                            absolutePath = "/tmp/FB2-log-20260827-194554.csv",
+                            startedMs = t,
+                            sizeBytes = 84_000,
+                        ),
+                    ),
+                    savedAiReports = listOf(
+                        com.fb2.obd.data.SavedAiReport(
+                            fileName = "FB2-ai-20260827-200000.txt",
+                            absolutePath = "/tmp/FB2-ai-20260827-200000.txt",
+                            createdMs = t + 60_000,
+                            sizeBytes = 12_000,
+                        ),
+                    ),
+                )
+            }
+        }
+    }
 
     @Test
     fun settings_screen() {
@@ -31,6 +92,7 @@ class ScreensSnapshotTest {
                     onToggleEstimatedGear = {},
                     onToggleVoiceAlerts = {},
                     onCheckSoundAlert = {},
+                    appVersionLabel = "v0.1.41",
                     nav = com.fb2.obd.ui.SettingsNav(),
                     onBack = {},
                 )
@@ -47,7 +109,7 @@ class ScreensSnapshotTest {
                     onToggleEstimatedGear = {},
                     onToggleVoiceAlerts = {},
                     onCheckSoundAlert = {},
-                    appVersionLabel = "v0.1.15 (15)",
+                    appVersionLabel = "v0.1.41",
                     updateStatusText = "5 updates available (v0.1.16 – v0.1.20)",
                     availableUpdates = listOf(
                         com.fb2.obd.obd.AppUpdateChecker.RemoteVersion(16, "0.1.16", notes = "OptA wheel"),

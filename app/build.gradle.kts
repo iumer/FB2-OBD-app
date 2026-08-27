@@ -12,11 +12,11 @@ android {
         applicationId = "com.fb2.obd"
         minSdk = 26
         targetSdk = 34
-        // Visible line: … → 0.1.22 deep-search heroes-live + blink LEDs → 0.1.23 Classic hero scrolls with Dash.
+        // Visible line: … → 0.1.40 Settings cleanup → 0.1.41 Settings category regroup.
         // versionCode is an Android install counter only (must rise so this
-        // APK can replace the mis-named 0.1.36/0.1.37 builds). Not shown in UI.
-        versionCode = 57
-        versionName = "0.1.36"
+        // APK can replace prior builds). Not shown in UI.
+        versionCode = 62
+        versionName = "0.1.41"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

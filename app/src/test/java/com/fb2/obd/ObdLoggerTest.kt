@@ -68,6 +68,20 @@ class ObdLoggerTest {
     }
 
     @Test
+    fun csv_includesVehicleProfileHeader() {
+        ObdLogger.valueLoggingEnabled = true
+        ObdLogger.logSnapshot(VehicleSnapshot(rpm = 800.0))
+        val csv = ObdLogger.valuesCsv(
+            isDemo = false,
+            vehicleProfileId = "generic_obd2",
+            vehicleLabel = "Generic OBD2 (SAE Mode 01 / codes) — unidentified vehicle unless VIN/ECU given",
+        )
+        assertTrue(csv.contains("# vehicle_profile=generic_obd2"))
+        assertTrue(csv.contains("# vehicle=Generic OBD2"))
+        assertFalse(csv.contains("Honda Civic FB2"))
+    }
+
+    @Test
     fun probeLog_alwaysRecordsEvenWithoutValueToggle() {
         val pid = com.fb2.obd.obd.StandardPidCatalog.byId("010C")!!
         ObdLogger.logProbe(
