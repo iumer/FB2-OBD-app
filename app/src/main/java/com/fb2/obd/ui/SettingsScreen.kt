@@ -313,7 +313,7 @@ fun SettingsScreen(
 
         SectionLabel("AI analysis")
         Text(
-            text = "OpenAI API key for DIAGNOSTICS → Analyze via AI. ChatGPT Plus does not include API access — use platform.openai.com billing. Model: gpt-4o-mini (pay per use). With Generic OBD2 profile selected, reports say generic SAE OBD-II — not Honda Civic FB2.",
+            text = "OpenAI API key for DIAGNOSTICS → Analyze via AI. ChatGPT Plus does not include API access — use platform.openai.com billing. Model: gpt-4o-mini (pay per use). Paste the key only here (never in chat/email — providers auto-revoke leaked keys). With Generic OBD2 profile selected, reports say generic SAE OBD-II — not Honda Civic FB2.",
             color = TextMuted,
             fontSize = 12.sp,
             modifier = Modifier.padding(bottom = 8.dp),
@@ -370,7 +370,7 @@ fun SettingsScreen(
             modifier = Modifier.padding(bottom = 6.dp),
         )
         Text(
-            text = "Uploads finished drives to github.com/${LogUploadManager.DEFAULT_OWNER}/${LogUploadManager.DEFAULT_REPO}/${LogUploadManager.REMOTE_DIR}/ (branch ${LogUploadManager.DEFAULT_BRANCH}) and AI reports to …/${LogUploadManager.REMOTE_AI_DIR}/. Fine-grained PAT: Contents Read and write on that repo. Large logs are gzipped. If Upload fails, the HTTP reason is shown on this row — not just “Failed 1”.",
+            text = "Paste a fine-grained GitHub PAT here (Contents: Read and write on ${LogUploadManager.DEFAULT_OWNER}/${LogUploadManager.DEFAULT_REPO}). The APK does not ship a live GitHub token — paste in Settings only. Uploads go to github.com/${LogUploadManager.DEFAULT_OWNER}/${LogUploadManager.DEFAULT_REPO}/${LogUploadManager.REMOTE_DIR}/ (branch ${LogUploadManager.DEFAULT_BRANCH}) and AI reports to …/${LogUploadManager.REMOTE_AI_DIR}/. Large logs are gzipped. If Upload fails, the HTTP reason is shown on this row.",
             color = TextMuted,
             fontSize = 12.sp,
             modifier = Modifier.padding(bottom = 8.dp),

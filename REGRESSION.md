@@ -117,6 +117,9 @@ Keep these fixed. If a change might touch one of these areas, re-verify it.
 | I93 | Generic profile AI/logs still said Honda Civic FB2 | Fixed | Profile-aware system prompt + CSV `# vehicle_profile=` / `# vehicle=`; history Analyze reads CSV stamp |
 | I94 | Full AI report filename shown but not openable in-app | Fixed | Analyze → OPEN FULL + Saved AI reports list (Open/Share/Del) |
 | I95 | Log upload stays pending forever | Fixed | Skip empty/active checkpoint; count only real files; packaged OpenAI key refresh |
+| I96 | Fresh install missing GitHub token / APK overwrote OpenAI key | Fixed | Packaged secrets fill **blank** Settings only — never overwrite user paste |
+| I97 | Want custom command box on Analyze (Live + History) | Fixed | Driver notes field → `=== DRIVER NOTES ===` in OpenAI user message (max 2000) |
+| I98 | MAF logged on MAP-only car felt like invented data | Fixed | Document + AI prompt: Dash MAF = SAE PID `0110` ECU reply (often calculated airflow), not proof of a physical MAF |
 
 When the user reports a **new** bug, add a new `Ixx` row here (Status: Open → Fixed)
 and add a matching automated or manual check in sections 2–3.

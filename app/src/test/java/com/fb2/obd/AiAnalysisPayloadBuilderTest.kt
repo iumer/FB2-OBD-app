@@ -292,6 +292,81 @@ class AiAnalysisPayloadBuilderTest {
     }
 
     @Test
+    fun buildUserMessage_includesDriverNotesWhenProvided() {
+        val truncated = AiAnalysisPayloadBuilder.TruncatedLog(
+            csvText = "# dashboard_snapshots\n1000,800,0,90,,,,,,,,,,,,,,\n",
+            rowCount = 10,
+            eventCount = 0,
+            limited = false,
+            windowMinutesUsed = 5,
+            firstTimestampMs = 1_785_182_650_255L,
+            lastTimestampMs = 1_785_182_710_255L,
+            uniqueTimestampCount = 10,
+        )
+        val payload = AiAnalysisPayloadBuilder.buildUserMessage(
+            sourceLabel = "live_window_5min",
+            windowMinutes = 5,
+            snapshotText = "rpm=800",
+            healthText = "(none)",
+            dtcText = "(none)",
+            log = truncated,
+            profile = VehicleProfile.GENERIC_OBD2,
+            driverNotes = "Daihatsu Mira 2015 MAP-only 6-injector FWD — no physical MAF.",
+        )
+        assertTrue(payload.userMessage.contains("=== DRIVER NOTES"))
+        assertTrue(payload.userMessage.contains("Daihatsu Mira 2015"))
+        assertTrue(payload.userMessage.contains("authoritative vehicle context"))
+        assertTrue(payload.userMessage.contains("does NOT prove a physical hot-wire MAF"))
+        assertTrue(payload.systemPrompt.contains("PID 0110"))
+    }
+
+    @Test
+    fun buildUserMessage_omitsDriverNotesWhenBlank() {
+        val truncated = AiAnalysisPayloadBuilder.TruncatedLog(
+            csvText = "# dashboard_snapshots\n1000,800,0,90,,,,,,,,,,,,,,\n",
+            rowCount = 10,
+            eventCount = 0,
+            limited = false,
+            windowMinutesUsed = 5,
+        )
+        val payload = AiAnalysisPayloadBuilder.buildUserMessage(
+            sourceLabel = "live_window_5min",
+            windowMinutes = 5,
+            snapshotText = "rpm=800",
+            healthText = "(none)",
+            dtcText = "(none)",
+            log = truncated,
+            driverNotes = "   ",
+        )
+        assertFalse(payload.userMessage.contains("=== DRIVER NOTES"))
+    }
+
+    @Test
+    fun buildUserMessage_clampsDriverNotesLength() {
+        val truncated = AiAnalysisPayloadBuilder.TruncatedLog(
+            csvText = "# dashboard_snapshots\n1000,800,0,90,,,,,,,,,,,,,,\n",
+            rowCount = 10,
+            eventCount = 0,
+            limited = false,
+            windowMinutesUsed = 5,
+        )
+        val longNotes = "x".repeat(AiAnalysisPayloadBuilder.MAX_DRIVER_NOTES_CHARS + 500)
+        val payload = AiAnalysisPayloadBuilder.buildUserMessage(
+            sourceLabel = "live_window_5min",
+            windowMinutes = 5,
+            snapshotText = "rpm=800",
+            healthText = "(none)",
+            dtcText = "(none)",
+            log = truncated,
+            driverNotes = longNotes,
+        )
+        val marker = "=== DRIVER NOTES (authoritative vehicle context for this request) ===\n"
+        val after = payload.userMessage.substringAfter(marker)
+        val notesBody = after.substringBefore("\nTreat the notes")
+        assertEquals(AiAnalysisPayloadBuilder.MAX_DRIVER_NOTES_CHARS, notesBody.length)
+    }
+
+    @Test
     fun maxPayload_truncatesHugeCsv() {
         val now = 5_000_000_000L
         val hugeLine = "x".repeat(2_000)

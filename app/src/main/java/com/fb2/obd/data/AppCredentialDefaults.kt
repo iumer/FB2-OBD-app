@@ -5,16 +5,18 @@ import android.content.SharedPreferences
 import java.util.Properties
 
 /**
- * Pre-filled credentials for the user's private sideload build only.
- * Loaded from `assets/fb2-secrets.properties` (not committed — see `.example`).
- * Values persist in app-private SharedPreferences after first use.
+ * Optional sideload defaults from `assets/fb2-secrets.properties` (gitignored).
+ *
+ * Safety rule: packaged values only fill **blank** Settings prefs.
+ * Never overwrite a token the user already pasted — APK updates must not
+ * clobber a working GitHub/OpenAI key (and must not push a revoked key
+ * that was only present in a build asset).
  */
 internal object AppCredentialDefaults {
 
     private var loaded = false
     private var openAiKey = ""
     private var githubPat = ""
-    private var fingerprint = ""
 
     fun ensureLoaded(context: Context) {
         if (loaded) return
@@ -24,7 +26,6 @@ internal object AppCredentialDefaults {
                 Properties().apply { load(stream) }.let { props ->
                     openAiKey = props.getProperty("openai_api_key", "").trim()
                     githubPat = props.getProperty("github_pat", "").trim()
-                    fingerprint = "${openAiKey.takeLast(12)}|${githubPat.takeLast(8)}"
                 }
             }
         }
@@ -41,25 +42,36 @@ internal object AppCredentialDefaults {
     }
 
     /**
-     * When the packaged secrets file changes (new APK), push keys into prefs so
-     * Settings fields and runtime use the updated token without a manual re-paste.
+     * Fill blank credential slots from the APK asset. Does nothing when
+     * [currentOpenAi] / [currentGithub] are already set.
      */
     fun applyPackagedCredentials(
         context: Context,
-        openAi: (String) -> Unit,
-        github: (String) -> Unit,
+        currentOpenAi: String,
+        currentGithub: String,
+        setOpenAi: (String) -> Unit,
+        setGithub: (String) -> Unit,
     ) {
         ensureLoaded(context)
-        if (fingerprint.isBlank()) return
-        val prefs: SharedPreferences =
-            context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-        val applied = prefs.getString(KEY_FP, null).orEmpty()
-        if (applied == fingerprint) return
-        if (openAiKey.isNotBlank()) openAi(openAiKey)
-        if (githubPat.isNotBlank()) github(githubPat)
-        prefs.edit().putString(KEY_FP, fingerprint).apply()
+        if (currentOpenAi.isBlank() && openAiKey.isNotBlank()) {
+            setOpenAi(openAiKey)
+        }
+        if (currentGithub.isBlank() && githubPat.isNotBlank()) {
+            setGithub(githubPat)
+        }
     }
 
-    private const val PREFS = "fb2_packaged_creds"
-    private const val KEY_FP = "secrets_fingerprint"
+    /** Pure helper for JVM tests (no Android assets). */
+    fun fillBlankOnly(
+        packagedOpenAi: String,
+        packagedGithub: String,
+        currentOpenAi: String,
+        currentGithub: String,
+    ): Pair<String?, String?> {
+        val nextOpenAi =
+            if (currentOpenAi.isBlank() && packagedOpenAi.isNotBlank()) packagedOpenAi else null
+        val nextGithub =
+            if (currentGithub.isBlank() && packagedGithub.isNotBlank()) packagedGithub else null
+        return nextOpenAi to nextGithub
+    }
 }
