@@ -124,6 +124,7 @@ Keep these fixed. If a change might touch one of these areas, re-verify it.
 | I100 | Update GET → allow installs → must download again | Fixed | APK in `filesDir/updates/` + prefs; ReadyToInstall kept on permission deny; restore on resume |
 | I101 | AI reports only on DIAG Analyze, not Settings logs | Fixed | Settings → Saved logs & AI reports lists AI with Open/Save/Del; Upload still syncs both |
 | I102 | Settings screen too much chrome / long blurbs | Fixed | Trimmed blurbs; Simulation = ToggleRow; Private keys (OpenAI+GitHub); Upload kept without Log upload section |
+| I103 | Settings categories mixed (gear/battery under Theme) | Fixed | Regroup: Vehicle / Appearance / Background·power / Alerts / Private keys / Logging — all prior options kept |
 
 When the user reports a **new** bug, add a new `Ixx` row here (Status: Open → Fixed)
 and add a matching automated or manual check in sections 2–3.
