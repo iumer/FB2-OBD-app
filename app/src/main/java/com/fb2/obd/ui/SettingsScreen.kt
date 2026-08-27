@@ -144,6 +144,7 @@ fun SettingsScreen(
             surface = palette.surface,
         )
 
+        // —— App update (no section heading) ——
         ActionRow(
             title = if (updateStatusText.isNotBlank()) updateStatusText else "Check for update",
             subtitle = if (appVersionLabel.isNotBlank()) {
@@ -196,14 +197,14 @@ fun SettingsScreen(
             }
         }
 
+        // —— Vehicle ——
+        SectionLabel("Vehicle")
         ToggleRow(
             title = "Simulation",
             subtitle = "Simulated Dash when no ELM adapter is connected.",
             checked = settings.allowDemo,
             onCheckedChange = onToggleAllowDemo,
         )
-
-        SectionLabel("Vehicle profile")
         SettingDropdown(
             label = settings.vehicleProfile.displayName,
             subtitle = settings.vehicleProfile.subtitle,
@@ -211,16 +212,6 @@ fun SettingsScreen(
             options = VehicleProfile.entries.map { it.displayName to it.subtitle },
             onSelectIndex = { onVehicleProfileChange(VehicleProfile.entries[it]) },
         )
-
-        SectionLabel("Theme")
-        SettingDropdown(
-            label = settings.dashTheme.displayName,
-            subtitle = settings.dashTheme.subtitle,
-            accent = palette.accent,
-            options = DashTheme.entries.map { it.displayName to it.subtitle },
-            onSelectIndex = { onDashThemeChange(DashTheme.entries[it]) },
-        )
-
         ToggleRow(
             title = "Show estimated gear",
             subtitle = if (settings.vehicleProfile.isGeneric) {
@@ -232,6 +223,18 @@ fun SettingsScreen(
             onCheckedChange = onToggleEstimatedGear,
         )
 
+        // —— Appearance ——
+        SectionLabel("Appearance")
+        SettingDropdown(
+            label = settings.dashTheme.displayName,
+            subtitle = settings.dashTheme.subtitle,
+            accent = palette.accent,
+            options = DashTheme.entries.map { it.displayName to it.subtitle },
+            onSelectIndex = { onDashThemeChange(DashTheme.entries[it]) },
+        )
+
+        // —— Background / power ——
+        SectionLabel("Background / power")
         ActionRow(
             title = "Unrestricted battery",
             subtitle = if (batteryUnrestricted) {
@@ -243,6 +246,7 @@ fun SettingsScreen(
             onClick = { if (!batteryUnrestricted) onKeepAliveBattery() },
         )
 
+        // —— Alerts ——
         SectionLabel("Alerts")
         ToggleRow(
             title = "Voice alerts",
@@ -264,6 +268,7 @@ fun SettingsScreen(
             onClick = onCheckSoundAlert,
         )
 
+        // —— Private keys ——
         SectionLabel("Private keys")
         var openAiDraft by remember(openAiApiKey) { mutableStateOf(openAiApiKey) }
         var tokenDraft by remember(githubToken) { mutableStateOf(githubToken) }
@@ -339,10 +344,10 @@ fun SettingsScreen(
             )
         }
 
+        // —— Logging ——
         SectionLabel("Logging")
         NavRow("Debug log (raw ELM327)", nav.onDebug)
         NavRow("Saved logs & AI reports", nav.onValues)
-
         ActionRow(
             title = "Upload saved logs + AI reports",
             subtitle = buildString {
