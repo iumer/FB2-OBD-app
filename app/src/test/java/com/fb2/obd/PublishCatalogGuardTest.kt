@@ -49,8 +49,11 @@ class PublishCatalogGuardTest {
         )
         assertFalse(
             "publish script must not push APKs to the latest branch",
-            script.contains("cp dist/FB2-Diag-debug.apk \"$TMP/dist/\"") ||
-                script.contains("cp dist/archive"),
+            script.contains("cp dist/FB2-Diag-debug.apk") && script.contains("\$TMP/dist"),
+        )
+        assertFalse(
+            "publish script must not copy dist/archive into the latest branch tree",
+            script.contains("cp dist/archive"),
         )
         assertTrue(
             "publish script must invoke catalog verification",
