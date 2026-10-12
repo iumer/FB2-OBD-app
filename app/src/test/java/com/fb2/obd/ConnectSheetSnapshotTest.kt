@@ -44,4 +44,26 @@ class ConnectSheetSnapshotTest {
             }
         }
     }
+
+    /** Many paired devices must not push "Use demo" off-screen in landscape. */
+    @Test
+    fun connectSheet_manyDevices_keepsDemoVisible() {
+        val devices = (1..12).map { i ->
+            BtDeviceUi(name = "Adapter $i", address = "AA:BB:CC:00:00:%02X".format(i))
+        }
+        paparazzi.snapshot {
+            FB2Theme {
+                Box(
+                    modifier = Modifier.fillMaxSize().background(Background),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    ConnectSheetContent(
+                        devices = devices,
+                        onPickDevice = {},
+                        onPickDemo = {},
+                    )
+                }
+            }
+        }
+    }
 }
