@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Bump dist catalog + build HU APK for the version in app/build.gradle.kts
+# Bump dist catalog + build release APK for the version in app/build.gradle.kts.
+# APKs are NOT committed — publish them as GitHub Release assets via publish-latest-apk.sh.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
@@ -13,9 +14,11 @@ from pathlib import Path
 vn = "$VN"
 vc = int("$VC")
 root = Path("$ROOT")
+apk_url = f"https://github.com/iumer/FB2-OBD-app/releases/download/v{vn}/FB2-Diag-{vn}.apk"
 version = json.loads((root / "dist/version.json").read_text())
 version["versionCode"] = vc
 version["versionName"] = vn
+version["apkUrl"] = apk_url
 (root / "dist/version.json").write_text(json.dumps(version, indent=2) + "\n")
 catalog = json.loads((root / "dist/versions.json").read_text())
 notes = {
@@ -37,11 +40,12 @@ notes = {
     "0.1.39": "Retain logs after reinstall; keep update APK after install permission; AI reports in Settings",
     "0.1.40": "Settings cleanup: Private keys, less chrome, Simulation matches gear toggle",
     "0.1.41": "Settings categories: Vehicle / Appearance / Background-power (no options removed)",
+    "0.1.42": "Security: encrypted keys, no packaged secrets, private logs repo, GitHub Release APKs",
 }.get(vn, catalog["latest"].get("notes", ""))
 catalog["latest"] = {
     "versionCode": vc,
     "versionName": vn,
-    "apkUrl": "https://raw.githubusercontent.com/iumer/FB2-OBD-app/latest/dist/FB2-Diag-debug.apk",
+    "apkUrl": apk_url,
     "notes": notes,
 }
 rel = catalog.setdefault("releases", [])
@@ -49,15 +53,26 @@ if not any(r.get("versionCode") == vc for r in rel):
     rel.append({
         "versionCode": vc,
         "versionName": vn,
-        "apkUrl": f"https://raw.githubusercontent.com/iumer/FB2-OBD-app/latest/dist/archive/FB2-Diag-{vn}.apk",
+        "apkUrl": apk_url,
         "notes": notes,
     })
+else:
+    for r in rel:
+        if r.get("versionCode") == vc:
+            r["versionName"] = vn
+            r["apkUrl"] = apk_url
+            r["notes"] = notes
+# Rewrite historical archive raw URLs → GitHub Release asset URLs.
+for r in rel:
+    name = r.get("versionName") or ""
+    if name and ("/dist/archive/" in r.get("apkUrl", "") or "FB2-Diag-debug.apk" in r.get("apkUrl", "")):
+        r["apkUrl"] = f"https://github.com/iumer/FB2-OBD-app/releases/download/v{name}/FB2-Diag-{name}.apk"
 rel.sort(key=lambda r: r["versionCode"])
 (root / "dist/versions.json").write_text(json.dumps(catalog, indent=2) + "\n")
 print(f"Catalog bumped to {vn} (code {vc}): {notes}")
+print(f"APK URL: {apk_url}")
 PY
 
 bash scripts/package-hu-apk.sh
-cp dist/FB2-Diag-debug.apk "dist/archive/FB2-Diag-${VN}.apk"
-./gradlew testDebugUnitTest lintDebug
-echo "Shipped ${VN} (code ${VC})"
+./gradlew testDebugUnitTest lintDebug checkNoPackagedSecrets
+echo "Shipped ${VN} (code ${VC}) — APK is local under dist/ (gitignored). Publish with scripts/publish-latest-apk.sh"

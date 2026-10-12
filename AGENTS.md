@@ -26,20 +26,20 @@ non-obvious cloud specifics.
 ### Commands
 
 - **After every code change, run the full checklist in [`REGRESSION.md`](REGRESSION.md)**
-  (unit tests + lint + debug APK → `dist/FB2-Diag-debug.apk`). That file also
-  lists every user-reported issue that must stay fixed.
+  (unit tests + lint + release APK). That file also lists every user-reported
+  issue that must stay fixed.
 - Unit tests (pure JVM, fast): `./gradlew testDebugUnitTest`
 - Lint: `./gradlew lintDebug`
-- Build APK: `./gradlew assembleDebug` → `app/build/outputs/apk/debug/app-debug.apk`
-  (also copy to `dist/FB2-Diag-debug.apk` for sideload).
-- **Always-latest sideload URL (do not invent branch-specific raw links for the user):**
-  https://raw.githubusercontent.com/iumer/FB2-OBD-app/latest/dist/FB2-Diag-debug.apk  
-  **Only one sideload APK URL** — publish `dist/FB2-Diag-debug.apk` to branch `latest`
-  via `scripts/publish-latest-apk.sh` (also copies `version.json`, `versions.json`,
-  and `dist/archive/*.apk`; runs `verify-latest-catalog.sh` so updater never 404s).
-  Never create a second sideload APK/link.
-  Tell the user that same URL — never a `cursor/...` branch raw link unless they
-  ask for a specific PR build.
+- Build release APK: `./gradlew assembleRelease` (or `scripts/package-hu-apk.sh`).
+  APKs land under `dist/` locally and are **gitignored** — never commit `*.apk`
+  or `dist/archive/`.
+- **Sideload / in-app update APKs are GitHub Release assets**, not raw files on
+  branch `latest`. Catalog JSON stays on `latest` (`dist/versions.json`); APK
+  URLs look like
+  `https://github.com/iumer/FB2-OBD-app/releases/download/vX.Y.Z/FB2-Diag-X.Y.Z.apk`.
+  Publish with `scripts/publish-latest-apk.sh` (uploads Release assets + pushes
+  catalog-only to `latest`; runs `verify-latest-catalog.sh`).
+  Never invent branch-specific raw APK links unless the user asks for a PR build.
 
 ### Running / demoing the UI
 
@@ -219,12 +219,12 @@ non-obvious cloud specifics.
   queue one-per-cycle. DIAG Faults Read / VIN / page probes keep heroes alive
   (`withDashKeptAlive`) so TTL cannot blank RPM/Speed/Coolant. Classic Dash
   TopBar + RPM/Speed hero also scroll away with the tiles.
-- **HU sideload APK:** Use `scripts/package-hu-apk.sh` → single file
-  `dist/FB2-Diag-debug.apk`. Must be **v1+v2** signed — plain AGP debug/release
-  is often **v2-only**, which makes some car package installers hang on
-  “Installing…”. Prefer the ~7MB release-classpath APK over the bloated debug
-  APK. If install sticks: uninstall old `FB2 Diag`, reboot HU, copy APK via USB
-  (not a partial GitHub download), then install.
+- **HU sideload APK:** Use `scripts/package-hu-apk.sh` → `dist/FB2-Diag-<version>.apk`
+  (gitignored). Must be **release-signed** from `local.properties` /
+  `RELEASE_*` env vars (never commit a keystore). Prefer the ~7MB
+  release-classpath APK over the bloated debug APK. Publish via GitHub Releases
+  (`scripts/publish-latest-apk.sh`), not by committing APKs. First switch from
+  the old debug-signed sideloads requires uninstall + reinstall.
 - **Car HU readability:** Dash uses `DashType` (hero 30sp, tile values 22sp,
   88dp tiles, fewer/wider columns). Floating bubble sizes live in
   `FloatingDashLayout` (collapsed/center 92dp, sat 100dp, expanded max 340dp,

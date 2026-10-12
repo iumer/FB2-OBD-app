@@ -1,41 +1,38 @@
 #!/usr/bin/env bash
-# Build a head-unit-friendly sideload APK:
-# - release classpath (no Compose ui-tooling bloat)
-# - signed with the Android debug key (same as prior sideloads)
+# Build a head-unit-friendly release APK:
+# - release classpath (non-debuggable, no Compose ui-tooling bloat)
+# - signed with the release keystore from local.properties / env
 # - v1 + v2 signatures (many car HU installers hang on v2-only APKs)
+#
+# APK is written to dist/ (gitignored). Publish as a GitHub Release asset —
+# never commit APKs to the repo.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
+VN=$(grep 'versionName = ' app/build.gradle.kts | head -1 | sed 's/.*"\(.*\)".*/\1/')
 BUILD_TOOLS="${ANDROID_HOME:-$HOME/android-sdk}/build-tools/34.0.0"
-ZIPALIGN="$BUILD_TOOLS/zipalign"
 APKSIGNER="$BUILD_TOOLS/apksigner"
-KS="${HOME}/.android/debug.keystore"
 
 ./gradlew assembleRelease
 
 SRC="$ROOT/app/build/outputs/apk/release/app-release.apk"
-UNSIGNED="$(mktemp /tmp/fb2-unsigned-XXXXXX.apk)"
-ALIGNED="$(mktemp /tmp/fb2-aligned-XXXXXX.apk)"
-SIGNED="$(mktemp /tmp/fb2-signed-XXXXXX.apk)"
-cp -f "$SRC" "$UNSIGNED"
-zip -d "$UNSIGNED" 'META-INF/*.SF' 'META-INF/*.RSA' 'META-INF/*.DSA' 'META-INF/MANIFEST.MF' >/dev/null 2>&1 || true
-"$ZIPALIGN" -f -p 4 "$UNSIGNED" "$ALIGNED"
-"$APKSIGNER" sign \
-  --ks "$KS" \
-  --ks-pass pass:android \
-  --key-pass pass:android \
-  --v1-signing-enabled true \
-  --v2-signing-enabled true \
-  --v3-signing-enabled false \
-  --min-sdk-version 21 \
-  --out "$SIGNED" \
-  "$ALIGNED"
+if [[ ! -f "$SRC" ]]; then
+  echo "missing $SRC — assembleRelease failed?" >&2
+  exit 1
+fi
 
-"$APKSIGNER" verify --min-sdk-version 21 "$SIGNED" >/dev/null
 mkdir -p "$ROOT/dist"
-cp -f "$SIGNED" "$ROOT/dist/FB2-Diag-debug.apk"
-rm -f "$UNSIGNED" "$ALIGNED" "$SIGNED" "$ROOT/dist/FB2-Diag-hu.apk"
+OUT_VERSIONED="$ROOT/dist/FB2-Diag-${VN}.apk"
+OUT_LATEST="$ROOT/dist/FB2-Diag.apk"
+cp -f "$SRC" "$OUT_VERSIONED"
+cp -f "$SRC" "$OUT_LATEST"
+# Keep legacy filename for older scripts/docs that still look for it locally.
+cp -f "$SRC" "$ROOT/dist/FB2-Diag-debug.apk"
 
-echo "OK: dist/FB2-Diag-debug.apk ($(du -h "$ROOT/dist/FB2-Diag-debug.apk" | awk '{print $1}'))"
-"$APKSIGNER" verify --verbose --min-sdk-version 21 "$ROOT/dist/FB2-Diag-debug.apk" | head -8
+"$APKSIGNER" verify --min-sdk-version 21 "$OUT_VERSIONED" >/dev/null
+echo "OK: $OUT_VERSIONED ($(du -h "$OUT_VERSIONED" | awk '{print $1}'))"
+"$APKSIGNER" verify --verbose --min-sdk-version 21 "$OUT_VERSIONED" | head -8
+
+# Refuse to package if secrets leaked into the APK.
+./gradlew checkNoPackagedSecrets

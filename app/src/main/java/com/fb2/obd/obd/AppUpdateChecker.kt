@@ -3,8 +3,8 @@ package com.fb2.obd.obd
 /**
  * Pure helpers for the in-app updater.
  *
- * Catalog on branch `latest`:
- *   dist/versions.json
+ * Catalog JSON lives on branch `latest` (`dist/versions.json`).
+ * APK binaries are GitHub Release assets — never committed to the repo.
  *
  * Prefer the GitHub Contents API — raw.githubusercontent.com can lag hours.
  * [VERSION_JSON_URL] remains as a one-entry fallback for older clients.
@@ -21,8 +21,12 @@ object AppUpdateChecker {
     const val VERSION_JSON_API_URL =
         "https://api.github.com/repos/iumer/FB2-OBD-app/contents/dist/version.json?ref=latest"
 
+    /** Fallback when a catalog entry omits apkUrl — GitHub Release latest asset. */
     const val DEFAULT_APK_URL =
-        "https://raw.githubusercontent.com/iumer/FB2-OBD-app/latest/dist/FB2-Diag-debug.apk"
+        "https://github.com/iumer/FB2-OBD-app/releases/latest/download/FB2-Diag.apk"
+
+    fun releaseApkUrl(versionName: String): String =
+        "https://github.com/iumer/FB2-OBD-app/releases/download/v$versionName/FB2-Diag-$versionName.apk"
 
     data class RemoteVersion(
         val versionCode: Int,

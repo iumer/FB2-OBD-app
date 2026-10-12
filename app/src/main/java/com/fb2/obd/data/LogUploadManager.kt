@@ -22,14 +22,16 @@ import kotlinx.coroutines.withContext
 
 /**
  * Uploads **saved** (finished) session CSVs to GitHub `logs/car-uploads/`
- * and AI report `.txt` files to `logs/ai-reports/`.
+ * and AI report `.txt` files to `logs/ai-reports/` on a **private** logs repo.
  *
- * Requires a fine-grained PAT with Contents:Write on the target repo
- * (Settings → Log upload token). Never uploads the in-progress live buffer.
+ * Requires a fine-grained PAT with Contents: Read and write on ONLY that
+ * private repo (Settings → Private keys). Never uploads the in-progress buffer.
+ * Never logs the token or Authorization header.
  */
 class LogUploadManager(
     context: Context,
     private val sessionLogStore: SessionLogStore,
+    private val credentials: SecureCredentialStore,
     private val aiReportStore: AiReportStore? = null,
 ) {
     data class Status(
@@ -49,6 +51,7 @@ class LogUploadManager(
     }
 
     private val app = context.applicationContext
+    /** Sync markers only — secrets live in [SecureCredentialStore]. */
     private val prefs: SharedPreferences =
         app.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
     private val cm = app.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
@@ -57,19 +60,26 @@ class LogUploadManager(
     val status: StateFlow<Status> = _status.asStateFlow()
 
     var githubOwner: String
-        get() = prefs.getString(KEY_OWNER, DEFAULT_OWNER) ?: DEFAULT_OWNER
-        set(value) = prefs.edit().putString(KEY_OWNER, value.trim()).apply()
+        get() = credentials.githubOwner
+        set(value) {
+            credentials.githubOwner = value
+        }
 
     var githubRepo: String
-        get() = prefs.getString(KEY_REPO, DEFAULT_REPO) ?: DEFAULT_REPO
-        set(value) = prefs.edit().putString(KEY_REPO, value.trim()).apply()
+        get() = credentials.githubRepo
+        set(value) {
+            credentials.githubRepo = value
+        }
 
     var githubToken: String
-        get() {
-            val stored = prefs.getString(KEY_TOKEN, null)?.trim().orEmpty()
-            return stored.ifBlank { AppCredentialDefaults.githubPat(app) }
+        get() = credentials.githubToken
+        set(value) {
+            credentials.githubToken = value
         }
-        set(value) = prefs.edit().putString(KEY_TOKEN, value.trim()).apply()
+
+    fun clearToken() = credentials.clearGithubToken()
+
+    fun maskedToken(): String = SecureCredentialStore.maskSecret(githubToken)
 
     private val callback = object : ConnectivityManager.NetworkCallback() {
         override fun onAvailable(network: Network) = refreshOnline()
@@ -255,7 +265,7 @@ class LogUploadManager(
             val err = conn.errorStream?.bufferedReader()?.readText()
             conn.disconnect()
             if (code !in 200..299) {
-                error("HTTP $code ${err?.take(200)}")
+                error("HTTP $code ${sanitizeRemoteError(err)}")
             }
         }
     }
@@ -278,6 +288,14 @@ class LogUploadManager(
         }.getOrNull()
     }
 
+    private fun sanitizeRemoteError(err: String?): String =
+        (err ?: "")
+            .replace(Regex("(?i)Bearer\\s+[A-Za-z0-9_\\-.]+"), "Bearer …")
+            .replace(Regex("sk-[A-Za-z0-9_\\-]{10,}"), "sk-…")
+            .replace(Regex("github_pat_[A-Za-z0-9_]+"), "github_pat_…")
+            .replace(Regex("ghp_[A-Za-z0-9]+"), "ghp_…")
+            .take(200)
+
     private fun sha256Hex(file: File): String? = runCatching {
         val md = MessageDigest.getInstance("SHA-256")
         file.inputStream().use { input ->
@@ -293,11 +311,8 @@ class LogUploadManager(
 
     companion object {
         private const val PREFS = "log_upload"
-        private const val KEY_TOKEN = "github_token"
-        private const val KEY_OWNER = "github_owner"
-        private const val KEY_REPO = "github_repo"
-        const val DEFAULT_OWNER = "iumer"
-        const val DEFAULT_REPO = "FB2-OBD-app"
+        val DEFAULT_OWNER: String get() = SecureCredentialStore.DEFAULT_OWNER
+        val DEFAULT_REPO: String get() = SecureCredentialStore.DEFAULT_REPO
         const val REMOTE_DIR = "logs/car-uploads"
         const val REMOTE_AI_DIR = "logs/ai-reports"
         const val DEFAULT_BRANCH = "main"

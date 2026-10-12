@@ -10,7 +10,6 @@ import com.fb2.obd.car.VehicleLiveStore
 import com.fb2.obd.data.AiAnalysisErrors
 import com.fb2.obd.data.AiAnalysisStore
 import com.fb2.obd.data.AiReportStore
-import com.fb2.obd.data.AppCredentialDefaults
 import com.fb2.obd.data.ConnectionState
 import com.fb2.obd.data.DashExtraPidStore
 import com.fb2.obd.data.DashTileOverrideStore
@@ -28,6 +27,7 @@ import com.fb2.obd.data.ObdSource
 import com.fb2.obd.data.OpenAiClient
 import com.fb2.obd.data.SavedAiReport
 import com.fb2.obd.data.SavedLogFile
+import com.fb2.obd.data.SecureCredentialStore
 import com.fb2.obd.data.SessionLogStore
 import com.fb2.obd.data.DashThemeStore
 import com.fb2.obd.data.DurableLogArchive
@@ -304,13 +304,19 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
     private val _savedAiReports = MutableStateFlow(aiReportStore.list())
     val savedAiReports: StateFlow<List<SavedAiReport>> = _savedAiReports.asStateFlow()
 
-    private val aiAnalysisStore = AiAnalysisStore(app)
+    private val secureCredentials = SecureCredentialStore(app)
+    private val aiAnalysisStore = AiAnalysisStore(secureCredentials)
     private val openAiClient = OpenAiClient(apiKeyProvider = { aiAnalysisStore.apiKey })
 
     private val _aiAnalyze = MutableStateFlow(AiAnalyzeUiState())
     val aiAnalyze: StateFlow<AiAnalyzeUiState> = _aiAnalyze.asStateFlow()
 
-    private val logUploadManager = LogUploadManager(app, sessionLogStore, aiReportStore)
+    private val logUploadManager = LogUploadManager(
+        context = app,
+        sessionLogStore = sessionLogStore,
+        credentials = secureCredentials,
+        aiReportStore = aiReportStore,
+    )
     val uploadStatus = logUploadManager.status
     private var autoUploadJob: Job? = null
 
@@ -517,14 +523,6 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
         }
         voiceAlerter.duckMediaDuringAlerts = _settings.value.duckMediaDuringAlerts
         voiceAlerter.start()
-        // Sideload defaults: fill blank Settings only — never overwrite a pasted token.
-        AppCredentialDefaults.applyPackagedCredentials(
-            context = app,
-            currentOpenAi = aiAnalysisStore.apiKey,
-            currentGithub = logUploadManager.githubToken,
-            setOpenAi = { key -> aiAnalysisStore.apiKey = key },
-            setGithub = { pat -> logUploadManager.githubToken = pat },
-        )
         logUploadManager.start()
         autoUploadJob = viewModelScope.launch {
             var lastAttemptMs = 0L
@@ -782,13 +780,37 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
         logUploadManager.githubToken = token
     }
 
-    fun githubUploadToken(): String = logUploadManager.githubToken
+    fun clearGithubUploadToken() {
+        logUploadManager.clearToken()
+    }
+
+    fun githubUploadTokenMasked(): String = logUploadManager.maskedToken()
+
+    fun hasGithubUploadToken(): Boolean = logUploadManager.githubToken.isNotBlank()
+
+    fun setGithubUploadOwner(owner: String) {
+        logUploadManager.githubOwner = owner
+    }
+
+    fun setGithubUploadRepo(repo: String) {
+        logUploadManager.githubRepo = repo
+    }
+
+    fun githubUploadOwner(): String = logUploadManager.githubOwner
+
+    fun githubUploadRepo(): String = logUploadManager.githubRepo
 
     fun setOpenAiApiKey(key: String) {
         aiAnalysisStore.apiKey = key
     }
 
-    fun openAiApiKey(): String = aiAnalysisStore.apiKey
+    fun clearOpenAiApiKey() {
+        aiAnalysisStore.clear()
+    }
+
+    fun openAiApiKeyMasked(): String = aiAnalysisStore.masked()
+
+    fun hasOpenAiApiKey(): Boolean = aiAnalysisStore.apiKey.isNotBlank()
 
     fun setAiAnalyzeModeLive(live: Boolean) {
         _aiAnalyze.update { it.copy(modeLive = live, error = null) }
@@ -886,7 +908,7 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
         if (st.loading) return
         if (aiAnalysisStore.apiKey.isBlank()) {
             _aiAnalyze.update {
-                it.copy(error = "Add an OpenAI API key in Settings → AI analysis")
+                it.copy(error = "Add an OpenAI API key in Settings → Private keys")
             }
             return
         }
@@ -923,8 +945,14 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
                     _uiState.value.dtcCount?.let { appendLine("Readiness DTC count: $it") }
                 }
                 val truncated = if (st.modeLive) {
-                    val snaps = ObdLogger.valueRows().map { row ->
+                    var snaps = ObdLogger.valueRows().map { row ->
                         row.timestampMs to AiAnalysisPayloadBuilder.snapshotCsvLine(row.timestampMs, row.snapshot)
+                    }
+                    // Demo / live without a LOG buffer: still send the current reading.
+                    if (snaps.isEmpty() && !snapshot.isEffectivelyBlank()) {
+                        snaps = listOf(
+                            now to AiAnalysisPayloadBuilder.snapshotCsvLine(now, snapshot),
+                        )
                     }
                     val evs = ObdLogger.eventRows().map { e ->
                         val msg = e.message.replace(",", " ").replace("\n", " ")
@@ -1302,11 +1330,19 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
             )
         }
         publishCarDash()
-        // Real ELM: auto-start value logging unless already running.
-        // Manual STOP LOG turns it off until the next fresh ELM connect.
-        if (source.isLive && !_settings.value.valueLogging) {
+        // Auto-start value logging for live ELM and demo so Analyze via AI
+        // has rows (and demo CSV sessions exist). STOP LOG still turns it off
+        // until the next fresh connect.
+        if (!_settings.value.valueLogging) {
             startValueLogging()
-            ObdLogger.logDebug(ObdLogger.Dir.INFO, "VALUE LOG auto-started on ELM connect")
+            ObdLogger.logDebug(
+                ObdLogger.Dir.INFO,
+                if (source.isLive) {
+                    "VALUE LOG auto-started on ELM connect"
+                } else {
+                    "VALUE LOG auto-started on demo connect"
+                },
+            )
         }
         collectJob = source.snapshots()
             .onEach { incoming ->

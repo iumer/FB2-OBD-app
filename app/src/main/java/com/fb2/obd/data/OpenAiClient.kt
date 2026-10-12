@@ -1,7 +1,5 @@
 package com.fb2.obd.data
 
-import android.content.Context
-import android.content.SharedPreferences
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.BufferedReader
@@ -13,28 +11,24 @@ import java.nio.charset.StandardCharsets
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
-/** Persists the OpenAI API key (same pattern as GitHub PAT). */
-class AiAnalysisStore(context: Context) {
-    private val app = context.applicationContext
-    private val prefs: SharedPreferences =
-        app.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-
+/** Thin accessor for the OpenAI API key held in [SecureCredentialStore]. */
+class AiAnalysisStore(private val credentials: SecureCredentialStore) {
     var apiKey: String
-        get() {
-            val stored = prefs.getString(KEY_API, null)?.trim().orEmpty()
-            return stored.ifBlank { AppCredentialDefaults.openAiKey(app) }
+        get() = credentials.openAiApiKey
+        set(value) {
+            credentials.openAiApiKey = value
         }
-        set(value) = prefs.edit().putString(KEY_API, value.trim()).apply()
 
-    companion object {
-        private const val PREFS = "ai_analysis"
-        private const val KEY_API = "openai_api_key"
-    }
+    fun clear() = credentials.clearOpenAi()
+
+    fun masked(): String = SecureCredentialStore.maskSecret(apiKey)
 }
 
 /**
  * Minimal OpenAI Chat Completions client via [HttpURLConnection]
  * (no Retrofit/OkHttp — matches [LogUploadManager]).
+ *
+ * Never logs the API key or Authorization header.
  */
 class OpenAiClient(
     private val apiKeyProvider: () -> String,
@@ -75,8 +69,9 @@ class OpenAiClient(
                 }
                 val code = conn.responseCode
                 val stream = if (code in 200..299) conn.inputStream else conn.errorStream
-                val text = stream?.let { BufferedReader(InputStreamReader(it, StandardCharsets.UTF_8)).readText() }
-                    ?: ""
+                val text = stream?.let {
+                    BufferedReader(InputStreamReader(it, StandardCharsets.UTF_8)).readText()
+                }.orEmpty()
                 if (code !in 200..299) {
                     error(friendlyHttpError(code, text))
                 }
@@ -89,7 +84,6 @@ class OpenAiClient(
                 require(content.isNotBlank()) { "OpenAI returned an empty report" }
                 Result(text = content, model = json.optString("model", model))
             } catch (e: Exception) {
-                // Re-throw with a clean message when the failure is clearly offline/timeout.
                 val friendly = AiAnalysisErrors.friendlyMessage(e)
                 if (friendly == AiAnalysisErrors.NO_INTERNET ||
                     friendly == AiAnalysisErrors.REQUEST_TIMEOUT
@@ -107,9 +101,14 @@ class OpenAiClient(
         private const val API_URL = "https://api.openai.com/v1/chat/completions"
 
         private fun friendlyHttpError(code: Int, body: String): String {
-            val snippet = body.trim().take(180)
+            // Strip anything that looks like a leaked secret from error bodies.
+            val snippet = body.trim()
+                .replace(Regex("sk-[A-Za-z0-9_\\-]{10,}"), "sk-…")
+                .replace(Regex("github_pat_[A-Za-z0-9_]+"), "github_pat_…")
+                .replace(Regex("ghp_[A-Za-z0-9]+"), "ghp_…")
+                .take(180)
             return when (code) {
-                401, 403 -> "OpenAI API key was rejected. Check Settings → AI analysis."
+                401, 403 -> "OpenAI API key was rejected. Check Settings → Private keys."
                 429 -> "OpenAI rate limit reached. Wait a moment and try again."
                 in 500..599 -> "OpenAI server error ($code). Try again shortly."
                 else -> "OpenAI HTTP $code${if (snippet.isNotBlank()) ": $snippet" else ""}"

@@ -10,4 +10,11 @@
 local.properties
 app/build/
 build/
+
+# Never commit secrets or sideload credential assets
 app/src/main/assets/fb2-secrets.properties
+
+# Never commit APKs or personal capture data
+*.apk
+dist/archive/
+logs/user-captures/

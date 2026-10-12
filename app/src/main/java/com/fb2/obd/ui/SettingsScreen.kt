@@ -109,11 +109,19 @@ fun SettingsScreen(
     onKeepAliveBattery: () -> Unit = {},
     batteryUnrestricted: Boolean = false,
     uploadStatus: LogUploadManager.Status = LogUploadManager.Status(),
-    githubToken: String = "",
-    onGithubTokenChange: (String) -> Unit = {},
+    hasGithubToken: Boolean = false,
+    githubTokenMasked: String = "",
+    onGithubTokenReplace: (String) -> Unit = {},
+    onGithubTokenClear: () -> Unit = {},
+    githubOwner: String = LogUploadManager.DEFAULT_OWNER,
+    githubRepo: String = LogUploadManager.DEFAULT_REPO,
+    onGithubOwnerChange: (String) -> Unit = {},
+    onGithubRepoChange: (String) -> Unit = {},
     onUploadLogs: () -> Unit = {},
-    openAiApiKey: String = "",
-    onOpenAiApiKeyChange: (String) -> Unit = {},
+    hasOpenAiKey: Boolean = false,
+    openAiKeyMasked: String = "",
+    onOpenAiKeyReplace: (String) -> Unit = {},
+    onOpenAiKeyClear: () -> Unit = {},
     appVersionLabel: String = "",
     updateStatusText: String = "",
     updateBusy: Boolean = false,
@@ -270,8 +278,12 @@ fun SettingsScreen(
 
         // —— Private keys ——
         SectionLabel("Private keys")
-        var openAiDraft by remember(openAiApiKey) { mutableStateOf(openAiApiKey) }
-        var tokenDraft by remember(githubToken) { mutableStateOf(githubToken) }
+        var replacingOpenAi by remember { mutableStateOf(false) }
+        var replacingGithub by remember { mutableStateOf(false) }
+        var openAiDraft by remember { mutableStateOf("") }
+        var tokenDraft by remember { mutableStateOf("") }
+        var ownerDraft by remember(githubOwner) { mutableStateOf(githubOwner) }
+        var repoDraft by remember(githubRepo) { mutableStateOf(githubRepo) }
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -281,51 +293,56 @@ fun SettingsScreen(
         ) {
             Text("OpenAI key", color = TextPrimary, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
             Text(
-                text = "Used for DIAG → Analyze via AI (gpt-4o-mini). Paste from platform.openai.com.",
+                text = "Used for DIAG → Analyze via AI (gpt-4o-mini). Paste from platform.openai.com. Stored encrypted on device.",
                 color = TextMuted,
                 fontSize = 12.sp,
                 modifier = Modifier.padding(top = 4.dp, bottom = 8.dp),
             )
-            BasicTextField(
-                value = openAiDraft,
-                onValueChange = {
-                    openAiDraft = it
-                    onOpenAiApiKeyChange(it)
-                },
-                singleLine = true,
-                textStyle = TextStyle(color = TextPrimary, fontSize = 13.sp),
-                cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(MaterialTheme.colorScheme.background)
-                    .padding(12.dp),
-                decorationBox = { inner ->
-                    if (openAiDraft.isBlank()) {
-                        Text("sk-… paste key", color = TextMuted, fontSize = 13.sp)
+            MaskedSecretField(
+                hasValue = hasOpenAiKey,
+                masked = openAiKeyMasked,
+                replacing = replacingOpenAi,
+                draft = openAiDraft,
+                placeholder = "sk-… paste key",
+                onDraftChange = { openAiDraft = it },
+                onReplace = { replacingOpenAi = true; openAiDraft = "" },
+                onSave = {
+                    if (openAiDraft.isNotBlank()) {
+                        onOpenAiKeyReplace(openAiDraft.trim())
+                        openAiDraft = ""
+                        replacingOpenAi = false
                     }
-                    inner()
+                },
+                onClear = {
+                    onOpenAiKeyClear()
+                    openAiDraft = ""
+                    replacingOpenAi = false
+                },
+                onCancelReplace = {
+                    openAiDraft = ""
+                    replacingOpenAi = false
                 },
             )
 
             Text(
-                text = "GitHub key",
+                text = "GitHub upload",
                 color = TextPrimary,
                 fontSize = 14.sp,
                 fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.padding(top = 16.dp),
             )
             Text(
-                text = "Fine-grained PAT with Contents: Read and write on this repo — uploads logs and AI reports.",
+                text = "Fine-grained PAT with Contents: Read & write on ONLY the private logs repo below (default ${LogUploadManager.DEFAULT_OWNER}/${LogUploadManager.DEFAULT_REPO}). Not this public app repo.",
                 color = TextMuted,
                 fontSize = 12.sp,
                 modifier = Modifier.padding(top = 4.dp, bottom = 8.dp),
             )
+            Text("Owner", color = TextMuted, fontSize = 12.sp, modifier = Modifier.padding(bottom = 4.dp))
             BasicTextField(
-                value = tokenDraft,
+                value = ownerDraft,
                 onValueChange = {
-                    tokenDraft = it
-                    onGithubTokenChange(it)
+                    ownerDraft = it
+                    onGithubOwnerChange(it)
                 },
                 singleLine = true,
                 textStyle = TextStyle(color = TextPrimary, fontSize = 13.sp),
@@ -335,11 +352,57 @@ fun SettingsScreen(
                     .clip(RoundedCornerShape(8.dp))
                     .background(MaterialTheme.colorScheme.background)
                     .padding(12.dp),
-                decorationBox = { inner ->
-                    if (tokenDraft.isBlank()) {
-                        Text("github_pat_… / ghp_… paste token", color = TextMuted, fontSize = 13.sp)
+            )
+            Text(
+                "Repo",
+                color = TextMuted,
+                fontSize = 12.sp,
+                modifier = Modifier.padding(top = 8.dp, bottom = 4.dp),
+            )
+            BasicTextField(
+                value = repoDraft,
+                onValueChange = {
+                    repoDraft = it
+                    onGithubRepoChange(it)
+                },
+                singleLine = true,
+                textStyle = TextStyle(color = TextPrimary, fontSize = 13.sp),
+                cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(MaterialTheme.colorScheme.background)
+                    .padding(12.dp),
+            )
+            Text(
+                "Token",
+                color = TextMuted,
+                fontSize = 12.sp,
+                modifier = Modifier.padding(top = 8.dp, bottom = 4.dp),
+            )
+            MaskedSecretField(
+                hasValue = hasGithubToken,
+                masked = githubTokenMasked,
+                replacing = replacingGithub,
+                draft = tokenDraft,
+                placeholder = "github_pat_… / ghp_… paste token",
+                onDraftChange = { tokenDraft = it },
+                onReplace = { replacingGithub = true; tokenDraft = "" },
+                onSave = {
+                    if (tokenDraft.isNotBlank()) {
+                        onGithubTokenReplace(tokenDraft.trim())
+                        tokenDraft = ""
+                        replacingGithub = false
                     }
-                    inner()
+                },
+                onClear = {
+                    onGithubTokenClear()
+                    tokenDraft = ""
+                    replacingGithub = false
+                },
+                onCancelReplace = {
+                    tokenDraft = ""
+                    replacingGithub = false
                 },
             )
         }
@@ -369,6 +432,84 @@ private fun SectionLabel(text: String) {
         fontSize = 12.sp,
         fontWeight = FontWeight.Bold,
         modifier = Modifier.padding(top = 18.dp, bottom = 8.dp),
+    )
+}
+
+/** Shows a masked secret with Replace / Clear; full value never reappears after save. */
+@Composable
+private fun MaskedSecretField(
+    hasValue: Boolean,
+    masked: String,
+    replacing: Boolean,
+    draft: String,
+    placeholder: String,
+    onDraftChange: (String) -> Unit,
+    onReplace: () -> Unit,
+    onSave: () -> Unit,
+    onClear: () -> Unit,
+    onCancelReplace: () -> Unit,
+) {
+    if (hasValue && !replacing) {
+        Text(
+            text = masked.ifBlank { "•••• saved" },
+            color = TextPrimary,
+            fontSize = 13.sp,
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(8.dp))
+                .background(MaterialTheme.colorScheme.background)
+                .padding(12.dp),
+        )
+        Row(
+            modifier = Modifier.padding(top = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            SmallActionChip("Replace", onReplace)
+            SmallActionChip("Clear", onClear)
+        }
+    } else {
+        BasicTextField(
+            value = draft,
+            onValueChange = onDraftChange,
+            singleLine = true,
+            textStyle = TextStyle(color = TextPrimary, fontSize = 13.sp),
+            cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(8.dp))
+                .background(MaterialTheme.colorScheme.background)
+                .padding(12.dp),
+            decorationBox = { inner ->
+                if (draft.isBlank()) {
+                    Text(placeholder, color = TextMuted, fontSize = 13.sp)
+                }
+                inner()
+            },
+        )
+        Row(
+            modifier = Modifier.padding(top = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            SmallActionChip("Save", onSave)
+            if (replacing) {
+                SmallActionChip("Cancel", onCancelReplace)
+            }
+        }
+    }
+}
+
+@Composable
+private fun SmallActionChip(label: String, onClick: () -> Unit) {
+    Text(
+        text = label,
+        color = LocalThemePalette.current.accent,
+        fontSize = 13.sp,
+        fontWeight = FontWeight.SemiBold,
+        modifier = Modifier
+            .clip(RoundedCornerShape(8.dp))
+            .background(MaterialTheme.colorScheme.background)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 8.dp),
     )
 }
 

@@ -37,25 +37,22 @@ max_attempts=8
 while true; do
   versions_code="$(fetch_http_code "${RAW_BASE}/versions.json")"
   version_code="$(fetch_http_code "${RAW_BASE}/version.json")"
-  apk_code="$(fetch_http_code "${RAW_BASE}/FB2-Diag-debug.apk")"
-  if [[ "$versions_code" == "200" && "$version_code" == "200" && "$apk_code" == "200" ]]; then
+  if [[ "$versions_code" == "200" && "$version_code" == "200" ]]; then
     break
   fi
   if (( attempt >= max_attempts )); then
     echo "FAIL after $max_attempts attempts:" >&2
     echo "  versions.json → HTTP $versions_code" >&2
     echo "  version.json  → HTTP $version_code" >&2
-    echo "  APK           → HTTP $apk_code" >&2
     exit 1
   fi
-  echo "Waiting for CDN (attempt $attempt/$max_attempts)… versions=$versions_code version=$version_code apk=$apk_code"
+  echo "Waiting for CDN (attempt $attempt/$max_attempts)… versions=$versions_code version=$version_code"
   sleep 4
   attempt=$((attempt + 1))
 done
 
 fetch_ok "${RAW_BASE}/versions.json"
 fetch_ok "${RAW_BASE}/version.json"
-fetch_ok "${RAW_BASE}/FB2-Diag-debug.apk"
 
 # GitHub Contents API — same path the app tries first.
 api_code="$(fetch_http_code "${API_BASE}/versions.json?ref=${BRANCH}")"
@@ -89,7 +86,13 @@ if version.get("versionName") != latest.get("versionName"):
     raise SystemExit(
         f"version.json name {version.get('versionName')} != latest {latest.get('versionName')}"
     )
+apk = latest.get("apkUrl") or ""
+if "github.com/" not in apk or "/releases/" not in apk:
+    raise SystemExit(f"latest.apkUrl must be a GitHub Release asset URL, got: {apk}")
+if "/dist/archive/" in apk or "FB2-Diag-debug.apk" in apk:
+    raise SystemExit(f"latest.apkUrl must not point at committed dist/ APKs: {apk}")
 print(f"Catalog OK — latest v{latest['versionName']} (code {latest['versionCode']}), {len(releases)} releases")
+print(f"APK URL: {apk}")
 PY
 
 echo "All update-catalog checks passed."

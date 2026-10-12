@@ -441,8 +441,14 @@ class MainActivity : ComponentActivity() {
                             },
                             batteryUnrestricted = batteryUnrestricted,
                             uploadStatus = uploadStatus,
-                            githubToken = viewModel.githubUploadToken(),
-                            onGithubTokenChange = viewModel::setGithubUploadToken,
+                            hasGithubToken = viewModel.hasGithubUploadToken(),
+                            githubTokenMasked = viewModel.githubUploadTokenMasked(),
+                            onGithubTokenReplace = viewModel::setGithubUploadToken,
+                            onGithubTokenClear = viewModel::clearGithubUploadToken,
+                            githubOwner = viewModel.githubUploadOwner(),
+                            githubRepo = viewModel.githubUploadRepo(),
+                            onGithubOwnerChange = viewModel::setGithubUploadOwner,
+                            onGithubRepoChange = viewModel::setGithubUploadRepo,
                             onUploadLogs = {
                                 viewModel.uploadSavedLogs()
                         toast(
@@ -450,8 +456,10 @@ class MainActivity : ComponentActivity() {
                             else "No internet — check HU Wi‑Fi / 4G",
                         )
                             },
-                            openAiApiKey = viewModel.openAiApiKey(),
-                            onOpenAiApiKeyChange = viewModel::setOpenAiApiKey,
+                            hasOpenAiKey = viewModel.hasOpenAiApiKey(),
+                            openAiKeyMasked = viewModel.openAiApiKeyMasked(),
+                            onOpenAiKeyReplace = viewModel::setOpenAiApiKey,
+                            onOpenAiKeyClear = viewModel::clearOpenAiApiKey,
                             appVersionLabel = appUpdateManager.localLabel,
                             updateStatusText = updateStatusText,
                             updateBusy = updateBusy,
@@ -494,7 +502,7 @@ class MainActivity : ComponentActivity() {
                             state = aiState,
                             savedLogs = logs,
                             savedAiReports = aiReports,
-                            hasApiKey = viewModel.openAiApiKey().isNotBlank(),
+                            hasApiKey = viewModel.hasOpenAiApiKey(),
                             vehicleProfile = settings.vehicleProfile,
                             onModeLive = viewModel::setAiAnalyzeModeLive,
                             onWindowMinutes = viewModel::setAiAnalyzeWindowMinutes,
