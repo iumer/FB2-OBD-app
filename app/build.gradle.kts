@@ -1,4 +1,5 @@
 import java.util.Properties
+import java.util.zip.ZipFile
 
 plugins {
     id("com.android.application")
@@ -154,7 +155,7 @@ tasks.register("checkNoPackagedSecrets") {
             else emptyList()
         }
         apks.forEach { apk ->
-            java.util.zip.ZipFile(apk).use { zip ->
+            ZipFile(apk).use { zip: ZipFile ->
                 val entries = zip.entries()
                 while (entries.hasMoreElements()) {
                     val entry = entries.nextElement()
