@@ -44,15 +44,21 @@ Requires JDK 17 and the Android SDK (see `AGENTS.md` for the cloud setup).
 After code changes, follow [`REGRESSION.md`](REGRESSION.md) (full automated suite +
 issue inventory + manual car checks).
 
-## Download (always the same link)
+## Download APK
 
-Phone sideload — **bookmark this; it does not change between updates:**
+Sideload builds are **GitHub Release assets** (not committed to git):
 
-https://raw.githubusercontent.com/iumer/FB2-OBD-app/latest/dist/FB2-Diag-debug.apk
+https://github.com/iumer/FB2-OBD-app/releases/latest/download/FB2-Diag.apk
 
-After every agent change that rebuilds the app, the APK is published to the
-`latest` branch so that URL stays current.
-Sideload `app-debug.apk` onto your phone (`adb install -r app-debug.apk` or copy
-it over). The app launches straight into the dashboard on the **Demo** source;
-wiring the paired ELM327 device into `Elm327BluetoothSource` switches it to live
-data.
+Or pick a version under [Releases](https://github.com/iumer/FB2-OBD-app/releases).
+In-app updates read `dist/versions.json` on branch `latest` (catalog only).
+
+The app launches on the **Demo** source with no hardware; Connect picks a paired
+ELM327 for live data. OpenAI / GitHub keys are entered only in Settings on the
+phone (never packaged in the APK).
+
+## Contributing
+
+This repo is public: anyone can view, clone, and open a **pull request**.
+Nobody can push to your branches unless you add them as a collaborator — you
+approve every change.
