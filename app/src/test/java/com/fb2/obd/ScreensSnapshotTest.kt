@@ -1,0 +1,223 @@
+package com.fb2.obd
+
+import app.cash.paparazzi.Paparazzi
+import com.fb2.obd.data.ObdLogger
+import com.fb2.obd.data.SavedLogFile
+import com.fb2.obd.obd.Dtc
+import com.fb2.obd.obd.GearSource
+import com.fb2.obd.obd.VehicleSnapshot
+import com.fb2.obd.perf.AccelResult
+import com.fb2.obd.obd.PidProbeResult
+import com.fb2.obd.obd.StandardPidCatalog
+import com.fb2.obd.ui.AiAnalyzeScreen
+import com.fb2.obd.ui.DebugLogScreen
+import com.fb2.obd.ui.FaultsScreen
+import com.fb2.obd.ui.PerformanceScreen
+import com.fb2.obd.ui.SettingsScreen
+import com.fb2.obd.ui.ValueLogScreen
+import com.fb2.obd.ui.theme.FB2Theme
+import com.fb2.obd.obd.VehicleProfile
+import org.junit.Rule
+import org.junit.Test
+
+class ScreensSnapshotTest {
+
+    @get:Rule
+    val paparazzi = Paparazzi(deviceConfig = CarHuDevices.HU_1024x600)
+
+    @Test
+    fun aiAnalyze_driverNotes_screen() {
+        paparazzi.snapshot {
+            FB2Theme {
+                AiAnalyzeScreen(
+                    state = AiAnalyzeUiState(
+                        modeLive = true,
+                        windowMinutes = 5,
+                        driverNotes = "Daihatsu Mira 2015 MAP-only 6-injector FWD — no physical MAF.",
+                    ),
+                    savedLogs = emptyList(),
+                    hasApiKey = true,
+                    vehicleProfile = VehicleProfile.GENERIC_OBD2,
+                    onModeLive = {},
+                    onWindowMinutes = {},
+                    onSelectLog = {},
+                    onDriverNotes = {},
+                    onAnalyze = {},
+                    onClearReport = {},
+                    onRefreshLogs = {},
+                    onOpenSettings = {},
+                    onBack = {},
+                )
+            }
+        }
+    }
+
+    @Test
+    fun valueLog_withAiReports_screen() {
+        val t = 1_700_000_000_000L
+        paparazzi.snapshot {
+            FB2Theme {
+                ValueLogScreen(
+                    rows = emptyList(),
+                    onShare = {},
+                    onClear = {},
+                    onBack = {},
+                    savedFiles = listOf(
+                        SavedLogFile(
+                            fileName = "FB2-log-20260827-194554.csv",
+                            absolutePath = "/tmp/FB2-log-20260827-194554.csv",
+                            startedMs = t,
+                            sizeBytes = 84_000,
+                        ),
+                    ),
+                    savedAiReports = listOf(
+                        com.fb2.obd.data.SavedAiReport(
+                            fileName = "FB2-ai-20260827-200000.txt",
+                            absolutePath = "/tmp/FB2-ai-20260827-200000.txt",
+                            createdMs = t + 60_000,
+                            sizeBytes = 12_000,
+                        ),
+                    ),
+                )
+            }
+        }
+    }
+
+    @Test
+    fun settings_screen() {
+        paparazzi.snapshot {
+            FB2Theme {
+                SettingsScreen(
+                    settings = SettingsState(showEstimatedGear = true, voiceAlerts = true),
+                    onToggleEstimatedGear = {},
+                    onToggleVoiceAlerts = {},
+                    onCheckSoundAlert = {},
+                    appVersionLabel = "v0.1.43",
+                    nav = com.fb2.obd.ui.SettingsNav(),
+                    onBack = {},
+                )
+            }
+        }
+    }
+
+    @Test
+    fun settings_updateList_screen() {
+        paparazzi.snapshot {
+            FB2Theme {
+                SettingsScreen(
+                    settings = SettingsState(showEstimatedGear = true, voiceAlerts = true),
+                    onToggleEstimatedGear = {},
+                    onToggleVoiceAlerts = {},
+                    onCheckSoundAlert = {},
+                    appVersionLabel = "v0.1.43",
+                    updateStatusText = "5 updates available (v0.1.16 – v0.1.20)",
+                    availableUpdates = listOf(
+                        com.fb2.obd.obd.AppUpdateChecker.RemoteVersion(16, "0.1.16", notes = "OptA wheel"),
+                        com.fb2.obd.obd.AppUpdateChecker.RemoteVersion(18, "0.1.18", notes = "OptB/OptC clip"),
+                        com.fb2.obd.obd.AppUpdateChecker.RemoteVersion(20, "0.1.20", notes = "ELM forensics"),
+                    ),
+                    nav = com.fb2.obd.ui.SettingsNav(),
+                    onBack = {},
+                )
+            }
+        }
+    }
+
+    @Test
+    fun sensor_picker_refresh_chip() {
+        val rpm = StandardPidCatalog.all.first { it.request.equals("010C", true) }
+        val coolant = StandardPidCatalog.all.first { it.request.equals("0105", true) }
+        val map = StandardPidCatalog.all.first { it.request.equals("010B", true) }
+        val maf = StandardPidCatalog.all.first { it.request.equals("0110", true) }
+        val ambient = StandardPidCatalog.all.first { it.request.equals("0146", true) }
+        val catalog = listOf(rpm, coolant, map, maf, ambient)
+        val snap = VehicleSnapshot(rpm = 847.0, coolantC = 57.0, mapKpa = 32.0, mafGps = 3.1)
+        paparazzi.snapshot {
+            FB2Theme {
+                com.fb2.obd.ui.SensorPickerContent(
+                    catalog = catalog,
+                    snapshot = snap,
+                    probeById = mapOf(
+                        maf.id to PidProbeResult(maf, true, 3.1, "from-live-dashboard"),
+                    ),
+                    scanning = false,
+                    onPick = {},
+                    onDismiss = {},
+                )
+            }
+        }
+    }
+
+    @Test
+    fun debugLog_screen() {
+        val t = 1_700_000_000_000L
+        val lines = listOf(
+            ObdLogger.DebugLine(t, ObdLogger.Dir.INFO, "Connecting to 00:1D:A5:68:98:8B"),
+            ObdLogger.DebugLine(t, ObdLogger.Dir.TX, "ATZ"),
+            ObdLogger.DebugLine(t, ObdLogger.Dir.RX, "ELM327 v1.5"),
+            ObdLogger.DebugLine(t, ObdLogger.Dir.INFO, "Supported PIDs: 04 05 06 0B 0C 0D 0E 0F 10 11 42"),
+            ObdLogger.DebugLine(t, ObdLogger.Dir.TX, "010C"),
+            ObdLogger.DebugLine(t, ObdLogger.Dir.RX, "41 0C 0B 20"),
+            ObdLogger.DebugLine(t, ObdLogger.Dir.TX, "0167"),
+            ObdLogger.DebugLine(t, ObdLogger.Dir.RX, "NO DATA"),
+        )
+        paparazzi.snapshot {
+            FB2Theme {
+                DebugLogScreen(lines = lines, onShare = {}, onClear = {}, onBack = {})
+            }
+        }
+    }
+
+    @Test
+    fun valueLog_screen() {
+        val t = 1_700_000_000_000L
+        val rows = listOf(
+            ObdLogger.ValueRow(t, VehicleSnapshot(rpm = 712.0, speedKmh = 0.0, coolantC = 86.0, batteryVolts = 13.0, gearSource = GearSource.NONE)),
+            ObdLogger.ValueRow(t + 250, VehicleSnapshot(rpm = 1650.0, speedKmh = 28.0, coolantC = 88.0, batteryVolts = 14.1, gear = 2, gearSource = GearSource.ESTIMATED)),
+            ObdLogger.ValueRow(t + 500, VehicleSnapshot(rpm = 2100.0, speedKmh = 52.0, coolantC = 90.0, batteryVolts = 14.2, gear = 3, gearSource = GearSource.ESTIMATED)),
+        )
+        paparazzi.snapshot {
+            FB2Theme {
+                ValueLogScreen(rows = rows, onShare = {}, onClear = {}, onBack = {})
+            }
+        }
+    }
+
+    @Test
+    fun faults_screen() {
+        val state = FaultsState(
+            hasRead = true,
+            stored = listOf(
+                Dtc("P0133", "O2 sensor slow response (B1S1)"),
+                Dtc("P0420", "Catalyst efficiency below threshold (Bank 1)"),
+            ),
+            pending = listOf(Dtc("P0300", "Random/multiple cylinder misfire")),
+        )
+        paparazzi.snapshot {
+            FB2Theme {
+                FaultsScreen(state = state, onRead = {}, onClear = {}, onBack = {})
+            }
+        }
+    }
+
+    @Test
+    fun performance_screen() {
+        val state = PerformanceState(
+            current = AccelResult(
+                zeroTo100Kmh = 10.42,
+                zeroTo60Mph = 9.15,
+                sixtyTo100Kmh = 4.80,
+                quarterMileSec = 17.6,
+                quarterMileTrapKmh = 130.0,
+            ),
+            best = AccelResult(zeroTo100Kmh = 10.42),
+            currentSpeedKmh = 48.0,
+        )
+        paparazzi.snapshot {
+            FB2Theme {
+                PerformanceScreen(state = state, onReset = {}, onBack = {})
+            }
+        }
+    }
+}
+

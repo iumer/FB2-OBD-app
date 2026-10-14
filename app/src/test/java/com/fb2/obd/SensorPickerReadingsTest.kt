@@ -1,0 +1,219 @@
+package com.fb2.obd
+
+import com.fb2.obd.obd.PidProbeResult
+import com.fb2.obd.obd.SensorPickerReading
+import com.fb2.obd.obd.SensorPickerReadings
+import com.fb2.obd.obd.SensorReadKind
+import com.fb2.obd.obd.StandardPidCatalog
+import com.fb2.obd.obd.VehicleSnapshot
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
+import org.junit.Test
+
+class SensorPickerReadingsTest {
+
+    private val coolant = StandardPidCatalog.all.first { it.request.equals("0105", true) }
+    private val rpm = StandardPidCatalog.all.first { it.request.equals("010C", true) }
+    private val ambient = StandardPidCatalog.all.first { it.request.equals("0146", true) }
+    private val fuelLoop = StandardPidCatalog.all.first { it.request.equals("0103", true) }
+    private val ltft = StandardPidCatalog.all.first { it.request.equals("0107", true) }
+
+    @Test
+    fun liveSnapshot_isGreenWithLatestValue() {
+        val snap = VehicleSnapshot(rpm = 711.0, coolantC = 73.0, fuelSystemStatus = "CLOSED LOOP")
+        val rpmReading = SensorPickerReadings.resolve(rpm, snap, emptyMap())
+        assertEquals(SensorReadKind.LIVE, rpmReading.kind)
+        assertTrue(rpmReading.subtitle.startsWith("Latest value:"))
+        assertTrue(rpmReading.latest!!.contains("711"))
+
+        val loop = SensorPickerReadings.resolve(fuelLoop, snap, emptyMap())
+        assertEquals(SensorReadKind.LIVE, loop.kind)
+        assertEquals("Latest value: CLOSED LOOP", loop.subtitle)
+    }
+
+    @Test
+    fun liveMap_beatsEcuUnsupportedBitmask() {
+        val map = StandardPidCatalog.all.first { it.request.equals("010B", true) }
+        val snap = VehicleSnapshot(mapKpa = 97.0, mafGps = 0.33, unsupportedPids = setOf(0x0B))
+        val reading = SensorPickerReadings.resolve(map, snap, emptyMap())
+        assertEquals(SensorReadKind.LIVE, reading.kind)
+        assertTrue(reading.latest!!.contains("97"))
+    }
+
+    @Test
+    fun liveCoolant_beatsEcuUnsupportedBitmask() {
+        val snap = VehicleSnapshot(coolantC = 85.0, unsupportedPids = setOf(0x05))
+        val reading = SensorPickerReadings.resolve(coolant, snap, emptyMap())
+        assertEquals(SensorReadKind.LIVE, reading.kind)
+        assertTrue(reading.latest!!.contains("85"))
+    }
+
+    @Test
+    fun liveIntake_beatsEcuUnsupportedBitmask() {
+        val intake = StandardPidCatalog.all.first { it.request.equals("010F", true) }
+        val snap = VehicleSnapshot(intakeC = 34.0, unsupportedPids = setOf(0x0F))
+        val reading = SensorPickerReadings.resolve(intake, snap, emptyMap())
+        assertEquals(SensorReadKind.LIVE, reading.kind)
+        assertTrue(reading.latest!!.contains("34"))
+    }
+
+    @Test
+    fun latch_keepsLiveWhenSnapshotClears() {
+        val live = SensorPickerReading(SensorReadKind.LIVE, "97.00 kPa")
+        val gone = SensorPickerReading(SensorReadKind.NONE)
+        val kept = SensorPickerReadings.latch(live, gone)
+        assertEquals(SensorReadKind.LIVE, kept.kind)
+        assertEquals("97.00 kPa", kept.latest)
+    }
+
+    @Test
+    fun latch_keepsCoolantWhenSnapshotAndProbeClear() {
+        val live = SensorPickerReading(SensorReadKind.LIVE, "85.00 °C")
+        val cleared = SensorPickerReading(SensorReadKind.NONE)
+        val kept = SensorPickerReadings.latch(live, cleared)
+        assertEquals(SensorReadKind.LIVE, kept.kind)
+        assertEquals("85.00 °C", kept.latest)
+    }
+
+    @Test
+    fun latchSequence_liveThenSnapshotClearThenBitmask() {
+        val map = StandardPidCatalog.all.first { it.request.equals("010B", true) }
+        val liveSnap = VehicleSnapshot(mapKpa = 97.0)
+        val frame1 = SensorPickerReadings.resolve(map, liveSnap, emptyMap())
+        assertEquals(SensorReadKind.LIVE, frame1.kind)
+        var latched: SensorPickerReading? = SensorPickerReadings.latch(null, frame1)
+        val cleared = VehicleSnapshot(unsupportedPids = setOf(0x0B))
+        val frame2 = SensorPickerReadings.resolve(map, cleared, emptyMap())
+        assertEquals(SensorReadKind.WAITING, frame2.kind)
+        latched = SensorPickerReadings.latch(latched, frame2)
+        assertEquals(SensorReadKind.LIVE, latched!!.kind)
+    }
+
+    @Test
+    fun unsupportedBitmask_staysWaitingEvenAfterScan() {
+        val snap = VehicleSnapshot(unsupportedPids = setOf(0x46))
+        val waiting = SensorPickerReadings.resolve(ambient, snap, emptyMap(), scanning = true)
+        assertEquals(SensorReadKind.WAITING, waiting.kind)
+        val still = SensorPickerReadings.resolve(ambient, snap, emptyMap(), scanning = false)
+        assertEquals(SensorReadKind.WAITING, still.kind)
+    }
+
+    @Test
+    fun mergeProbeResults_neverDowngradesSupportedHit() {
+        val map = StandardPidCatalog.all.first { it.request.equals("010B", true) }
+        val prev = PidProbeResult(map, supported = true, sample = 97.0, raw = "from-live-dashboard")
+        val miss = PidProbeResult(map, supported = false, sample = null, raw = "NO DATA")
+        val merged = SensorPickerReadings.mergeProbeResults(
+            mapOf(map.id to prev),
+            mapOf(map.id to miss),
+        )
+        assertTrue(merged[map.id]!!.supported)
+        assertEquals(97.0, merged[map.id]!!.sample!!, 0.01)
+    }
+
+    @Test
+    fun mergeProbeResults_keepsFuelLoopTextWithoutSample() {
+        val prev = PidProbeResult(fuelLoop, supported = true, sample = null, raw = "CLOSED LOOP")
+        val miss = PidProbeResult(fuelLoop, supported = false, sample = null, raw = "NO DATA")
+        val merged = SensorPickerReadings.mergeProbeResults(
+            mapOf(fuelLoop.id to prev),
+            mapOf(fuelLoop.id to miss),
+        )
+        assertTrue(merged[fuelLoop.id]!!.supported)
+        assertEquals("CLOSED LOOP", merged[fuelLoop.id]!!.raw)
+    }
+
+    @Test
+    fun ecuUnsupported_staysWaitingUntilProbed() {
+        val snap = VehicleSnapshot(unsupportedPids = setOf(0x46, 0x07, 0x67))
+        val reading = SensorPickerReadings.resolve(ambient, snap, emptyMap())
+        assertEquals(SensorReadKind.WAITING, reading.kind)
+        assertFalse(reading.isReadable)
+
+        val ltftReading = SensorPickerReadings.resolve(ltft, snap, emptyMap())
+        assertEquals(SensorReadKind.WAITING, ltftReading.kind)
+    }
+
+    @Test
+    fun waitingUntilProbed() {
+        val reading = SensorPickerReadings.resolve(coolant, VehicleSnapshot.EMPTY, emptyMap())
+        assertEquals(SensorReadKind.WAITING, reading.kind)
+        assertEquals("Waiting for data", reading.subtitle)
+    }
+
+    @Test
+    fun probeHit_becomesLive() {
+        val probe = mapOf(
+            coolant.id to PidProbeResult(coolant, supported = true, sample = 73.0, raw = "41 05 7B"),
+        )
+        val reading = SensorPickerReadings.resolve(coolant, VehicleSnapshot.EMPTY, probe)
+        assertEquals(SensorReadKind.LIVE, reading.kind)
+        assertTrue(reading.subtitle.contains("73"))
+    }
+
+    @Test
+    fun probeMiss_isNoData() {
+        val probe = mapOf(
+            ambient.id to PidProbeResult(ambient, supported = false, sample = null, raw = "NO DATA"),
+        )
+        val reading = SensorPickerReadings.resolve(ambient, VehicleSnapshot.EMPTY, probe)
+        assertEquals(SensorReadKind.NONE, reading.kind)
+        assertEquals("No data received", reading.subtitle)
+    }
+
+    @Test
+    fun searchMatchesLabelAndPid() {
+        assertTrue(SensorPickerReadings.matchesQuery(rpm, "rpm"))
+        assertTrue(SensorPickerReadings.matchesQuery(rpm, "010C"))
+        assertTrue(SensorPickerReadings.matchesQuery(coolant, "temp"))
+        assertFalse(SensorPickerReadings.matchesQuery(rpm, "banana"))
+    }
+
+    @Test
+    fun parseSaeSupport_fromDemo0100() {
+        val set = SensorPickerReadings.parseSaeSupport(0x00, "41 00 BE 3E B8 11")
+        assertTrue("RPM 0x0C should be advertised", 0x0C in set)
+        assertTrue("Coolant 0x05 should be advertised", 0x05 in set)
+        assertFalse("Ambient 0x46 is not in the 01-20 block", 0x46 in set)
+    }
+
+    @Test
+    fun expandProbeHits_decodesO2CurrentFromSame0124Frame() {
+        val lambda = StandardPidCatalog.all.first { it.id.equals("0124", true) }
+        val current = StandardPidCatalog.all.first { it.id.equals("0124I", true) }
+        val hit = PidProbeResult(lambda, supported = true, sample = 1.99, raw = "41 24 FF FF 80 01")
+        val expanded = SensorPickerReadings.expandProbeHits(listOf(lambda, current), listOf(hit))
+        assertTrue(expanded.containsKey("0124"))
+        assertTrue(expanded.containsKey("0124I"))
+        assertEquals(SensorReadKind.LIVE, SensorPickerReadings.resolve(current, VehicleSnapshot.EMPTY, expanded).kind)
+    }
+
+    @Test
+    fun pidInCoveredSupportBlock_onlyMarksDecodedRange() {
+        assertTrue(SensorPickerReadings.pidInCoveredSupportBlock(0x0C, setOf(0x00)))
+        assertFalse(SensorPickerReadings.pidInCoveredSupportBlock(0x42, setOf(0x00)))
+        assertTrue(SensorPickerReadings.pidInCoveredSupportBlock(0x42, setOf(0x00, 0x40)))
+    }
+
+    @Test
+    fun unknownFuelLoop_isNotReadable() {
+        val snap = VehicleSnapshot(fuelSystemStatus = "UNKNOWN")
+        val fromSnap = SensorPickerReadings.resolve(fuelLoop, snap, emptyMap())
+        assertEquals(SensorReadKind.WAITING, fromSnap.kind)
+
+        val probe = mapOf(
+            fuelLoop.id to PidProbeResult(fuelLoop, supported = true, sample = 0.0, raw = "41 03 00 00"),
+        )
+        val fromProbe = SensorPickerReadings.resolve(fuelLoop, VehicleSnapshot.EMPTY, probe)
+        assertEquals(SensorReadKind.NONE, fromProbe.kind)
+    }
+
+    @Test
+    fun skippedProbe_isNotStoredByMerge() {
+        val map = StandardPidCatalog.all.first { it.request.equals("010B", true) }
+        val skip = PidProbeResult(map, supported = false, sample = null, raw = "SKIPPED (bus unhealthy)")
+        val merged = SensorPickerReadings.mergeProbeResults(emptyMap(), mapOf(map.id to skip))
+        assertTrue(merged.isEmpty())
+    }
+}
