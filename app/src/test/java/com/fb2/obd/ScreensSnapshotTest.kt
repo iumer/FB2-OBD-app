@@ -1,5 +1,6 @@
 package com.fb2.obd
 
+import androidx.compose.foundation.ScrollState
 import app.cash.paparazzi.Paparazzi
 import com.fb2.obd.data.ObdLogger
 import com.fb2.obd.data.SavedLogFile
@@ -92,9 +93,28 @@ class ScreensSnapshotTest {
                     onToggleEstimatedGear = {},
                     onToggleVoiceAlerts = {},
                     onCheckSoundAlert = {},
-                    appVersionLabel = "v0.1.43",
+                    appVersionLabel = "v0.1.44",
                     nav = com.fb2.obd.ui.SettingsNav(),
                     onBack = {},
+                )
+            }
+        }
+    }
+
+    @Test
+    fun settings_about_credit_screen() {
+        paparazzi.snapshot {
+            FB2Theme {
+                SettingsScreen(
+                    settings = SettingsState(showEstimatedGear = true, voiceAlerts = true),
+                    onToggleEstimatedGear = {},
+                    onToggleVoiceAlerts = {},
+                    onCheckSoundAlert = {},
+                    appVersionLabel = "v0.1.44",
+                    nav = com.fb2.obd.ui.SettingsNav(),
+                    onBack = {},
+                    // Jump near the bottom so ABOUT / Built by is in frame.
+                    scrollState = ScrollState(initial = 2800),
                 )
             }
         }
@@ -109,7 +129,7 @@ class ScreensSnapshotTest {
                     onToggleEstimatedGear = {},
                     onToggleVoiceAlerts = {},
                     onCheckSoundAlert = {},
-                    appVersionLabel = "v0.1.43",
+                    appVersionLabel = "v0.1.44",
                     updateStatusText = "5 updates available (v0.1.16 – v0.1.20)",
                     availableUpdates = listOf(
                         com.fb2.obd.obd.AppUpdateChecker.RemoteVersion(16, "0.1.16", notes = "OptA wheel"),

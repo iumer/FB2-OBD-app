@@ -1,9 +1,14 @@
 # FB2-OBD-app
 
+**Built by iUmer Farooq** · [github.com/iumer/FB2-OBD-app](https://github.com/iumer/FB2-OBD-app)
+
 A personal Android diagnostic dashboard for a Honda Civic **FB2** (1.8L, 5-speed
 automatic), built around an ELM327 OBD-II adapter. The goal is a single-screen,
 instrument-cluster style dashboard that goes beyond generic OBD apps (Torque
 etc.) with Honda-focused diagnostics and a strong transmission dashboard.
+
+Copyright (c) 2026 iUmer Farooq — see [`LICENSE`](LICENSE) (MIT; keep this notice
+in forks and copies).
 
 > Status: **feature-rich diagnostic build.** Live dashboard + ELM327 Bluetooth,
 > full SAE Mode 01 catalog (~150+), custom sensor picker, fuel/trip/transmission

@@ -141,6 +141,7 @@ class AiReportStore(
             vehicleLabel: String? = null,
         ): String = buildString {
             appendLine("# FB2-OBD AI diagnostic report")
+            com.fb2.obd.obd.AppAttribution.logHeaderLines().forEach { appendLine(it) }
             appendLine("# created_ms=$createdMs")
             appendLine("# source=$sourceLabel")
             appendLine("# requested_window_minutes=$windowMinutes")

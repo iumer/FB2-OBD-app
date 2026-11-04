@@ -78,6 +78,7 @@ class ObdLoggerTest {
         )
         assertTrue(csv.contains("# vehicle_profile=generic_obd2"))
         assertTrue(csv.contains("# vehicle=Generic OBD2"))
+        assertTrue(csv.contains("# Built by iUmer Farooq"))
         assertFalse(csv.contains("Honda Civic FB2"))
     }
 

@@ -1,4 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">FB2 Diag</string>
+    <string name="built_by">Built by iUmer Farooq</string>
+    <string name="author_name">iUmer Farooq</string>
+    <string name="project_url">https://github.com/iumer/FB2-OBD-app</string>
+    <string name="copyright_notice">Copyright (c) 2026 iUmer Farooq</string>
 </resources>

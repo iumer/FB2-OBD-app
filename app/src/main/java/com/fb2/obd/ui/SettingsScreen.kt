@@ -35,6 +35,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.fb2.obd.SettingsState
 import com.fb2.obd.data.LogUploadManager
+import com.fb2.obd.obd.AppAttribution
 import com.fb2.obd.obd.AppUpdateChecker
 import com.fb2.obd.obd.DashTheme
 import com.fb2.obd.obd.KeepAlivePolicy
@@ -154,10 +155,14 @@ fun SettingsScreen(
         // —— App update (no section heading) ——
         ActionRow(
             title = if (updateStatusText.isNotBlank()) updateStatusText else "Check for update",
-            subtitle = if (appVersionLabel.isNotBlank()) {
-                "Currently installed version is $appVersionLabel"
-            } else {
-                "Currently installed version unknown"
+            subtitle = buildString {
+                if (appVersionLabel.isNotBlank()) {
+                    append("Currently installed version is $appVersionLabel")
+                } else {
+                    append("Currently installed version unknown")
+                }
+                append(" · ")
+                append(AppAttribution.BUILT_BY)
             },
             actionLabel = if (updateBusy) "…" else "CHECK",
             onClick = { if (!updateBusy) onCheckForUpdate() },
@@ -391,6 +396,35 @@ fun SettingsScreen(
             actionLabel = if (uploadStatus.uploading) "…" else "UPLOAD",
             onClick = onUploadLogs,
         )
+
+        // —— About (builder credit; keep in forks) ——
+        SectionLabel("About")
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(12.dp))
+                .background(MaterialTheme.colorScheme.surface)
+                .padding(14.dp),
+        ) {
+            Text(
+                text = AppAttribution.BUILT_BY,
+                color = TextPrimary,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Text(
+                text = AppAttribution.PROJECT_URL,
+                color = TextMuted,
+                fontSize = 12.sp,
+                modifier = Modifier.padding(top = 4.dp),
+            )
+            Text(
+                text = AppAttribution.COPYRIGHT,
+                color = TextMuted,
+                fontSize = 12.sp,
+                modifier = Modifier.padding(top = 4.dp),
+            )
+        }
     }
 }
 
