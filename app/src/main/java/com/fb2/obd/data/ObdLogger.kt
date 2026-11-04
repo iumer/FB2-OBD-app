@@ -223,6 +223,7 @@ object ObdLogger {
 
         buildString {
             appendLine("# fb2_session_log")
+            com.fb2.obd.obd.AppAttribution.logHeaderLines().forEach { appendLine(it) }
             appendLine("# sections: events | dashboard_snapshots | dash_tiles")
             appendLine("# note: main Dash only (hero + tiles + any + extras). Fuel/Trans/etc. not included.")
             vehicleProfileId?.takeIf { it.isNotBlank() }?.let {

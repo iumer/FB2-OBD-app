@@ -116,7 +116,7 @@ class ObdMonitorForegroundService : Service() {
         )
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("FB2 Diag — $status")
-            .setContentText("Monitoring ELM327 · voice alerts active")
+            .setContentText("${com.fb2.obd.obd.AppAttribution.BUILT_BY} · ELM327 · voice alerts")
             .setSmallIcon(R.mipmap.ic_launcher)
             .setContentIntent(pending)
             .setOngoing(true)

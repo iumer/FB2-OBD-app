@@ -644,7 +644,12 @@ class MainActivity : ComponentActivity() {
                         val lines = remember(tick) { ObdLogger.debugLines() }
                         DebugLogScreen(
                             lines = lines,
-                            onShare = { shareText("FB2 Diag debug log", ObdLogger.debugText()) },
+                            onShare = {
+                                shareText(
+                                    "FB2 Diag debug log — ${com.fb2.obd.obd.AppAttribution.BUILT_BY}",
+                                    ObdLogger.debugText(),
+                                )
+                            },
                             onClear = { ObdLogger.clearDebug(); tick++ },
                             onBack = { screen = Screen.SETTINGS },
                             modifier = Modifier.fillMaxSize(),
@@ -867,7 +872,10 @@ class MainActivity : ComponentActivity() {
                     type = mime
                     putExtra(Intent.EXTRA_STREAM, uri)
                     putExtra(Intent.EXTRA_SUBJECT, subject)
-                    putExtra(Intent.EXTRA_TEXT, "FB2 Diag log: $displayName")
+                    putExtra(
+                        Intent.EXTRA_TEXT,
+                        "FB2 Diag log (${com.fb2.obd.obd.AppAttribution.BUILT_BY}): $displayName",
+                    )
                     addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                     clipData = android.content.ClipData.newUri(contentResolver, displayName, uri)
                 }

@@ -1,9 +1,9 @@
 {
   "latest": {
-    "versionCode": 64,
-    "versionName": "0.1.43",
-    "apkUrl": "https://github.com/iumer/FB2-OBD-app/releases/download/v0.1.43/FB2-Diag-0.1.43.apk",
-    "notes": "Google Drive cloud backup: sign in, pick folder; GitHub log upload removed"
+    "versionCode": 65,
+    "versionName": "0.1.44",
+    "apkUrl": "https://github.com/iumer/FB2-OBD-app/releases/download/v0.1.44/FB2-Diag-0.1.44.apk",
+    "notes": "Built by iUmer Farooq credit in Settings, logs, LICENSE (keep attribution in forks)"
   },
   "releases": [
     {
@@ -179,6 +179,12 @@
       "versionName": "0.1.43",
       "apkUrl": "https://github.com/iumer/FB2-OBD-app/releases/download/v0.1.43/FB2-Diag-0.1.43.apk",
       "notes": "Google Drive cloud backup: sign in, pick folder; GitHub log upload removed"
+    },
+    {
+      "versionCode": 65,
+      "versionName": "0.1.44",
+      "apkUrl": "https://github.com/iumer/FB2-OBD-app/releases/download/v0.1.44/FB2-Diag-0.1.44.apk",
+      "notes": "Built by iUmer Farooq credit in Settings, logs, LICENSE (keep attribution in forks)"
     }
   ]
 }

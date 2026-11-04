@@ -24,11 +24,14 @@ android {
         applicationId = "com.fb2.obd"
         minSdk = 26
         targetSdk = 34
-        // Visible line: … → 0.1.42 Security audit → 0.1.43 Google Drive cloud backup.
+        // Visible line: … → 0.1.43 Google Drive → 0.1.44 Built by iUmer Farooq.
         // versionCode is an Android install counter only (must rise so this
         // APK can replace prior builds). Not shown in UI.
-        versionCode = 64
-        versionName = "0.1.43"
+        versionCode = 65
+        versionName = "0.1.44"
+        buildConfigField("String", "AUTHOR_NAME", "\"iUmer Farooq\"")
+        buildConfigField("String", "BUILT_BY", "\"Built by iUmer Farooq\"")
+        buildConfigField("String", "PROJECT_URL", "\"https://github.com/iumer/FB2-OBD-app\"")
     }
 
     // Many Android head-unit installers hang on v2-only APKs — keep v1 JAR signing.
