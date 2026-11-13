@@ -64,8 +64,17 @@ android {
         }
         release {
             val releaseSigning = signingConfigs.findByName("release")
-            // Prefer release keystore from local.properties / env; never commit it.
-            signingConfig = releaseSigning ?: signingConfigs.getByName("debug")
+            // Release keystore comes from local.properties / env; never commit it.
+            // A release build without it fails instead of quietly using the public debug key,
+            // which anyone can use to sign an "update" that installs over the real app.
+            // Set FB2_ALLOW_DEBUG_SIGNED_RELEASE=true only for local throwaway test builds.
+            val allowDebugSigned = (System.getenv("FB2_ALLOW_DEBUG_SIGNED_RELEASE")
+                ?: project.findProperty("fb2.allowDebugSignedRelease")?.toString()) == "true"
+            signingConfig = when {
+                releaseSigning != null -> releaseSigning
+                allowDebugSigned -> signingConfigs.getByName("debug")
+                else -> null
+            }
             isDebuggable = false
             isMinifyEnabled = false
             isShrinkResources = false
@@ -135,6 +144,23 @@ dependencies {
 }
 
 // Fail the build if a secrets asset is present or APKs contain leaked tokens.
+// A release build with no release keystore must fail, not fall back to the debug key.
+gradle.taskGraph.whenReady {
+    val wantsRelease = allTasks.any { t ->
+        t.project == project && t.name.contains("Release") &&
+            (t.name.startsWith("assemble") || t.name.startsWith("package") || t.name.startsWith("bundle"))
+    }
+    val allowDebugSigned = (System.getenv("FB2_ALLOW_DEBUG_SIGNED_RELEASE")
+        ?: project.findProperty("fb2.allowDebugSignedRelease")?.toString()) == "true"
+    if (wantsRelease && android.signingConfigs.findByName("release") == null && !allowDebugSigned) {
+        throw GradleException(
+            "Release signing is not configured. Set RELEASE_STORE_FILE, RELEASE_STORE_PASSWORD, " +
+                "RELEASE_KEY_ALIAS and RELEASE_KEY_PASSWORD (local.properties or env). " +
+                "For a local throwaway build only, set FB2_ALLOW_DEBUG_SIGNED_RELEASE=true.",
+        )
+    }
+}
+
 tasks.register("checkNoPackagedSecrets") {
     group = "verification"
     description = "Fail if assets/fb2-secrets.properties exists or APKs contain sk-/github_pat_/ghp_"

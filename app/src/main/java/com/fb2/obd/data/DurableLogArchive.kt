@@ -16,6 +16,9 @@ import java.io.File
  */
 object DurableLogArchive {
 
+    private val SAFE_NAME = Regex("^FB2-(log|ai)[A-Za-z0-9._-]{0,120}\\.(csv|txt)$", RegexOption.IGNORE_CASE)
+    private const val MAX_IMPORT_BYTES = 50L * 1024 * 1024
+
     data class ImportResult(
         val csvImported: Int = 0,
         val aiImported: Int = 0,
@@ -37,6 +40,8 @@ object DurableLogArchive {
 
         collectCandidates(context).forEach { src ->
             val name = src.name
+            // Only names this app writes, and a sane size; never a path or hidden file.
+            if (!SAFE_NAME.matches(name) || src.length() > MAX_IMPORT_BYTES) return@forEach
             when {
                 name.startsWith("FB2-log", ignoreCase = true) &&
                     name.endsWith(".csv", ignoreCase = true) -> {
@@ -75,17 +80,10 @@ object DurableLogArchive {
             ?.filter { it.isFile }
             ?.let { out.addAll(it) }
 
-        // Legacy public Downloads/FB2-Diag/
-        @Suppress("DEPRECATION")
-        runCatching {
-            val dir = File(
-                Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
-                "FB2-Diag",
-            )
-            if (dir.isDirectory) {
-                dir.listFiles()?.filter { it.isFile }?.let { out.addAll(it) }
-            }
-        }
+        // No import from the raw public Downloads/FB2-Diag folder: on Android 8–9 (and with
+        // legacy storage) any app with storage access can drop files there, and they would be
+        // taken as this user's own logs and later uploaded to their Google Drive. On API 29+
+        // MediaStore below only returns Downloads entries this app wrote.
 
         // MediaStore Downloads (API 29+) — copy into cache then treat as sources.
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {

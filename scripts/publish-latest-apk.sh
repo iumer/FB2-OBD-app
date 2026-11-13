@@ -14,16 +14,16 @@ VN=$(grep 'versionName = ' app/build.gradle.kts | head -1 | sed 's/.*"\(.*\)".*/
 APK_VERSIONED="dist/FB2-Diag-${VN}.apk"
 APK_LATEST="dist/FB2-Diag.apk"
 
-test -f "$APK_VERSIONED" || test -f dist/FB2-Diag-debug.apk || {
-  echo "missing release APK — run scripts/package-hu-apk.sh first" >&2
+test -f "$APK_VERSIONED" || {
+  echo "missing $APK_VERSIONED — run scripts/package-hu-apk.sh first" >&2
   exit 1
 }
-if [[ ! -f "$APK_VERSIONED" && -f dist/FB2-Diag-debug.apk ]]; then
-  cp -f dist/FB2-Diag-debug.apk "$APK_VERSIONED"
-fi
 if [[ ! -f "$APK_LATEST" ]]; then
   cp -f "$APK_VERSIONED" "$APK_LATEST"
 fi
+# The in-app updater installs whatever is published: check the signer of both files.
+"$ROOT/scripts/check-apk-signer.sh" "$APK_VERSIONED"
+"$ROOT/scripts/check-apk-signer.sh" "$APK_LATEST"
 
 test -f dist/versions.json || {
   echo "missing dist/versions.json — add catalog before publishing" >&2

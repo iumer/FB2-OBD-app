@@ -31,6 +31,8 @@ cp -f "$SRC" "$OUT_LATEST"
 cp -f "$SRC" "$ROOT/dist/FB2-Diag-debug.apk"
 
 "$APKSIGNER" verify --min-sdk-version 21 "$OUT_VERSIONED" >/dev/null
+# Never ship a debug-signed APK to the in-app updater.
+APKSIGNER="$APKSIGNER" "$ROOT/scripts/check-apk-signer.sh" "$OUT_VERSIONED"
 echo "OK: $OUT_VERSIONED ($(du -h "$OUT_VERSIONED" | awk '{print $1}'))"
 "$APKSIGNER" verify --verbose --min-sdk-version 21 "$OUT_VERSIONED" | head -8
 

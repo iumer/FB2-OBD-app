@@ -872,12 +872,10 @@ class MainActivity : ComponentActivity() {
                     clipData = android.content.ClipData.newUri(contentResolver, displayName, uri)
                 }
                 if (LogExportHelper.hasUsefulShareTargets(this, intent)) {
-                    packageManager.queryIntentActivities(intent, 0).forEach { ri ->
-                        val pkg = ri.activityInfo.packageName
-                        if (LogExportHelper.isUsefulSharePackage(pkg)) {
-                            grantUriPermission(pkg, uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                        }
-                    }
+                    // No pre-grants: FLAG_GRANT_READ_URI_PERMISSION + ClipData give read access
+                    // only to the app the user picks in the chooser, and only for that share.
+                    // Granting every share-capable app up front leaked logs (VIN, sessions, AI
+                    // reports) to apps the user never chose, with no revoke.
                     shareIntent = intent
                 }
             }
